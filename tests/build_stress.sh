@@ -1,0 +1,4 @@
+#!/bin/sh
+# usage: build_stress.sh SRC.c OUT  (run from the ui-next tree; address+undefined sanitizers)
+F="-std=c11 -O1 -g -fwrapv -Wno-unused-function -DFM1_NATIVE_OUTPUT_32K=0 -DFM1_NATIVE_OUTPUT_48K=0 -DBR_AUDIO_INTERNAL_BLOCK160=0 -DBR_AUDIO_INTERNAL_BLOCK256=1 -DPLAITS_INTERNAL_SAMPLE_RATE=44100 -DFM1_PLAITS_SOURCE_RATE_32K=0 -DFM1_PLAITS_SOURCE_RATE_44100=1 -DFM1_PLAITS_SOURCE_RATE_38400=0 -DFM1_PLAITS_SOURCE_RATE_48000=0 -DFM1_PLAITS_SRC_LAGRANGE4=0 -DFM1_PLAITS_SRC_FLOAT_PHASE_FRACTION=0 -DFM1_PLAITS_PHASE_LUT=0 -DBR_FX_RATE_SIGNED_441_RECIP=0 -DBR_FX_TAPE_WOW_DELTA_LUT=0 -DBR_AUDIO_FOREGROUND_FIXED8_PLAN=0 -Ifirmware/src -Ifirmware/gen"
+c++ -x c $F -fsanitize=address,undefined -fno-omit-frame-pointer "$1" -x none build/bank-test/planner.o build/host/braids/*.o build/host/plaits_reference/*.o -o "$2"

@@ -1,0 +1,13 @@
+#include "pattern_pair_project.h"
+#include "pattern_codec_source.h"
+#include "pattern_storage_codec.h"
+#include "pattern_stream_project.h"
+#include <stdint.h>
+#include <string.h>
+typedef struct {const uint8_t *data;uint32_t len;} memory;
+static int overlap(const void *a,size_t n,const void *b,size_t m){uintptr_t x=(uintptr_t)a,y=(uintptr_t)b;return n&&m&&(x<=y?y-x<n:x-y<m);}
+static int memread(void *v,uint32_t off,void *dst,uint32_t n){memory *m=v;if(off>m->len||n>m->len-off||(!dst&&n)||overlap(dst,n,m->data,m->len))return -1;if(n)memcpy(dst,m->data+off,n);return 0;}
+int fm1_pair_project_validate(void *v,pps_read_at read,void *ctx,uint32_t len){fm1_fixed_stage *s=v;int rc;if(!fm1_fixed_stage_ready(s)||!read)return 0;rc=fm1_stream_project_decode(read,ctx,len,s->valid,s->validate_ctx,s->work,s->session,s->bank,s->arena,s->capacity,s->live,s->state);return rc==FM1_PROJECT_OK&&s->safe(s->guard_ctx)==1;}
+int fm1_pair_project_buffers_ready(const pps_store *store,fm1_fixed_stage *stage,uint8_t *encoded,uint8_t *scratch){return store&&store->validate==fm1_pair_project_validate&&store->validate_ctx==stage&&fm1_fixed_stage_ready(stage)&&encoded&&scratch&&!overlap(encoded,PPS_MAX_PAYLOAD,scratch,256)&&!overlap(encoded,PPS_MAX_PAYLOAD,store,sizeof *store)&&!overlap(scratch,256,store,sizeof *store)&&fm1_fixed_stage_source_separate(stage,encoded,PPS_MAX_PAYLOAD)&&fm1_fixed_stage_source_separate(stage,scratch,256);}
+int fm1_pair_project_save(const pps_store *store,uint32_t slot,const char *name,fm1_project_source *source,fm1_fixed_stage *stage,uint8_t *encoded,uint8_t *scratch){size_t n;int rc;memory m;if(!fm1_pair_project_buffers_ready(store,stage,encoded,scratch)||!source||!fm1_fixed_project_source_separate(source,encoded,PPS_MAX_PAYLOAD)||!fm1_fixed_project_source_separate(source,scratch,256))return PS_INVALID;rc=fm1_codec_source_encode(fm1_project_source_read,source,source->total,encoded,PPS_MAX_PAYLOAD,&n);if(rc==FM1_CODEC_FULL)return FM1_FIXED_FULL;if(rc!=FM1_CODEC_OK)return PS_IO;m.data=encoded;m.len=(uint32_t)n;return pps_save(store,slot,name,m.len,memread,&m,scratch,0);}
+int fm1_pair_project_load(const pps_store *store,uint32_t slot,fm1_fixed_stage *stage,uint8_t *encoded,uint8_t *scratch,ps_info *info){uint32_t n;int rc;ps_info staged;if(!fm1_pair_project_buffers_ready(store,stage,encoded,scratch)||!info||overlap(info,sizeof *info,encoded,PPS_MAX_PAYLOAD)||overlap(info,sizeof *info,scratch,256)||overlap(info,sizeof *info,store,sizeof *store)||!fm1_fixed_stage_source_separate(stage,info,sizeof *info))return PS_INVALID;rc=pps_load(store,slot,encoded,PPS_MAX_PAYLOAD,&n,scratch,&staged);if(rc!=PS_OK)return rc;if(!fm1_fixed_stage_preflight(stage,encoded,n))return PS_CORRUPT;*info=staged;return PS_OK;}

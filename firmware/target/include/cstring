@@ -1,0 +1,17 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Freestanding C++ string declarations forwarded to the app's libc shim.
+ */
+#ifndef FM1_TARGET_CSTRING
+#define FM1_TARGET_CSTRING
+
+#include <string.h>
+
+namespace std {
+using ::memcmp;
+using ::memcpy;
+using ::memmove;
+using ::memset;
+using ::strlen;
+}
+
+#endif

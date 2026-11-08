@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Freestanding C++ standard-library names backed by the vendor C library.
+ */
+#ifndef FM1_TARGET_CSTDLIB
+#define FM1_TARGET_CSTDLIB
+
+#include <stdlib.h>
+
+namespace std {
+using ::abs;
+using ::abort;
+using ::exit;
+using ::free;
+using ::malloc;
+using ::rand;
+using ::srand;
+}
+
+#endif

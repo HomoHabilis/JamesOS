@@ -1,0 +1,88 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Freestanding C++14 algorithms used by the Plaits DSP.
+ * These definitions implement only the operations used by the vendored code.
+ */
+#ifndef FM1_TARGET_ALGORITHM
+#define FM1_TARGET_ALGORITHM
+
+namespace std {
+
+template <class T>
+inline const T& min(const T& a, const T& b) { return b < a ? b : a; }
+
+template <class T, class Compare>
+inline const T& min(const T& a, const T& b, Compare compare) {
+  return compare(b, a) ? b : a;
+}
+
+template <class T>
+inline const T& max(const T& a, const T& b) { return a < b ? b : a; }
+
+template <class T, class Compare>
+inline const T& max(const T& a, const T& b, Compare compare) {
+  return compare(a, b) ? b : a;
+}
+
+template <class InputIterator, class OutputIterator>
+inline OutputIterator copy(InputIterator first, InputIterator last,
+                           OutputIterator result) {
+  for (; first != last; ++first, ++result) *result = *first;
+  return result;
+}
+
+template <class ForwardIterator, class T>
+inline void fill(ForwardIterator first, ForwardIterator last, const T& value) {
+  for (; first != last; ++first) *first = value;
+}
+
+template <class RandomAccessIterator, class Compare>
+inline void sort(RandomAccessIterator first, RandomAccessIterator last,
+                 Compare compare) {
+  /* The only Plaits use sorts seven finite chord ratios during initialization.
+   * Insertion sort is a complete in-place sort; equivalent values may appear
+   * in either order, as permitted by std::sort. */
+  for (RandomAccessIterator current = first; current != last; ++current) {
+    auto value = *current;
+    RandomAccessIterator hole = current;
+    while (hole != first && compare(value, *(hole - 1))) {
+      *hole = *(hole - 1);
+      --hole;
+    }
+    *hole = value;
+  }
+}
+
+template <class RandomAccessIterator>
+inline void sort(RandomAccessIterator first, RandomAccessIterator last) {
+  sort(first, last, [](const auto& a, const auto& b) { return a < b; });
+}
+
+template <class RandomAccessIterator, class T, class Compare>
+inline RandomAccessIterator upper_bound(RandomAccessIterator first,
+                                        RandomAccessIterator last,
+                                        const T& value, Compare compare) {
+  auto count = last - first;
+  while (count > 0) {
+    auto step = count / 2;
+    RandomAccessIterator middle = first + step;
+    if (!compare(value, *middle)) {
+      first = middle + 1;
+      count -= step + 1;
+    } else {
+      count = step;
+    }
+  }
+  return first;
+}
+
+template <class RandomAccessIterator, class T>
+inline RandomAccessIterator upper_bound(RandomAccessIterator first,
+                                        RandomAccessIterator last,
+                                        const T& value) {
+  return upper_bound(first, last, value,
+                     [](const T& a, const auto& b) { return a < b; });
+}
+
+}  // namespace std
+
+#endif

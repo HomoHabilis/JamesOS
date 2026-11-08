@@ -1,0 +1,9 @@
+# Private working records and generated output
+/archive/
+/build/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+*.log

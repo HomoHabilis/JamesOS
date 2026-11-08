@@ -1,0 +1,13 @@
+#include "pattern_compressed_project.h"
+#include "pattern_storage_codec.h"
+#include <string.h>
+typedef struct { const uint8_t *data; size_t length, at; uint32_t decoded, pos, distance, left; uint8_t kind, value, window[1024]; } compressed;
+static uint32_t get32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
+static int overlap(const void *a,size_t an,const void *b,size_t bn){uintptr_t x=(uintptr_t)a,y=(uintptr_t)b;if(!an||!bn)return 0;return x<=y?y-x<an:x-y<bn;}
+/* Outer stream is fully validated once before any read. The caller promises
+ * it remains immutable. Sequential reads retain a bounded cursor; backwards
+ * seeks restart it. Every token and distance is checked again during replay. */
+static int next_byte(compressed *s,uint8_t *out){uint8_t b;if(s->pos>=s->decoded)return -1;if(!s->left){uint8_t token;if(s->at>=s->length)return -1;token=s->data[s->at++];s->kind=token>>6;s->left=(token&63u)+1u;if(s->left>s->decoded-s->pos)return -1;if(s->kind==0&&s->left>s->length-s->at)return -1;if(s->kind==2){if(s->at>=s->length)return -1;s->value=s->data[s->at++];}if(s->kind==3){if(s->length-s->at<2)return -1;s->distance=(uint32_t)s->data[s->at]|(uint32_t)s->data[s->at+1]<<8;s->at+=2;if(!s->distance||s->distance>sizeof s->window||s->distance>s->pos)return -1;}}
+ b=s->kind==0?s->data[s->at++]:s->kind==1?0:s->kind==2?s->value:s->window[(s->pos-s->distance)%sizeof s->window];s->window[s->pos%sizeof s->window]=b;s->pos++;s->left--;*out=b;return 0;}
+static int read_decoded(void *v,uint32_t offset,void *dst,uint32_t len){compressed *s=v;uint8_t b,*out=dst;uint32_t i;if((!dst&&len)||offset>s->decoded||len>s->decoded-offset||overlap(dst,len,s->data,s->length))return -1;if(offset<s->pos){s->pos=0;s->at=12;s->left=0;}while(s->pos<offset)if(next_byte(s,&b))return -1;for(i=0;i<len;i++){if(next_byte(s,&b))return -1;out[i]=b;}return 0;}
+int fm1_compressed_project_decode(const uint8_t *data,size_t length,fm1_project_session_valid valid,void *vctx,fm1_project_work *work,uint8_t *session,br_pattern_bank *bank,uint8_t *arena,size_t capacity,br_pattern_snapshot *live,fm1_pattern_song *song){compressed s;uint32_t n;if(!data||length<12||length>3584u||memcmp(data,"PSC\3",4))return FM1_PROJECT_INVALID;n=get32(data+4);if(n>FM1_PROJECT_MAX||n<FM1_PROJECT_HEADER_BYTES+FM1_PROJECT_SESSION||fm1_pattern_codec_validate(data,length,n)!=FM1_CODEC_OK)return FM1_PROJECT_INVALID;memset(&s,0,sizeof s);s.data=data;s.length=length;s.decoded=n;s.at=12;return fm1_project_decode_stream(read_decoded,&s,n,valid,vctx,work,session,bank,arena,capacity,live,song);}

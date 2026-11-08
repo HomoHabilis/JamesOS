@@ -1,0 +1,12 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+#ifndef FM1_TARGET_CSTDIO
+#define FM1_TARGET_CSTDIO
+#include <stdio.h>
+namespace std {
+using ::FILE;
+using ::printf;
+using ::fprintf;
+using ::sprintf;
+using ::snprintf;
+}
+#endif

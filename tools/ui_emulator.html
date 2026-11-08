@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FM-1 · Local UI</title>
+<style>
+:root{color-scheme:dark;font:14px system-ui,sans-serif;background:#14191c;color:#e7e4dc;--case:#292e30;--case-edge:#495052;--muted:#a3b0b5;--green:#bed1a5;--led:#f4f0d7}
+*{box-sizing:border-box}body{margin:0;padding:24px}main{max-width:1240px;margin:auto}header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}h1{font-size:21px;letter-spacing:.02em;margin:0}p{color:var(--muted);line-height:1.5;margin:8px 0}button,select{font:inherit;color:inherit;border:1px solid #465057;background:#252e33;border-radius:8px;padding:9px 12px;cursor:pointer}button:hover,select:hover{background:#344149}button:focus-visible,select:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--green);outline-offset:3px}button:disabled{cursor:not-allowed;opacity:.55}.hint{font-size:12px}.status{font-size:12px;color:#a1b8a9}#error{color:#ffb49c;white-space:pre-wrap;min-height:1em}
+.device-shell{padding:18px;background:linear-gradient(145deg,#343a3b,#23282a 72%);border:1px solid #596062;border-radius:28px;box-shadow:0 20px 60px #0008,inset 0 1px #ffffff12}.device-top{display:grid;grid-template-columns:194px 238px minmax(430px,1fr);gap:16px;align-items:start}.left-panel{padding:3px 2px}.left-knobs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 8px}.knob{min-width:0;text-align:center;padding:4px 1px}.knob-label{display:block;min-height:17px;color:#d4d4cb;font:10px ui-monospace,monospace;letter-spacing:.04em}.dial{margin:5px auto 3px;width:48px;height:48px;border:5px solid #111619;border-radius:50%;background:linear-gradient(145deg,#596368,#182024 65%);box-shadow:inset 0 1px 4px #fff3,0 2px 3px #000a;position:relative;cursor:ns-resize;touch-action:none}.dial:after{content:'';position:absolute;width:3px;height:14px;top:1px;left:17px;border-radius:4px;background:#e9eadf;transform:rotate(25deg);transform-origin:50% 21px}.dial[aria-disabled="true"]{cursor:not-allowed;filter:grayscale(1);opacity:.55}.dial[aria-disabled="true"]:after{background:#9aa0a0}.knob-note{display:block;min-height:14px;color:#94a0a2;font-size:9px;line-height:1.2}.knob-note.unavailable{color:#d5a88f}.octave-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.panel-button{min-width:0;min-height:48px;display:flex;align-items:center;justify-content:center;gap:7px;padding:7px 6px;background:linear-gradient(#202628,#171c1e);border:2px solid #0d1112;border-radius:11px;box-shadow:inset 0 1px #ffffff13,0 2px 0 #111;touch-action:none;user-select:none}.panel-button:hover{background:linear-gradient(#31393b,#1c2224)}.panel-button.is-held{background:linear-gradient(#657253,#303b2b);border-color:#899c70;box-shadow:inset 0 0 10px #d5f6a42b,0 0 10px #bed1a53b}.panel-button.is-state{border-color:#9cac7e}.switch-led{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:#6d7168;box-shadow:0 0 0 2px #101415;opacity:.23}.panel-button[data-led-level="1"] .switch-led{opacity:.38;background:#b6bf9c;box-shadow:0 0 5px #c5d59c66}.panel-button[data-led-level="2"] .switch-led{opacity:.72;background:#e3ebc5;box-shadow:0 0 8px #d8eca2a6}.panel-button[data-led-level="3"] .switch-led{opacity:1;background:#fff4bc;box-shadow:0 0 12px #f5e6a9}.button-label{font-size:10px;font-weight:700;letter-spacing:.035em;line-height:1.05;text-align:center}.octave-buttons .button-label{font-size:11px}.display-housing{padding:26px 15px;background:#101416;border:1px solid #13191b;border-radius:28px;box-shadow:inset 0 0 0 5px #171d1f,0 3px 9px #0006}.display img{display:block;width:100%;aspect-ratio:1;image-rendering:pixelated;background:#000;border:1px solid #555;border-radius:2px}.display-caption{margin:8px 0 0;color:#849092;text-align:center;font-size:9px;letter-spacing:.03em}.right-panel{min-width:0}.right-knobs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 5px 12px}.right-knobs .dial{width:46px;height:46px}.right-knobs .dial:after{left:16px}.button-matrix{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;padding:8px;background:#151a1c;border:2px solid #171c1e;border-radius:16px;box-shadow:inset 0 0 0 1px #4b5150}.button-matrix .panel-button{min-height:48px}
+.keyboard-panel{margin-top:16px;padding:12px 12px 10px;background:#171c1e;border:2px solid #121719;border-radius:22px;box-shadow:inset 0 1px #ffffff0e}.keyboard-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 4px 9px;color:#aab2b0;font:10px ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}.key-state-count{color:#819087;letter-spacing:0}.keyboard{height:126px;position:relative;touch-action:none;user-select:none}.white-row{position:absolute;left:0;right:0;bottom:0;height:94px;display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:5px;align-items:stretch}.black-row{position:absolute;z-index:2;top:0;left:0;right:0;height:76px;pointer-events:none}.note-key{position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:4px 1px;touch-action:none;user-select:none}.key-cap{border-radius:24px;background:linear-gradient(100deg,#303638,#171c1e 24%,#242a2b 70%,#111617);border:2px solid #0b1011;box-shadow:inset 0 1px #ffffff18,0 2px 3px #0008}.white-row .note-key{width:100%;height:100%;border-radius:25px;padding-top:10px}.white-row .key-cap{background:linear-gradient(100deg,#343a3a,#1e2425 25%,#303635 75%,#161b1c)}.black-key{pointer-events:auto;position:absolute;top:0;height:76px;width:4.85%;min-width:20px;transform:translateX(-50%);border-radius:22px;padding:4px 2px}.note-key .led-bar{display:block;width:4px;height:30px;border-radius:5px;background:#ecebdc;opacity:.13;box-shadow:none;transition:opacity .08s,box-shadow .08s,background .08s}.black-key .led-bar{height:25px}.note-key[data-led-level="1"] .led-bar{opacity:.38;box-shadow:0 0 5px #e8eccb55}.note-key[data-led-level="2"] .led-bar{opacity:.7;background:#f0f3db;box-shadow:0 0 8px #e5f0b080}.note-key[data-led-level="3"] .led-bar{opacity:1;background:#fff8d7;box-shadow:0 0 14px 3px #eff4b9b3}.note-key.is-held .key-cap{background:linear-gradient(100deg,#687858,#34412f 35%,#526248);border-color:#9aae7d}.note-key.is-held .led-bar{opacity:1;background:#fffbdc;box-shadow:0 0 15px 4px #d5f6a4}.white-row .key-name{position:absolute;bottom:5px;color:#7c8583;font:8px ui-monospace,monospace;opacity:.75}.black-key .key-name{display:block;min-height:10px;color:#e5e4d8;font:8px ui-monospace,monospace;line-height:1;white-space:nowrap;text-shadow:0 1px 3px #000}.note-key.is-held .key-name{color:#fff}.black-key[data-led-level="1"] .key-name,.black-key[data-led-level="2"] .key-name,.black-key[data-led-level="3"] .key-name{color:#fff7cc}
+.note-key.is-held{background:linear-gradient(100deg,#687858,#34412f 35%,#526248);border-color:#9aae7d}
+.quick-controls{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(420px,1.3fr);gap:18px;margin-top:16px}.quick-card{padding:14px;background:#20272a;border:1px solid #394246;border-radius:14px}.quick-card h2{margin:0 0 10px;color:#b6c1c3;font:11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em}.tracks,.pages{display:grid;gap:7px}.tracks{grid-template-columns:repeat(4,1fr);margin-bottom:10px}.pages{grid-template-columns:repeat(5,1fr)}.tracks button,.pages button{padding:8px 5px;font-size:11px}.quick-card button.active{background:#bed1a5;border-color:#bed1a5;color:#172014}.pager{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:9px 0 0;color:#b5c0c5;font-size:12px}.pager button{padding:5px 13px}.session-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 2px 0}.latch-control{display:inline-flex;align-items:center;gap:8px}.latch-control.active{background:#465639;border-color:#9bad7d;color:#eff7e0}.latch-control .switch-led{width:9px;height:9px}.latch-control.active .switch-led{opacity:1;background:#e8f6bf;box-shadow:0 0 10px #d6ed9e}.session-row .status{margin:0;text-align:right}
+@media(max-width:1000px){body{padding:16px}.device-top{grid-template-columns:184px minmax(220px,238px) minmax(320px,1fr);gap:10px}.right-knobs{gap:2px;margin-left:0;margin-right:0}.button-matrix{gap:5px;padding:6px}.button-matrix .panel-button{padding:5px 2px}.button-label{font-size:9px}.quick-controls{grid-template-columns:1fr 1.4fr}}
+@media(max-width:820px){.device-top{grid-template-columns:185px minmax(220px,1fr)}.right-panel{grid-column:1/-1;display:grid;grid-template-columns:minmax(230px,.8fr) minmax(390px,1.2fr);gap:12px;align-items:center}.right-knobs{margin:0}.button-matrix{grid-template-columns:repeat(6,minmax(0,1fr))}.quick-controls{grid-template-columns:1fr}.session-row{flex-wrap:wrap}.session-row .status{text-align:left}}
+@media(max-width:560px){body{padding:10px}.device-shell{padding:12px;border-radius:20px}.device-top{grid-template-columns:1fr;gap:12px}.left-panel{max-width:300px;width:100%;margin:0 auto}.left-knobs{gap:5px 14px}.left-knobs .dial{width:42px;height:42px}.left-knobs .dial:after{left:14px}.octave-buttons{max-width:240px;margin:8px auto 0}.display-housing{max-width:270px;width:100%;margin:0 auto;padding:18px}.right-panel{grid-column:auto;display:flex;flex-direction:column;gap:9px}.right-knobs{width:100%;max-width:360px}.button-matrix{width:100%;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:5px}.button-matrix .panel-button{min-height:43px;border-radius:9px}.button-label{font-size:8px}.keyboard-panel{margin-top:12px;padding:9px 6px 7px;border-radius:16px}.keyboard-heading{font-size:8px}.keyboard{height:108px}.white-row{height:78px;gap:2px}.black-row{height:65px}.black-key{height:65px;width:5.3%;min-width:15px;border-radius:17px;padding:3px 1px}.note-key .led-bar{height:23px;width:3px}.black-key .led-bar{height:20px}.white-row .key-name{font-size:6px;bottom:3px}.black-key .key-name{font-size:6px;min-height:8px}.quick-card{padding:11px}.pages{grid-template-columns:repeat(3,1fr)}.session-row{align-items:flex-start}.session-row .status{width:100%}}
+.button-matrix .panel-button{aspect-ratio:1 / 1;min-height:0;border-radius:5px}
+.button-matrix{grid-template-columns:repeat(6,minmax(0,1fr));width:90%;margin-inline:auto}
+.panel-button[data-led-level="2"] .switch-led{opacity:.58;box-shadow:0 0 7px #d8eca280}
+.note-key[data-led-level="2"] .led-bar{opacity:.45;box-shadow:0 0 5px #e5f0b040}
+.white-row .key-name{display:none}
+.white-row .note-key{padding:10px 1px}
+.white-row .led-bar{height:80%}
+.black-key{flex-direction:column-reverse;gap:5px}
+.black-key .key-name{position:static;color:#e5e4d8;opacity:.13;text-shadow:none}
+.black-key[data-led-level="1"] .key-name{opacity:.38}
+.black-key[data-led-level="2"] .key-name{opacity:.45;text-shadow:0 0 5px #e5f0b040}
+.black-key[data-led-level="3"] .key-name{opacity:1;text-shadow:0 0 8px #eff4b9b3}
+.note-key[data-led-level="0"] .led-bar,.note-key[data-led-level="0"].is-held .led-bar{opacity:.1;box-shadow:none}
+.black-key[data-led-level="0"] .key-name{opacity:.13;text-shadow:none}
+.panel-button .switch-led{display:none}
+.panel-button .button-label{color:#525d60;text-shadow:none}
+.panel-button[data-led-level="1"] .button-label{color:#515e61;text-shadow:none}
+.panel-button[data-led-level="2"] .button-label{color:#657579;text-shadow:0 0 3px #b2dce030}
+.panel-button[data-led-level="3"] .button-label{color:#f0ffff;text-shadow:0 0 8px #bceef2,0 0 14px #a8e0eb99}
+.panel-button:is([data-button-id="12"],[data-button-id="13"]) .button-label{color:#563234}
+.panel-button:is([data-button-id="12"],[data-button-id="13"])[data-led-level="1"] .button-label{color:#69383a}
+.panel-button:is([data-button-id="12"],[data-button-id="13"])[data-led-level="2"] .button-label{color:#9b4949;text-shadow:0 0 3px #ed444430}
+.panel-button:is([data-button-id="12"],[data-button-id="13"])[data-led-level="3"] .button-label{color:#ff5050;text-shadow:0 0 8px #ff3030,0 0 14px #ff303099}
+.panel-button[data-button-id="12"] .button-label{color:#424a2c}
+.panel-button[data-button-id="12"][data-led-level="1"] .button-label{color:#59643a}
+.panel-button[data-button-id="12"][data-led-level="2"] .button-label{color:#91a552;text-shadow:0 0 3px #cce85a30}
+.panel-button[data-button-id="12"][data-led-level="3"] .button-label{color:#d9f47b;text-shadow:0 0 8px #c4ed4a,0 0 14px #b7e83b99}
+.panel-button[data-led-level="0"] .button-label{color:#394447;text-shadow:none}
+.panel-button[data-button-id="12"][data-led-level="0"] .button-label{color:#343c24}
+.panel-button[data-button-id="13"][data-led-level="0"] .button-label{color:#402526}
+.device-shell.save-screen .panel-button[data-button-id="12"][data-led-level="3"] .button-label{color:#ff5050;text-shadow:0 0 8px #ff3030,0 0 14px #ff303099}
+.display-housing{aspect-ratio:1;padding:20px;align-self:center;justify-self:center;width:100%;max-width:238px}
+.display img{border:0}
+@media(min-width:821px){.device-top{grid-template-columns:194px minmax(220px,1fr) minmax(430px,50%)}}
+@media(min-width:821px) and (max-width:1000px){.device-top{grid-template-columns:184px minmax(220px,1fr) minmax(320px,45%)}}
+.knob-note{display:none}
+.dial:after{display:none}
+.keyboard{height:144px}
+.white-row{height:76px}
+@media(max-width:560px){.keyboard{height:122px}.white-row{height:65px}}
+/* The instrument is a single scaled panel, not a responsive arrangement. */
+.device-viewport{width:100%;max-width:984px;aspect-ratio:984 / 552;margin:auto;position:relative}
+.device-scroll{width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:8px}
+.device-viewport{max-width:none;margin:0 auto}
+.device-viewport>.screen-overlay{position:absolute;display:block;image-rendering:pixelated;background:#000;pointer-events:none;z-index:2}
+.display img{visibility:hidden}
+.zoom-controls{display:flex;align-items:center;gap:8px;margin:0 0 12px;color:var(--muted);font-size:12px}
+.zoom-controls button{padding:5px 12px}.zoom-controls button.active{background:#bed1a5;border-color:#bed1a5;color:#172014}
+.device-shell{position:absolute;left:0;top:0;width:984px;height:552px;transform-origin:top left;padding:18px;border-radius:28px}
+.device-top{display:grid;grid-template-columns:216px 270px 1fr;gap:16px;align-items:start}
+.left-panel{max-width:none;width:auto;margin:0;padding:3px 2px}.left-knobs{gap:10px 8px}.left-knobs .dial{width:48px;height:48px}
+.octave-buttons{max-width:none;margin:10px 0 0;padding:8px;gap:7px;background:#151a1c;border:2px solid #171c1e;border-radius:16px;box-shadow:inset 0 0 0 1px #4b5150}
+.display-housing{width:270px;max-width:none;margin:0;padding:24px;position:relative;left:8px}
+.right-panel{grid-column:auto;display:block;min-width:0}.right-knobs{display:grid;width:auto;max-width:none;gap:8px;margin:0 5px 12px}
+.left-panel,.right-panel{align-self:center}
+.button-matrix{display:grid;width:90%;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;padding:8px}
+.button-matrix .panel-button{padding:7px 6px;min-height:0;border-radius:5px}.button-label{font-size:10px}
+.keyboard-panel{margin-top:28px;padding:12px 12px 10px;border-radius:22px}.keyboard{height:176px}.white-row{height:90px;gap:5px}.black-row,.black-key{height:90px}.black-key{width:4.85%;min-width:20px;border-radius:22px;padding:4px 2px}.note-key .led-bar{width:4px}.black-key .led-bar{height:25px}.black-key .key-name{font-size:8px;min-height:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>FM-1 · Local UI</h1><p class="hint">A browser model of the physical panel. The connected FM-1 hardware stays untouched.</p></div>
+    <button id="reload" type="button">Reload UI changes</button>
+  </header>
+
+  <div class="zoom-controls" role="group" aria-label="Device size"><span>Device size</span><button type="button" id="zoom50" aria-pressed="false">50%</button><button type="button" id="zoom100" aria-pressed="true">100%</button><button type="button" id="zoom200" aria-pressed="false">200%</button></div>
+  <div class="device-scroll"><div class="device-viewport" id="deviceViewport"><section class="device-shell" aria-label="FM-1 instrument panel">
+    <div class="device-top">
+      <section class="left-panel" aria-label="Left controls">
+        <div class="left-knobs" id="leftKnobs"></div>
+        <div class="octave-buttons" id="octaveButtons" aria-label="Octave buttons"></div>
+      </section>
+      <section class="display-housing" aria-label="Instrument display">
+        <div class="display"><img id="screen" alt="FM-1 screen rendered by the local application"></div>
+      </section>
+      <section class="right-panel" aria-label="Right controls">
+        <div class="right-knobs" id="rightKnobs" aria-label="Parameter knobs"></div>
+        <div class="button-matrix" id="buttonMatrix" aria-label="Panel buttons"></div>
+      </section>
+    </div>
+
+    <section class="keyboard-panel" aria-label="FM-1 27-key keyboard">
+      <div class="keyboard" id="keyboard">
+        <div class="white-row" id="whiteKeys" aria-label="White keys"></div>
+        <div class="black-row" id="blackKeys" aria-label="Black keys"></div>
+      </div>
+    </section>
+  </section><img id="screenOverlay" class="screen-overlay" alt="" aria-hidden="true"></div></div>
+
+  <div class="session-row">
+    <button type="button" class="latch-control" id="latchMode" aria-pressed="false"><span class="switch-led" aria-hidden="true"></span><span id="latchLabel">Latch mode: off</span></button>
+    <button type="button" id="releaseAll">Release all</button>
+    <div id="status" class="status">Starting local application…</div>
+  </div>
+  <p id="error" role="status" aria-live="polite"></p>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const deviceViewport=$('deviceViewport');
+let deviceZoom=100;
+try{const saved=Number(localStorage.getItem('fm1-device-zoom'));if([50,100,200].includes(saved))deviceZoom=saved}catch(e){}
+function scaleDevice(){
+  const screenWidth=$('screen').offsetWidth;
+  if(!screenWidth)return;
+  // Calibrated against the in-app browser screenshot: the 240 CSS-pixel
+  // display appeared approximately 216 host points across.
+  const targetWidth=(240*deviceZoom/100)/0.9;
+  const scale=targetWidth/screenWidth;
+  deviceViewport.style.width=(984*scale)+'px';
+  deviceViewport.style.height=(552*scale)+'px';
+  deviceViewport.firstElementChild.style.transform=`scale(${scale})`;
+  const screen=$('screen').getBoundingClientRect(), viewport=deviceViewport.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1, pixel=value=>Math.round(value*dpr)/dpr;
+  const overlay=$('screenOverlay');
+  overlay.style.left=(pixel(screen.left)-viewport.left)+'px';
+  overlay.style.top=(pixel(screen.top)-viewport.top)+'px';
+  overlay.style.width=targetWidth+'px';
+  overlay.style.height=targetWidth+'px';
+  for(const zoom of [50,100,200]){const b=$('zoom'+zoom);b.classList.toggle('active',zoom===deviceZoom);b.setAttribute('aria-pressed',String(zoom===deviceZoom))}
+}
+for(const zoom of [50,100,200])$('zoom'+zoom).onclick=()=>{deviceZoom=zoom;try{localStorage.setItem('fm1-device-zoom',String(zoom))}catch(e){}scaleDevice()};
+window.addEventListener('resize',scaleDevice);scaleDevice();
+const whiteKeys=[
+  {note:0,name:'F3'},{note:2,name:'G3'},{note:4,name:'A3'},{note:6,name:'B3'},
+  {note:7,name:'C4'},{note:9,name:'D4'},{note:11,name:'E4'},{note:12,name:'F4'},
+  {note:14,name:'G4'},{note:16,name:'A4'},{note:18,name:'B4'},{note:19,name:'C5'},
+  {note:21,name:'D5'},{note:23,name:'E5'},{note:24,name:'F5'},{note:26,name:'G5'}
+];
+const blackKeys=[
+  {note:1,name:'F♯3',legend:'OP1',afterWhite:0},{note:3,name:'G♯3',legend:'OP2',afterWhite:1},
+  {note:5,name:'A♯3',legend:'OP3',afterWhite:2},{note:8,name:'C♯4',legend:'OP4',afterWhite:4},
+  {note:10,name:'D♯4',legend:'OP5',afterWhite:5},{note:13,name:'F♯4',legend:'OP6',afterWhite:7},
+  {note:15,name:'G♯4',legend:'PIT',afterWhite:8},{note:17,name:'A♯4',legend:'GLO',afterWhite:9},
+  {note:20,name:'C♯5',legend:'MONO',afterWhite:11},{note:22,name:'D♯5',legend:'POLY',afterWhite:12},
+  {note:25,name:'F♯5',legend:'',afterWhite:14}
+];
+const buttons=[
+  {id:2,label:'FX'},{id:3,label:'SEL'},{id:4,label:'ENV'},{id:5,label:'LFO'},{id:6,label:'EDIT'},{id:7,label:'GLO'},
+  {id:8,label:'HOME'},{id:9,label:'SAVE'},{id:10,label:'ARP'},{id:11,label:'SEQ'},{id:12,label:'PLAY / STOP'},{id:13,label:'REC'}
+];
+const encoders=[
+  {id:0,label:'SELECT',side:'left'},{id:6,label:'PRESETS',side:'left'},{id:1,label:'ALGORITHM',side:'left'},
+  {id:2,label:'KNOB1',side:'right',control:0},{id:3,label:'KNOB2',side:'right',control:1},
+  {id:4,label:'KNOB3',side:'right',control:2},{id:5,label:'KNOB4',side:'right',control:3}
+];
+let state=null,busy=false,queue=[],latchMode=false;
+const controls=new Map(),heldControls=new Set(),latchedControls=new Set(),sourcesByControl=new Map(),pointerSources=new Map();
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+
+function send(type,a=0,b=0){queue.push({type,a,b});pump()}
+async function pump(){
+  if(busy)return;busy=true;
+  const event=queue.shift()||{type:'tick'};
+  try{
+    if(event.type==='reload')$('status').textContent='Rebuilding local UI…';
+    const r=await fetch('/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event)});
+    const s=await r.json();if(!r.ok)throw Error(s.error||r.statusText);
+    state=s;$('screen').src='data:image/png;base64,'+s.image;$('screenOverlay').src=$('screen').src;
+    document.querySelector('.device-shell').classList.toggle('save-screen',!!s.saveScreen);
+    if(Array.isArray(s.controls))s.controls.forEach((c,i)=>{const value=$('value'+i);if(value)value.textContent=[c.label,c.text].filter(Boolean).join(' · ')||'—'});
+    document.querySelector('[data-button-id="12"]')?.classList.toggle('is-state',!!s.playing);
+    document.querySelector('[data-button-id="13"]')?.classList.toggle('is-state',!!s.recording);
+    $('status').textContent='Local session · hardware untouched';$('error').textContent='';renderControls();
+  }catch(e){$('error').textContent=e.message;$('status').textContent='Local session unavailable'}
+  finally{if(event.type==='reload')firmwareReloadQueued=false;busy=false;if(queue.length)pump()}
+}
+
+function controlEvent(control,down){send(control.kind==='button'?'button_state':'note',control.id,down?1:0)}
+function updateControlState(control,down){
+  const had=heldControls.has(control.key);if(had===down)return;
+  if(down)heldControls.add(control.key);else heldControls.delete(control.key);
+  controlEvent(control,down);renderControls();
+}
+function addMomentarySource(control,source){
+  let sources=sourcesByControl.get(control.key);if(!sources){sources=new Set();sourcesByControl.set(control.key,sources)}
+  if(sources.has(source))return;sources.add(source);if(sources.size===1&&!latchedControls.has(control.key))updateControlState(control,true);
+}
+function removeMomentarySource(source){
+  const key=pointerSources.get(source);if(!key)return;pointerSources.delete(source);
+  const sources=sourcesByControl.get(key);if(!sources)return;sources.delete(source);
+  if(!sources.size){sourcesByControl.delete(key);if(!latchedControls.has(key)){const control=controls.get(key);if(control)updateControlState(control,false)}}
+}
+function toggleLatched(control){
+  if(latchedControls.has(control.key)){latchedControls.delete(control.key);updateControlState(control,false)}
+  else{latchedControls.add(control.key);updateControlState(control,true)}
+}
+function startPhysicalControl(control,source){
+  if(latchMode){toggleLatched(control);return}
+  pointerSources.set(source,control.key);addMomentarySource(control,source);
+}
+function stopPhysicalControl(source){removeMomentarySource(source)}
+function bindPhysicalControl(el,control){
+  controls.set(control.key,control);el.dataset.controlKey=control.key;
+  el.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='mouse'&&e.button!==0)return;e.preventDefault();
+    try{el.setPointerCapture(e.pointerId)}catch{}
+    startPhysicalControl(control,'p'+e.pointerId);
+  });
+  const finish=e=>{if(e?.pointerId!==undefined)stopPhysicalControl('p'+e.pointerId)};
+  el.addEventListener('pointerup',finish);el.addEventListener('pointercancel',finish);el.addEventListener('lostpointercapture',finish);
+  el.addEventListener('keydown',e=>{
+    if(e.repeat||!(e.key===' '||e.key==='Enter'))return;e.preventDefault();
+    const source='k'+e.key+':'+control.key;el.dataset.keyboardSource=source;startPhysicalControl(control,source);
+  });
+  el.addEventListener('keyup',e=>{
+    if(!(e.key===' '||e.key==='Enter'))return;e.preventDefault();const source=el.dataset.keyboardSource;if(source){stopPhysicalControl(source);delete el.dataset.keyboardSource}
+  });
+  el.addEventListener('click',e=>{
+    // Screen-reader synthesized activation has no preceding pointer or key event.
+    if(e.detail===0&&!e.defaultPrevented){if(latchMode)toggleLatched(control);else{updateControlState(control,true);setTimeout(()=>updateControlState(control,false),110)}}
+  });
+}
+function ledIndex(control){return control.kind==='button'?control.id:14+control.id}
+function makePhysicalButton({id,label,kind='button',className=''}){
+  const b=document.createElement('button');b.type='button';b.className='panel-button '+className;b.setAttribute('aria-label',label);
+  b.innerHTML='<span class="switch-led" aria-hidden="true"></span><span class="button-label"></span>';b.querySelector('.button-label').textContent=label;
+  const control={kind,id,key:(kind==='button'?'button:':'note:')+id,led:kind==='button'?id:14+id};
+  b.dataset.ledIndex=String(control.led);if(kind==='button')b.dataset.buttonId=String(id);bindPhysicalControl(b,control);return b;
+}
+function makeKnob(entry){
+  const wrap=document.createElement('div');wrap.className='knob';
+  const label=document.createElement('span');label.className='knob-label';label.textContent=entry.label;wrap.append(label);
+  const dial=document.createElement('div');dial.className='dial';dial.setAttribute('role','slider');dial.setAttribute('aria-label',entry.label+' encoder');dial.tabIndex=0;wrap.append(dial);
+  if(entry.control!==undefined){label.id='knob-label'+entry.control;const value=document.createElement('span');value.className='knob-note';value.id='value'+entry.control;wrap.append(value)}
+  let y=null;
+  const turn=delta=>{if(delta)send('encoder',entry.id,clamp(delta,-100,100))};
+  dial.addEventListener('wheel',e=>{e.preventDefault();turn(e.deltaY<0?1:-1)},{passive:false});
+  dial.addEventListener('pointerdown',e=>{y=e.clientY;try{dial.setPointerCapture(e.pointerId)}catch{};e.preventDefault()});
+  dial.addEventListener('pointermove',e=>{if(y===null)return;const d=Math.trunc((y-e.clientY)/5);if(d){y=e.clientY;turn(d)}});
+  const end=()=>{y=null};dial.addEventListener('pointerup',end);dial.addEventListener('pointercancel',end);dial.addEventListener('lostpointercapture',end);
+  dial.addEventListener('keydown',e=>{if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();turn(['ArrowUp','ArrowRight'].includes(e.key)?1:-1)});
+  return wrap;
+}
+
+// Four left-side controls: MASTER is an analog volume knob and is not part of the local host API.
+const master=document.createElement('div');master.className='knob';master.innerHTML='<span class="knob-label">MASTER</span><div class="dial" role="img" aria-label="Master analog volume unavailable in the local simulator" aria-disabled="true" title="Analog master volume is unavailable in the local simulator"></div><span class="knob-note unavailable">Unavailable locally</span>';$('leftKnobs').append(master);
+encoders.filter(e=>e.side==='left').forEach(e=>$('leftKnobs').append(makeKnob(e)));
+encoders.filter(e=>e.side==='right').forEach(e=>$('rightKnobs').append(makeKnob(e)));
+[{id:0,label:'OCT−'},{id:1,label:'OCT+'}].forEach(x=>$('octaveButtons').append(makePhysicalButton(x)));
+buttons.forEach(x=>$('buttonMatrix').append(makePhysicalButton(x)));
+
+whiteKeys.forEach(k=>{
+  const b=document.createElement('button');b.type='button';b.className='note-key key-cap white-key';b.setAttribute('aria-label',k.name+' key');b.title=k.name;
+  b.innerHTML='<span class="led-bar" aria-hidden="true"></span><span class="key-name"></span>';b.querySelector('.key-name').textContent=k.name;b.dataset.ledIndex=String(14+k.note);
+  bindPhysicalControl(b,{kind:'note',id:k.note,key:'note:'+k.note,led:14+k.note});$('whiteKeys').append(b);
+});
+blackKeys.forEach(k=>{
+  const b=document.createElement('button');b.type='button';b.className='note-key key-cap black-key';b.setAttribute('aria-label',k.name+' key'+(k.legend?' · '+k.legend:''));b.title=k.name+(k.legend?' · '+k.legend:'');
+  b.style.left=`calc(${(k.afterWhite+1)*100/16}% )`;b.innerHTML='<span class="key-name"></span><span class="led-bar" aria-hidden="true"></span>';b.querySelector('.key-name').textContent=k.legend;b.dataset.ledIndex=String(14+k.note);
+  bindPhysicalControl(b,{kind:'note',id:k.note,key:'note:'+k.note,led:14+k.note});$('blackKeys').append(b);
+});
+
+function maskHas(mask,index){
+  if(mask===undefined||mask===null)return null;
+  if(Array.isArray(mask))return !!mask[index];
+  const n=Number(mask);if(!Number.isFinite(n))return null;
+  return ((n>>>index)&1)!==0;
+}
+function renderControls(){
+  const leds=Array.isArray(state?.ledLevels)?state.ledLevels:null;
+  document.querySelectorAll('[data-led-index]').forEach(el=>{
+    const i=+el.dataset.ledIndex,level=leds?clamp(Number(leds[i])||0,0,3):0;el.dataset.ledLevel=String(level);
+  });
+  controls.forEach(control=>{
+    const fromMask=control.kind==='button'?maskHas(state?.buttonMask,control.id):maskHas(state?.noteMask,control.id);
+    const down=fromMask===null?heldControls.has(control.key):fromMask;
+    document.querySelectorAll(`[data-control-key="${control.key}"]`).forEach(el=>{
+      el.classList.toggle('is-held',down);el.classList.toggle('is-latched',latchedControls.has(control.key));
+    });
+  });
+  $('latchMode').classList.toggle('active',latchMode);$('latchMode').setAttribute('aria-pressed',String(latchMode));$('latchLabel').textContent='Latch mode: '+(latchMode?'on':'off');
+}
+function releaseMomentary(){
+  for(const [key,sources] of sourcesByControl){const control=controls.get(key);if(control&&!latchedControls.has(key)&&sources.size)updateControlState(control,false)}
+  sourcesByControl.clear();pointerSources.clear();
+}
+function releaseAll(){
+  const keys=new Set([...heldControls,...latchedControls]);
+  keys.forEach(key=>{const control=controls.get(key);if(control)updateControlState(control,false)});
+  latchedControls.clear();sourcesByControl.clear();pointerSources.clear();renderControls();
+}
+$('latchMode').onclick=()=>{releaseAll();latchMode=!latchMode;renderControls()};
+$('releaseAll').onclick=releaseAll;
+$('reload').onclick=()=>{releaseAll();send('reload')};
+window.addEventListener('blur',releaseMomentary);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll()});
+window.addEventListener('pagehide',()=>{
+  // A final same-origin release keeps a held note from surviving a browser close/reload.
+  for(const key of [...heldControls]){const c=controls.get(key);if(c)navigator.sendBeacon('/event',new Blob([JSON.stringify({type:c.kind==='button'?'button_state':'note',a:c.id,b:0})],{type:'application/json'}))}
+});
+// Reload the browser when the locally served panel changes. The application
+// process and its local session remain running across a page refresh.
+let panelRevision=null, checkingPanel=false;
+let firmwareCandidate=null, firmwareStable=0, firmwareReloadQueued=false;
+async function checkPanelChanges(){
+  if(checkingPanel || document.hidden)return;
+  checkingPanel=true;
+  try{
+    const response=await fetch('/',{cache:'no-store'});
+    if(!response.ok)return;
+    const latest=await response.text();
+    if(panelRevision===null)panelRevision=latest;
+    else if(latest!==panelRevision)location.reload();
+  }catch(e){ /* The existing connection status reports server failures. */ }
+  finally{checkingPanel=false}
+}
+checkPanelChanges();setInterval(checkPanelChanges,1500);
+async function checkFirmwareChanges(){
+  if(document.hidden || firmwareReloadQueued)return;
+  try{
+    const response=await fetch('/revision',{cache:'no-store'});
+    if(!response.ok)return;
+    const version=await response.json();
+    if(version.source===version.built){firmwareCandidate=null;firmwareStable=0;return}
+    if(firmwareCandidate===version.source)firmwareStable++;
+    else {firmwareCandidate=version.source;firmwareStable=1}
+    // Don't interrupt playback or a held control while rebuilding.
+    if(firmwareStable>=2 && state && !state.playing && !heldControls.size && !busy && !queue.length){
+      firmwareReloadQueued=true;
+      send('reload');
+    }
+  }catch(e){ /* Retry once the local server is available again. */ }
+}
+setInterval(checkFirmwareChanges,2000);
+let lastPoll=0;
+renderControls();setInterval(()=>{const now=performance.now(),period=state?.messageActive?35:140;if(!document.hidden&&!busy&&!queue.length&&now-lastPoll>=period){lastPoll=now;pump()}},35);pump();
+</script>
+</body>
+</html>

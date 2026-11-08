@@ -1,0 +1,1538 @@
+[
+  {
+    "number": 1,
+    "name": "REESE",
+    "engine": "VIRTUAL AN",
+    "sound": [
+      30,
+      84,
+      105
+    ],
+    "filter": [
+      70,
+      20
+    ],
+    "envelope": [
+      0,
+      40,
+      127,
+      20
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 2,
+    "name": "SUB DEEP",
+    "engine": "VIRTUAL AN",
+    "sound": [
+      0,
+      10,
+      0
+    ],
+    "filter": [
+      50,
+      0
+    ],
+    "envelope": [
+      0,
+      50,
+      127,
+      15
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 3,
+    "name": "ACID LINE",
+    "engine": "ANALOG VCF",
+    "sound": [
+      40,
+      70,
+      30
+    ],
+    "filter": [
+      45,
+      100
+    ],
+    "envelope": [
+      0,
+      30,
+      60,
+      10
+    ],
+    "effects": [
+      20,
+      0
+    ]
+  },
+  {
+    "number": 4,
+    "name": "FM BASS",
+    "engine": "FM BASS",
+    "sound": [
+      30,
+      60,
+      50
+    ],
+    "filter": [
+      90,
+      0
+    ],
+    "envelope": [
+      0,
+      35,
+      90,
+      15
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 5,
+    "name": "WOBBLE",
+    "engine": "WAVESHAPE",
+    "sound": [
+      50,
+      80,
+      60
+    ],
+    "filter": [
+      60,
+      60
+    ],
+    "envelope": [
+      0,
+      40,
+      127,
+      20
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 6,
+    "name": "PLUCK BASS",
+    "engine": "ANALOG VCF",
+    "sound": [
+      30,
+      50,
+      20
+    ],
+    "filter": [
+      55,
+      40
+    ],
+    "envelope": [
+      0,
+      25,
+      20,
+      15
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 7,
+    "name": "DIST BASS",
+    "engine": "PHASE DIST",
+    "sound": [
+      70,
+      100,
+      70
+    ],
+    "filter": [
+      80,
+      10
+    ],
+    "envelope": [
+      0,
+      40,
+      120,
+      20
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 8,
+    "name": "808 BOOM",
+    "engine": "KICK",
+    "sound": [
+      20,
+      40,
+      80
+    ],
+    "filter": [
+      127,
+      0
+    ],
+    "envelope": [
+      0,
+      80,
+      0,
+      60
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 9,
+    "name": "E PIANO",
+    "engine": "FM KEYS",
+    "sound": [
+      40,
+      50,
+      40
+    ],
+    "filter": [
+      100,
+      0
+    ],
+    "envelope": [
+      0,
+      60,
+      80,
+      40
+    ],
+    "effects": [
+      10,
+      35
+    ]
+  },
+  {
+    "number": 10,
+    "name": "DX TINE",
+    "engine": "FM KEYS",
+    "sound": [
+      70,
+      70,
+      60
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      55,
+      60,
+      35
+    ],
+    "effects": [
+      15,
+      30
+    ]
+  },
+  {
+    "number": 11,
+    "name": "ORGAN",
+    "engine": "HARMONIC",
+    "sound": [
+      60,
+      40,
+      64
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      2,
+      30,
+      127,
+      15
+    ],
+    "effects": [
+      0,
+      30
+    ]
+  },
+  {
+    "number": 12,
+    "name": "HOUSE ORG",
+    "engine": "HARMONIC",
+    "sound": [
+      80,
+      60,
+      40
+    ],
+    "filter": [
+      95,
+      10
+    ],
+    "envelope": [
+      0,
+      25,
+      110,
+      10
+    ],
+    "effects": [
+      10,
+      25
+    ]
+  },
+  {
+    "number": 13,
+    "name": "CLAV",
+    "engine": "WAVESHAPE",
+    "sound": [
+      30,
+      90,
+      20
+    ],
+    "filter": [
+      100,
+      20
+    ],
+    "envelope": [
+      0,
+      20,
+      30,
+      10
+    ],
+    "effects": [
+      0,
+      15
+    ]
+  },
+  {
+    "number": 14,
+    "name": "MALLET",
+    "engine": "MODAL",
+    "sound": [
+      50,
+      40,
+      60
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      0,
+      50,
+      0,
+      50
+    ],
+    "effects": [
+      15,
+      35
+    ]
+  },
+  {
+    "number": 15,
+    "name": "BELL KEYS",
+    "engine": "FM",
+    "sound": [
+      80,
+      70,
+      50
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      0,
+      70,
+      20,
+      60
+    ],
+    "effects": [
+      20,
+      45
+    ]
+  },
+  {
+    "number": 16,
+    "name": "TOY PIANO",
+    "engine": "CHIPTUNE",
+    "sound": [
+      40,
+      40,
+      40
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      30,
+      20,
+      25
+    ],
+    "effects": [
+      15,
+      25
+    ]
+  },
+  {
+    "number": 17,
+    "name": "HOUSE CHRD",
+    "engine": "CHORD",
+    "sound": [
+      40,
+      60,
+      50
+    ],
+    "filter": [
+      85,
+      20
+    ],
+    "envelope": [
+      0,
+      30,
+      40,
+      20
+    ],
+    "effects": [
+      20,
+      30
+    ]
+  },
+  {
+    "number": 18,
+    "name": "DEEP CHORD",
+    "engine": "CHORD",
+    "sound": [
+      30,
+      40,
+      70
+    ],
+    "filter": [
+      60,
+      30
+    ],
+    "envelope": [
+      0,
+      60,
+      50,
+      50
+    ],
+    "effects": [
+      40,
+      55
+    ]
+  },
+  {
+    "number": 19,
+    "name": "ORGAN CHRD",
+    "engine": "CHORD",
+    "sound": [
+      70,
+      30,
+      40
+    ],
+    "filter": [
+      100,
+      0
+    ],
+    "envelope": [
+      0,
+      25,
+      100,
+      15
+    ],
+    "effects": [
+      10,
+      30
+    ]
+  },
+  {
+    "number": 20,
+    "name": "STRING STB",
+    "engine": "STRING MACH",
+    "sound": [
+      50,
+      60,
+      50
+    ],
+    "filter": [
+      90,
+      0
+    ],
+    "envelope": [
+      0,
+      35,
+      60,
+      30
+    ],
+    "effects": [
+      15,
+      40
+    ]
+  },
+  {
+    "number": 21,
+    "name": "90S STAB",
+    "engine": "CHORD",
+    "sound": [
+      60,
+      90,
+      30
+    ],
+    "filter": [
+      110,
+      20
+    ],
+    "envelope": [
+      0,
+      20,
+      10,
+      15
+    ],
+    "effects": [
+      25,
+      35
+    ]
+  },
+  {
+    "number": 22,
+    "name": "JAZZ 9TH",
+    "engine": "CHORD",
+    "sound": [
+      20,
+      50,
+      60
+    ],
+    "filter": [
+      95,
+      0
+    ],
+    "envelope": [
+      0,
+      50,
+      70,
+      40
+    ],
+    "effects": [
+      10,
+      35
+    ]
+  },
+  {
+    "number": 23,
+    "name": "PLUCK CHRD",
+    "engine": "CHORD",
+    "sound": [
+      50,
+      70,
+      40
+    ],
+    "filter": [
+      80,
+      40
+    ],
+    "envelope": [
+      0,
+      25,
+      0,
+      25
+    ],
+    "effects": [
+      30,
+      30
+    ]
+  },
+  {
+    "number": 24,
+    "name": "POLY SAW",
+    "engine": "VIRTUAL AN",
+    "sound": [
+      90,
+      70,
+      30
+    ],
+    "filter": [
+      90,
+      10
+    ],
+    "envelope": [
+      5,
+      40,
+      90,
+      40
+    ],
+    "effects": [
+      15,
+      40
+    ]
+  },
+  {
+    "number": 25,
+    "name": "LUSH PAD",
+    "engine": "SWARM",
+    "sound": [
+      60,
+      50,
+      60
+    ],
+    "filter": [
+      80,
+      0
+    ],
+    "envelope": [
+      70,
+      60,
+      120,
+      90
+    ],
+    "effects": [
+      20,
+      80
+    ]
+  },
+  {
+    "number": 26,
+    "name": "WARM PAD",
+    "engine": "FM PAD",
+    "sound": [
+      40,
+      40,
+      50
+    ],
+    "filter": [
+      70,
+      10
+    ],
+    "envelope": [
+      60,
+      60,
+      120,
+      90
+    ],
+    "effects": [
+      10,
+      70
+    ]
+  },
+  {
+    "number": 27,
+    "name": "STR MACH",
+    "engine": "STRING MACH",
+    "sound": [
+      60,
+      50,
+      60
+    ],
+    "filter": [
+      85,
+      0
+    ],
+    "envelope": [
+      50,
+      60,
+      120,
+      80
+    ],
+    "effects": [
+      15,
+      70
+    ]
+  },
+  {
+    "number": 28,
+    "name": "GLASS PAD",
+    "engine": "WAVETABLE",
+    "sound": [
+      70,
+      60,
+      50
+    ],
+    "filter": [
+      100,
+      0
+    ],
+    "envelope": [
+      60,
+      60,
+      110,
+      90
+    ],
+    "effects": [
+      25,
+      80
+    ]
+  },
+  {
+    "number": 29,
+    "name": "DARK PAD",
+    "engine": "WAVE TERRAIN",
+    "sound": [
+      30,
+      40,
+      60
+    ],
+    "filter": [
+      50,
+      20
+    ],
+    "envelope": [
+      80,
+      70,
+      120,
+      100
+    ],
+    "effects": [
+      15,
+      85
+    ]
+  },
+  {
+    "number": 30,
+    "name": "CHOIR",
+    "engine": "SPEECH",
+    "sound": [
+      50,
+      40,
+      70
+    ],
+    "filter": [
+      80,
+      0
+    ],
+    "envelope": [
+      60,
+      60,
+      120,
+      80
+    ],
+    "effects": [
+      15,
+      80
+    ]
+  },
+  {
+    "number": 31,
+    "name": "GRAIN PAD",
+    "engine": "GRAIN",
+    "sound": [
+      60,
+      70,
+      60
+    ],
+    "filter": [
+      90,
+      0
+    ],
+    "envelope": [
+      70,
+      70,
+      120,
+      100
+    ],
+    "effects": [
+      20,
+      85
+    ]
+  },
+  {
+    "number": 32,
+    "name": "AMBIENT",
+    "engine": "CHORD",
+    "sound": [
+      40,
+      30,
+      80
+    ],
+    "filter": [
+      70,
+      0
+    ],
+    "envelope": [
+      90,
+      80,
+      120,
+      110
+    ],
+    "effects": [
+      30,
+      100
+    ]
+  },
+  {
+    "number": 33,
+    "name": "SAW LEAD",
+    "engine": "VIRTUAL AN",
+    "sound": [
+      70,
+      80,
+      30
+    ],
+    "filter": [
+      100,
+      20
+    ],
+    "envelope": [
+      0,
+      40,
+      110,
+      20
+    ],
+    "effects": [
+      25,
+      30
+    ]
+  },
+  {
+    "number": 34,
+    "name": "SQ LEAD",
+    "engine": "VIRTUAL AN",
+    "sound": [
+      20,
+      60,
+      90
+    ],
+    "filter": [
+      100,
+      10
+    ],
+    "envelope": [
+      0,
+      40,
+      110,
+      20
+    ],
+    "effects": [
+      25,
+      30
+    ]
+  },
+  {
+    "number": 35,
+    "name": "ACID LEAD",
+    "engine": "ANALOG VCF",
+    "sound": [
+      60,
+      90,
+      40
+    ],
+    "filter": [
+      70,
+      110
+    ],
+    "envelope": [
+      0,
+      30,
+      80,
+      15
+    ],
+    "effects": [
+      30,
+      20
+    ]
+  },
+  {
+    "number": 36,
+    "name": "SYNC LEAD",
+    "engine": "PHASE DIST",
+    "sound": [
+      60,
+      80,
+      80
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      40,
+      110,
+      20
+    ],
+    "effects": [
+      25,
+      25
+    ]
+  },
+  {
+    "number": 37,
+    "name": "CHIP LEAD",
+    "engine": "CHIPTUNE",
+    "sound": [
+      50,
+      60,
+      50
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      0,
+      30,
+      110,
+      10
+    ],
+    "effects": [
+      20,
+      15
+    ]
+  },
+  {
+    "number": 38,
+    "name": "FM LEAD",
+    "engine": "FM",
+    "sound": [
+      60,
+      70,
+      40
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      40,
+      100,
+      25
+    ],
+    "effects": [
+      25,
+      30
+    ]
+  },
+  {
+    "number": 39,
+    "name": "WHISTLE",
+    "engine": "MODAL",
+    "sound": [
+      90,
+      30,
+      80
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      10,
+      40,
+      110,
+      40
+    ],
+    "effects": [
+      30,
+      50
+    ]
+  },
+  {
+    "number": 40,
+    "name": "HOOVER",
+    "engine": "SWARM",
+    "sound": [
+      80,
+      90,
+      40
+    ],
+    "filter": [
+      90,
+      30
+    ],
+    "envelope": [
+      0,
+      40,
+      120,
+      30
+    ],
+    "effects": [
+      10,
+      30
+    ]
+  },
+  {
+    "number": 41,
+    "name": "PLUCK",
+    "engine": "STRING",
+    "sound": [
+      50,
+      60,
+      50
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      40,
+      0,
+      30
+    ],
+    "effects": [
+      30,
+      40
+    ]
+  },
+  {
+    "number": 42,
+    "name": "KALIMBA",
+    "engine": "MODAL",
+    "sound": [
+      40,
+      50,
+      30
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      0,
+      45,
+      0,
+      45
+    ],
+    "effects": [
+      25,
+      40
+    ]
+  },
+  {
+    "number": 43,
+    "name": "HARP",
+    "engine": "STRING",
+    "sound": [
+      30,
+      40,
+      70
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      60,
+      0,
+      60
+    ],
+    "effects": [
+      25,
+      55
+    ]
+  },
+  {
+    "number": 44,
+    "name": "ARP SAW",
+    "engine": "ANALOG VCF",
+    "sound": [
+      50,
+      60,
+      30
+    ],
+    "filter": [
+      80,
+      50
+    ],
+    "envelope": [
+      0,
+      25,
+      0,
+      20
+    ],
+    "effects": [
+      40,
+      30
+    ]
+  },
+  {
+    "number": 45,
+    "name": "FM PLUCK",
+    "engine": "FM",
+    "sound": [
+      50,
+      80,
+      30
+    ],
+    "filter": [
+      115,
+      0
+    ],
+    "envelope": [
+      0,
+      25,
+      0,
+      25
+    ],
+    "effects": [
+      35,
+      30
+    ]
+  },
+  {
+    "number": 46,
+    "name": "BLIP",
+    "engine": "CHIPTUNE",
+    "sound": [
+      30,
+      50,
+      30
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      0,
+      15,
+      0,
+      10
+    ],
+    "effects": [
+      35,
+      25
+    ]
+  },
+  {
+    "number": 47,
+    "name": "GLASS PLK",
+    "engine": "WAVETABLE",
+    "sound": [
+      70,
+      70,
+      30
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      30,
+      0,
+      30
+    ],
+    "effects": [
+      35,
+      45
+    ]
+  },
+  {
+    "number": 48,
+    "name": "STEEL DRUM",
+    "engine": "MODAL",
+    "sound": [
+      60,
+      70,
+      50
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      0,
+      45,
+      0,
+      40
+    ],
+    "effects": [
+      20,
+      35
+    ]
+  },
+  {
+    "number": 49,
+    "name": "KICK",
+    "engine": "KICK",
+    "sound": [
+      30,
+      50,
+      50
+    ],
+    "filter": [
+      127,
+      0
+    ],
+    "envelope": [
+      0,
+      50,
+      0,
+      40
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 50,
+    "name": "TOM",
+    "engine": "KICK",
+    "sound": [
+      60,
+      40,
+      40
+    ],
+    "filter": [
+      127,
+      0
+    ],
+    "envelope": [
+      0,
+      40,
+      0,
+      35
+    ],
+    "effects": [
+      0,
+      20
+    ]
+  },
+  {
+    "number": 51,
+    "name": "SNARE",
+    "engine": "SNARE",
+    "sound": [
+      50,
+      50,
+      50
+    ],
+    "filter": [
+      120,
+      0
+    ],
+    "envelope": [
+      0,
+      35,
+      0,
+      30
+    ],
+    "effects": [
+      0,
+      15
+    ]
+  },
+  {
+    "number": 52,
+    "name": "HAT",
+    "engine": "HI HAT",
+    "sound": [
+      50,
+      60,
+      30
+    ],
+    "filter": [
+      127,
+      0
+    ],
+    "envelope": [
+      0,
+      15,
+      0,
+      10
+    ],
+    "effects": [
+      0,
+      0
+    ]
+  },
+  {
+    "number": 53,
+    "name": "RIDE",
+    "engine": "HI HAT",
+    "sound": [
+      60,
+      80,
+      80
+    ],
+    "filter": [
+      127,
+      0
+    ],
+    "envelope": [
+      0,
+      60,
+      0,
+      60
+    ],
+    "effects": [
+      0,
+      20
+    ]
+  },
+  {
+    "number": 54,
+    "name": "PERC BLIP",
+    "engine": "MODAL",
+    "sound": [
+      80,
+      80,
+      20
+    ],
+    "filter": [
+      127,
+      0
+    ],
+    "envelope": [
+      0,
+      15,
+      0,
+      15
+    ],
+    "effects": [
+      30,
+      30
+    ]
+  },
+  {
+    "number": 55,
+    "name": "NOISE SWP",
+    "engine": "NOISE",
+    "sound": [
+      60,
+      70,
+      60
+    ],
+    "filter": [
+      60,
+      70
+    ],
+    "envelope": [
+      40,
+      80,
+      60,
+      80
+    ],
+    "effects": [
+      20,
+      60
+    ]
+  },
+  {
+    "number": 56,
+    "name": "ZAP",
+    "engine": "PHASE DIST",
+    "sound": [
+      90,
+      100,
+      20
+    ],
+    "filter": [
+      127,
+      0
+    ],
+    "envelope": [
+      0,
+      20,
+      0,
+      15
+    ],
+    "effects": [
+      30,
+      20
+    ]
+  },
+  {
+    "number": 57,
+    "name": "RAIN",
+    "engine": "PARTICLE",
+    "sound": [
+      50,
+      40,
+      60
+    ],
+    "filter": [
+      100,
+      0
+    ],
+    "envelope": [
+      20,
+      60,
+      110,
+      80
+    ],
+    "effects": [
+      30,
+      80
+    ]
+  },
+  {
+    "number": 58,
+    "name": "WIND",
+    "engine": "NOISE",
+    "sound": [
+      40,
+      50,
+      70
+    ],
+    "filter": [
+      60,
+      50
+    ],
+    "envelope": [
+      80,
+      70,
+      120,
+      100
+    ],
+    "effects": [
+      10,
+      80
+    ]
+  },
+  {
+    "number": 59,
+    "name": "VOX TALK",
+    "engine": "SPEECH",
+    "sound": [
+      60,
+      60,
+      40
+    ],
+    "filter": [
+      100,
+      0
+    ],
+    "envelope": [
+      0,
+      50,
+      100,
+      40
+    ],
+    "effects": [
+      30,
+      40
+    ]
+  },
+  {
+    "number": 60,
+    "name": "METAL DRN",
+    "engine": "MODAL",
+    "sound": [
+      30,
+      90,
+      80
+    ],
+    "filter": [
+      90,
+      0
+    ],
+    "envelope": [
+      60,
+      80,
+      120,
+      100
+    ],
+    "effects": [
+      30,
+      90
+    ]
+  },
+  {
+    "number": 61,
+    "name": "GRANULAR",
+    "engine": "GRAIN",
+    "sound": [
+      80,
+      90,
+      80
+    ],
+    "filter": [
+      90,
+      0
+    ],
+    "envelope": [
+      40,
+      70,
+      120,
+      90
+    ],
+    "effects": [
+      35,
+      90
+    ]
+  },
+  {
+    "number": 62,
+    "name": "TERRAIN",
+    "engine": "WAVE TERRAIN",
+    "sound": [
+      70,
+      70,
+      70
+    ],
+    "filter": [
+      80,
+      20
+    ],
+    "envelope": [
+      30,
+      60,
+      120,
+      80
+    ],
+    "effects": [
+      25,
+      70
+    ]
+  },
+  {
+    "number": 63,
+    "name": "BOWED",
+    "engine": "STRING",
+    "sound": [
+      70,
+      30,
+      90
+    ],
+    "filter": [
+      80,
+      0
+    ],
+    "envelope": [
+      60,
+      70,
+      120,
+      90
+    ],
+    "effects": [
+      20,
+      80
+    ]
+  },
+  {
+    "number": 64,
+    "name": "SPACE BELL",
+    "engine": "FM",
+    "sound": [
+      90,
+      50,
+      70
+    ],
+    "filter": [
+      110,
+      0
+    ],
+    "envelope": [
+      0,
+      90,
+      30,
+      100
+    ],
+    "effects": [
+      50,
+      100
+    ]
+  }
+]

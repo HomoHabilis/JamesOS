@@ -1,0 +1,14 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Placement construction is the only C++ allocation form used by Plaits.
+ */
+#ifndef FM1_TARGET_NEW
+#define FM1_TARGET_NEW
+
+#include <stddef.h>
+
+inline void* operator new(size_t, void* storage) noexcept { return storage; }
+inline void* operator new[](size_t, void* storage) noexcept { return storage; }
+inline void operator delete(void*, void*) noexcept {}
+inline void operator delete[](void*, void*) noexcept {}
+
+#endif

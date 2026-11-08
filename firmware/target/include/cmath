@@ -1,0 +1,46 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Freestanding C++ math declarations forwarded to the vendor libm interface.
+ */
+#ifndef FM1_TARGET_CMATH
+#define FM1_TARGET_CMATH
+
+#include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+namespace std {
+using ::acos;
+using ::acosf;
+using ::asin;
+using ::asinf;
+using ::atan;
+using ::atanf;
+using ::atan2;
+using ::atan2f;
+using ::ceil;
+using ::ceilf;
+using ::cos;
+using ::cosf;
+using ::exp;
+using ::expf;
+using ::fabs;
+using ::fabsf;
+using ::floor;
+using ::floorf;
+using ::fmod;
+using ::fmodf;
+using ::log;
+using ::logf;
+using ::pow;
+using ::powf;
+using ::sin;
+using ::sinf;
+using ::sqrt;
+using ::sqrtf;
+using ::tan;
+using ::tanf;
+}
+
+#endif
