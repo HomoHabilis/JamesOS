@@ -1,0 +1,8 @@
+{
+  "what": "A groovebox for the FM-1 with three synth tracks, four drum lanes, 24 Plaits engines, 64 starting sounds and a 64-step sequencer. Shape your mix with track effects, shared reverb and master controls.",
+  "author": "Aaron Grando",
+  "kinds": ["groove"],
+  "cheat": "https://gjelly.com/JamesOS/manual#quick-start",
+  "image": "docs/images/home.png",
+  "color": "#19C47B"
+}
