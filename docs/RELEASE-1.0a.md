@@ -1,6 +1,6 @@
 # JamesOS 1.0a alpha
 
-JamesOS 1.0a is the alpha designation for the frozen firmware candidate identified as distribution build `FM-1_9262012`. It is an independent firmware project by Aaron Grando and Gjelly for the M-VAVE FM-1.
+JamesOS 1.0a is the alpha designation for the frozen firmware candidate identified as distribution build `FM-1_9262012`. It is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1.
 
 The alpha designation identifies the existing candidate and does not change its firmware, loader or source package. The matching development build is `FM-1_9262011`; both use update loader `ota-FM-1_904`.
 

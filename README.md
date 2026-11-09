@@ -1,8 +1,25 @@
 # JamesOS
 
+<p align="center">
+  <img src="assets/jamesos-start.png" alt="JamesOS startup graphic" width="200">
+</p>
+
 JamesOS is community firmware for the M-VAVE FM-1, built on Dinghy and the Felucca platform with SLOOP contributions. It adds synth engines, drum kits, sequencing and performance controls. The project is independent of the hardware manufacturer.
 
-JamesOS is a Gjelly project by Aaron Grando.
+JamesOS is a Gjelly project by Aaron Grando (a.k.a. James Os).
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/home.png" alt="JamesOS sound controls" width="240"><br>Sound controls</td>
+    <td align="center"><img src="docs/images/lfo.png" alt="JamesOS LFO controls" width="240"><br>LFO</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/mixer.png" alt="JamesOS track mixer" width="240"><br>Mixer</td>
+    <td align="center"><img src="docs/images/drum-sequence.png" alt="JamesOS drum sequencer with programmed steps" width="240"><br>Drum sequencer</td>
+  </tr>
+</table>
+
+Screens shown above were rendered from the 1.0a firmware source in the host emulator.
 
 Release candidates are identified by source tags and matching firmware packages. Hardware compatibility, update and recovery coverage are documented for each candidate.
 
