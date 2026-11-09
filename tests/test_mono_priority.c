@@ -25,5 +25,25 @@ int main(void) {
  br_midi(0x80,48,0); audio();
  br_ui.page=BR_PAGE_HOME; br_ui.part=0; br_arp_on=0; br_hold_on=0;
  br_key_down(0,1); audio(); {uint32_t n=br_env[0].note; br_key_down(2,1); audio(); br_key_up(2); audio(); assert(br_env[0].note==n); br_key_up(0); audio();}
+ /* A release and re-press can both occur between UI snapshots. The scanner
+    reports the new press with the key still down; the old note must end. */
+ br_engine_part_off(0); audio(); br_ui.previous_keys=0; fm1_in.notes=0;
+ fm1_in.notes=1u; host_note_pressed=1u; br_app_tick(); audio();
+ assert(br_live_count[0]==1 && br_live_notes[0][0].count==1);
+ host_note_pressed=1u; br_app_tick(); audio();
+ assert(br_live_count[0]==1 && br_live_notes[0][0].count==1);
+ fm1_in.notes=0; br_app_tick(); audio();
+ assert(br_live_count[0]==0);
+ /* A re-press and release can both happen before the next snapshot. */
+ fm1_in.notes=1u; host_note_pressed=1u; br_app_tick(); audio();
+ fm1_in.notes=0; host_note_pressed=1u; br_app_tick(); audio();
+ assert(br_live_count[0]==0);
+ /* A simultaneous MIDI note at the same pitch remains held independently. */
+ br_midi(0x90,53,80); audio();
+ fm1_in.notes=1u; host_note_pressed=1u; br_app_tick(); audio();
+ host_note_pressed=1u; br_app_tick(); audio();
+ fm1_in.notes=0; br_app_tick(); audio();
+ assert(br_live_count[0]==1 && br_live_notes[0][0].count==1);
+ br_midi(0x80,53,0); audio(); assert(br_live_count[0]==0);
  puts("PASS: mono last-note priority, duplicates, reset, MIDI and keyboard"); return 0;
 }

@@ -1,5 +1,7 @@
 # JamesOS 1.0a alpha
 
+**Current update: build 2104 (9 November 2026).** The keyboard repeat fix was tested on one FM-1: loader 904 installed the standard package from 2103, the unit restarted, and the owner reported no stuck notes during repeated and alternating rapid key presses. The settings protection flag was already active and remained active; its cause is unresolved. The 2104 combined package for installation from V15 has not been hardware-tested. See the README for package hashes and limitations. The 2014 record below is historical.
+
 JamesOS is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1. The owner froze the 1.0a alpha candidate on distribution build 2014 on 8 November 2026.
 
 The distribution build is `FM-1_9262014` and the matching development build is `FM-1_9262013`; both use update loader `ota-FM-1_904`. Firmware switching can overwrite another firmware's saved data. JamesOS identifies incompatible project slots and permits a confirmed save to replace them. It does not convert projects from other firmware.

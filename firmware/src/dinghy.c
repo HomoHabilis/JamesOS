@@ -1425,6 +1425,16 @@ static void br_app_tick_inner(void)
     int32_t turn, select_turn;
     uint32_t save_active = 0u;
     uint8_t status, d1, d2;
+    /* A new press edge on a previously held key proves it was released and
+     * pressed again between snapshots. Release the old voice before handling
+     * the new press, including when that press was already released too. */
+    for (k = 0u; k < 27u; ++k) {
+        uint32_t bit = 1u << k;
+        if ((edges & br_ui.previous_keys & bit) && br_ui.held_note[k]) {
+            BR_FOREGROUND_MUTATE(br_key_up(k));
+            up &= ~bit;
+        }
+    }
     br_ui.previous_keys = keys;
     if (br_ui.retrig_key && !br_retrig_editing()) { br_ui.retrig_key = 0u; br_ui.redraw = 1u; }
 #if defined(DINGHY_EMULATOR_SAVE) || defined(FM1_DEVICE) || defined(DINGHY_DEVICE_SAVE_TEST)
