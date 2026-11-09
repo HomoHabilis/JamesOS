@@ -23,7 +23,7 @@ Screens shown above were rendered from the 1.0a firmware source in the host emul
 
 Release candidates are identified by source tags and matching firmware packages. Hardware compatibility, update and recovery coverage are documented for each candidate.
 
-The frozen build 2012 candidate is designated **JamesOS 1.0a alpha**. Its tested scope and known limitations are described in [the alpha release record](docs/RELEASE-1.0a.md).
+The proposed **JamesOS 1.0a alpha** candidate and its validation status are described in [the alpha release record](docs/RELEASE-1.0a.md).
 
 ## Source layout
 
@@ -34,16 +34,16 @@ The frozen build 2012 candidate is designated **JamesOS 1.0a alpha**. Its tested
 
 ## Build and test
 
-The device build requires the JieLi Linux toolchain and the AC79 SDK tag pinned by `tools/build.py`; see `tools/get_toolchain.sh`. Set `JIELI_TOOLCHAIN` to the toolchain directory and `AC79_SDK` to the SDK checkout. On macOS, Docker is required. The following commands select the configurations and product identifiers used for candidate builds 2011 and 2012. Build the development configuration with:
+The device build requires the JieLi Linux toolchain and the AC79 SDK tag pinned by `tools/build.py`; see `tools/get_toolchain.sh`. Set `JIELI_TOOLCHAIN` to the toolchain directory and `AC79_SDK` to the SDK checkout. On macOS, Docker is required. The following commands select the configurations and product identifiers used for candidate builds 2013 and 2014. Build the development configuration with:
 
 ```sh
-python3 tools/build.py --pattern-device-candidate --app-opt Oz --product FM-1_9262011 --diagnostics development --sdk "$AC79_SDK"
+python3 tools/build.py --pattern-device-candidate --app-opt Oz --product FM-1_9262013 --diagnostics development --sdk "$AC79_SDK"
 ```
 
 Build the distribution configuration with:
 
 ```sh
-python3 tools/build.py --pattern-device-candidate --app-opt Oz --product FM-1_9262012 --diagnostics distribution --sdk "$AC79_SDK"
+python3 tools/build.py --pattern-device-candidate --app-opt Oz --product FM-1_9262014 --diagnostics distribution --sdk "$AC79_SDK"
 ```
 
 The distribution configuration excludes development-only controls, telemetry, profiling and optional crash sidecar capture. It retains operational timing, safety, fault and recovery paths and rejects optional profiling and test modes. Build output includes `build-settings.json` identifying the selected configuration. See `docs/DIAGNOSTICS.md` for details.

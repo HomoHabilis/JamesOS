@@ -34,6 +34,9 @@ pps_store *pps_owner_store(pps_owner *);
  * returned only during the owner-authorized erase, for its preflighted sector
  * under the same live lease and fence; ordinary calls grant no authority. */
 int pps_owner_may_erase(pps_owner *,uint32_t sector_address);
+/* Explicit project replacement: erase only fully scanned incompatible copies,
+ * retaining valid survivors. Requires the same live parked owner and fence. */
+int pps_owner_reclaim_incompatible(pps_owner *);
 /* Serialized one-way transfer from a named slot to the working pair while the
  * SAME park/freeze remains held. next, fresh_lease and scratch are live for
  * the rest of the transaction; next_token is distinct from all stale tokens.

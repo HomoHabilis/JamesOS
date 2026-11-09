@@ -14,7 +14,7 @@ static inline int br_pattern_boot_result(br_pattern_boot_recovery *s,uint32_t no
     if(!s || s->done) return -2;
     s->attempted=1; s->last_attempt=now;
     if(fatal || result==FM1_PROJECT_ROLLBACK_FAILED) { s->done=1; return -1; }
-    if(result==PFS_OK || result==FM1_PROJECT_SAFE_EMPTY) { s->done=1; return 1; }
+    if(result==PFS_OK || result==FM1_PROJECT_SAFE_EMPTY || result==FM1_PROJECT_FOREIGN_WORKING) { s->done=1; return 1; }
     if(result==FM1_PROJECT_BUSY) return 0;
     s->done=1; return -2;
 }

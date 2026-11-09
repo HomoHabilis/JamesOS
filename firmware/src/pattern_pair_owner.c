@@ -13,6 +13,7 @@ static int admitted(pps_owner*o,uint32_t off,uint32_t n){int valid;
 }
 static int read_cb(void*v,uint32_t off,void*dst,uint32_t n){pps_owner*o=v;return !dst||!admitted(o,off,n)?-1:br_pattern_park_read(o->park,off,dst,n);}
 int pps_owner_may_erase(pps_owner*o,uint32_t off){return o&&o->erase_armed&&o->armed==off&&admitted(o,off,PS_SECTOR);}
+int pps_owner_reclaim_incompatible(pps_owner*o){unsigned mask=0;int rc;if(!o||!admitted(o,o->first,PS_SECTOR)||o->erase_armed)return PS_INVALID;rc=pps_incompatible_mask(&o->store,o->slot,o->scratch,&mask);if(rc!=PS_OK||!admitted(o,o->first,PS_SECTOR))return rc==PS_IO?PS_IO:PS_INVALID;for(unsigned i=0;i<2;i++)if(mask&(1u<<i)){uint32_t off=o->first+i*PS_SECTOR;unsigned check=0;if(pps_incompatible_mask(&o->store,o->slot,o->scratch,&check)!=PS_OK||!(check&(1u<<i))||!admitted(o,off,PS_SECTOR))return PS_IO;o->armed=off;o->erase_armed=1;rc=br_pattern_park_erase(o->park,off);o->erase_armed=0;if(rc)return PS_IO;}return PS_OK;}
 static int erase_cb(void*v,uint32_t off){pps_owner*o=v;unsigned copy;int r;if(!admitted(o,off,PS_SECTOR)||off%PS_SECTOR||o->erase_armed)return -1;copy=(off-o->first)/PS_SECTOR;o->has_erased=0;
  if(pps_erase_allowed(&o->store,o->slot,copy,o->scratch)!=1||!admitted(o,off,PS_SECTOR))return -1;
  o->armed=off;o->erase_armed=1;r=br_pattern_park_erase(o->park,off);o->erase_armed=0;if(r)return -1;

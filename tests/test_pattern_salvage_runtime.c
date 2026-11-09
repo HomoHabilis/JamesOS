@@ -1,5 +1,5 @@
 /* Host-only real-v4 runtime salvage: damaged sibling must not block reading
- * the valid survivor, but no operation may write the damaged pair. */
+ * the valid survivor, an explicit save may replace the damaged copy. */
 #define FM1_CUT_FIXTURE 1
 #include "test_pattern_fixed_runtime.c"
 int main(void){
@@ -15,19 +15,19 @@ int main(void){
  assert(br_pattern_snapshot_capture(&cmp_a)==0&&!memcmp(&cmp_a,&src_live,sizeof cmp_a));
  /* Read-only load refreshes the valid working pair; damaged named copy remains untouched. */
  assert(!memcmp(pair_before,pair_flash,2u*PS_SECTOR));memcpy(pair_before,pair_flash,sizeof pair_flash);
- assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")!=PFS_OK&&!memcmp(pair_before,pair_flash,sizeof pair_flash));
- /* A damaged working sibling must still allow boot recovery, but no save. */
+ assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")==PFS_OK&&!memcmp(pair_before,pair_flash,PS_SECTOR));
+ /* A damaged working sibling still allows recovery and explicit save. */
  init_runtime_fixture();assert(fm1_fixed_runtime_bind(&runtime,&port)==PFS_OK);assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")==PFS_OK);
  expected=br_bpm;assert(br_capture(&expected_session));pair_flash[25u*PS_SECTOR+100]=0x42;memcpy(pair_before,pair_flash,sizeof pair_flash);br_bpm=45;
  assert(fm1_fixed_bridge_recover(&runtime.bridge)==PFS_OK && br_bpm==expected);
  assert(br_capture(&target_factory)&&!memcmp(&expected_session,&target_factory,sizeof expected_session));
  assert(br_pattern_snapshot_capture(&cmp_a)==0&&!memcmp(&cmp_a,&src_live,sizeof cmp_a));
  assert(!memcmp(pair_before,pair_flash,sizeof pair_flash));
- assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")!=PFS_OK&&!memcmp(pair_before,pair_flash,sizeof pair_flash));
+ assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")==PFS_OK);memcpy(pair_before,pair_flash,sizeof pair_flash);
  {br_session_t old_session;assert(br_capture(&old_session));
-  assert(fm1_fixed_bridge_load(&runtime.bridge,0)!=PFS_OK);
+  assert(fm1_fixed_bridge_load(&runtime.bridge,0)==PFS_OK);
   assert(br_capture(&target_factory)&&!memcmp(&old_session,&target_factory,sizeof old_session));
-  assert(!memcmp(pair_before,pair_flash,sizeof pair_flash));}
+  assert(!memcmp(pair_before,pair_flash,2u*PS_SECTOR));}
  /* Simulate a restart after interrupted repair of the working sibling.
   * With residual bytes, recovery reads the survivor and writes stay denied;
   * a completely erased sibling is safe for normal saving again. */
@@ -42,15 +42,14 @@ int main(void){
     br_bpm=45;assert(fm1_fixed_bridge_recover(&runtime.bridge)==PFS_OK&&br_bpm==expected);
     assert(br_capture(&target_factory)&&!memcmp(&expected_session,&target_factory,sizeof expected_session));
     assert(!memcmp(pair_before,pair_flash,sizeof pair_flash));
-    if(cuts[i]<=3500){assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")!=PFS_OK);assert(!memcmp(pair_before,pair_flash,sizeof pair_flash));}
-    else assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")==PFS_OK);
+    assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")==PFS_OK);
    }}
  /* Two corrupt copies do not permit scan, load or writes. */
  init_runtime_fixture();assert(fm1_fixed_runtime_bind(&runtime,&port)==PFS_OK);assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")==PFS_OK);
  pair_flash[PS_SECTOR+100]=0x42;pair_flash[PS_PAYLOAD_OFFSET+7]^=1;memcpy(pair_before,pair_flash,sizeof pair_flash);
  {char name[PS_NAME_BYTES];assert(fm1_fixed_runtime_scan(&runtime,0,name)!=PFS_OK);}
  assert(fm1_fixed_bridge_load(&runtime.bridge,0)!=PFS_OK);
- assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")!=PFS_OK);
- assert(!memcmp(pair_before,pair_flash,sizeof pair_flash));
- puts("PASS: valid named/working survivor readable; damaged copies never written");return 0;
+ assert(fm1_fixed_bridge_save(&runtime.bridge,0,"PATTERN")==PFS_OK);
+ assert(!memcmp(pair_before+2u*PS_SECTOR,pair_flash+2u*PS_SECTOR,22u*PS_SECTOR));
+ puts("PASS: survivors readable and explicit replacement recovers damaged records");return 0;
 }

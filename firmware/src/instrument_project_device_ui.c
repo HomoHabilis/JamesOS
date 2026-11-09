@@ -131,7 +131,7 @@ static int br_project_target_recover(void) {
     if(br_playing) return PFS_INVALID;
     rc=br_pp_ui_recover(&slot);
     if(rc==FM1_PROJECT_ROLLBACK_FAILED){es_project_fault=1u;es_error("RECOVERY NEEDED");}
-    if(rc==PFS_OK || rc==FM1_PROJECT_SAFE_EMPTY) es_project_boot_state=1u;
+    if(rc==PFS_OK || rc==FM1_PROJECT_SAFE_EMPTY || rc==FM1_PROJECT_FOREIGN_WORKING) es_project_boot_state=1u;
     if(rc==PFS_OK) { br_project_host_ui_reset(); es.current=slot; if(slot>=0 && slot<ES_SLOTS) es_scan_slot(slot); }
     return rc;
 }
@@ -177,7 +177,6 @@ static int es_write(int slot,const char *name) {
     if(!br_pp_target_ready() || es_project_boot_state!=1u){es_error(es_project_boot_state==2u?"RECOVERY FAILED":"STORE LOCKED");return 0;}
 #endif
     if(!es_slot_ready(slot)){es_error("SCANNING SLOTS");return 0;}
-    if(es_directory[slot].state==3){es_error("USED DATA");return 0;}
     if(br_playing){es_error("STOP PLAYBACK");return 0;}
     if(!es_silence_for_save()){es_error("BUSY");return 0;}
 #if !BR_PATTERN_PROJECT_UI_TARGET

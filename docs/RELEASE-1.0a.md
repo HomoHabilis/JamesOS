@@ -1,25 +1,16 @@
-# JamesOS 1.0a alpha
+# JamesOS 1.0a alpha candidate
 
-JamesOS 1.0a is the alpha designation for the frozen firmware candidate identified as distribution build `FM-1_9262012`. It is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1.
+JamesOS is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1. This replacement 1.0a candidate is **under validation and not yet frozen**.
 
-The alpha designation identifies the existing candidate and does not change its firmware, loader or source package. The matching development build is `FM-1_9262011`; both use update loader `ota-FM-1_904`.
+The distribution test build is `FM-1_9262014` and the matching development test build is `FM-1_9262013`; both use update loader `ota-FM-1_904`. Firmware switching can overwrite another firmware's saved data. The candidate identifies incompatible project slots and permits a confirmed save to replace them. It does not convert projects from other firmware.
 
-## Artifact identity
-
-| Artifact | SHA-256 |
+| Test package | SHA-256 |
 | --- | --- |
-| Distribution package | `1bba4a934ec771c7eb7161a4c886725de94d6bd8f6bf70d753c7a6cc9785a74e` |
-| Development package | `1467dfe43f39373f8eb6570bbf37373bb37d11316bef7e316663301344068811` |
-| Original frozen source archive (not included in the publication bundle) | `bfc4c5703503a1cf34bf45360bfa9bd100a6d05ebea9609e313248fbf84369be` |
+| Distribution | `8e2efc76bf7cf18e0cd10df3a053e5b3fadbfa0a74aa88543b9d832356e5556b` |
+| Development | `ca964cdbcff5d3f4f0a1872d380b50e2ccd7755f445eb16c9861de965119a398` |
 
-The frozen clean-history source commit is `97d831c6a8509f19470cd59fce26d97509898262`, with tree `6366a2ecb424c816f21e452db0bb291fb148707b`. This release record was added after the freeze and is not included in the original frozen source archive. The publication source archive includes updated documentation and a nonfunctional font-header comment change; its glyph data and firmware behavior remain unchanged. Check the accompanying checksum and provenance record. Build configuration and toolchain requirements are in the project README.
+Both packages built with the pinned SDK and toolchain and passed independent package validation. Host tests exercised foreign working data, replacement of incompatible named slots, valid-survivor preservation, read failures and simulated interrupted writes. Distribution build 2014 installed and restarted on the tested FM-1; the on-device foreign-data test remains in progress. Development build 2013 has not been tested on hardware. These checks do not qualify other devices or power-interrupted firmware updates.
 
-## Validation and limits
+The prior 2012 candidate was tested on one FM-1 with flash ID `0x856014`, including save and reload, invalid-record and capacity checks, physical rescue entry, a powered interrupted transfer and selected USB MIDI checks. Those checks are not a substitute for testing the changed firmware. Hardware with flash ID `0xB36014`, physical interrupted saves, DIN MIDI and an independent MIDI clock remain unverified. The long playback soak and extended idle-clock test were deferred. Returning to M-Vave firmware via its Workbench remains unqualified.
 
-Build 2012 was tested on one FM-1 with flash ID `0x856014`. Checks included project save and reload, capacity and invalid-record rejection, physical rescue entry and exit, and a powered same-image update transfer that was interrupted and resumed. USB MIDI transport and selected incoming and outgoing routing were also checked. The owner accepted the partial outgoing drum comparison.
-
-Power interruption during a partially written update or recovery and operation on the other supported flash ID `0xB36014` have not been verified. Some MIDI outputs, DIN MIDI and an independent MIDI clock remain untested. Physical interrupted-save testing and long-idle clock testing were skipped at the owner's direction; the long playback soak was deferred. The brief audio checks do not establish performance under all workloads.
-
-Component notices are in `legal/THIRD-PARTY-NOTICES.md`.
-
-This record does not itself publish the release or establish support for untested configurations.
+Component notices are in `legal/THIRD-PARTY-NOTICES.md`. Build configuration and toolchain requirements are in the project README.

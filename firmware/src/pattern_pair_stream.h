@@ -13,7 +13,8 @@
  * A validator returns exactly 1 only for a valid fully read payload. Sources
  * and validation inputs remain immutable for a transaction. The 16-byte role
  * is a collision discriminator, not authentication. A copied/forged marker
- * cannot prove historical reservation. No unknown nonblank sector is erased. */
+ * cannot prove historical reservation. Ordinary saves never erase unknown
+ * data; an explicitly selected replacement uses a separate guarded path. */
 typedef int (*pps_read_at)(void *,uint32_t,void *,uint32_t);
 typedef int (*pps_validate)(void *,pps_read_at,void *,uint32_t);
 typedef struct { void *ctx; int (*read)(void *,uint32_t,void *,uint32_t); int (*program)(void *,uint32_t,const void *,uint32_t); int (*erase)(void *,uint32_t); uint32_t base; uint8_t role[16]; pps_validate validate; void *validate_ctx; } pps_store;
@@ -39,6 +40,9 @@ int pps_reader_equal(const pps_reader *,const uint8_t *expected,uint32_t length,
  * invalid nonblank sector, ambiguity, or I/O error denies. The caller must
  * fence all writers continuously until its subsequent erase completes. */
 int pps_erase_allowed(const pps_store *,uint32_t slot,unsigned target,void *scratch);
+/* Classify nonblank invalid copies under the same exclusive fence. Never
+ * return an erase mask if any read fails. Valid copies are never selected. */
+int pps_incompatible_mask(const pps_store *,uint32_t slot,void *scratch,unsigned *mask);
 /* Revalidates the entire selected record; fencing guarantees it remains
  * immutable throughout the reader lifetime. Out must be disjoint from the
  * reader, store, scratch and callback state. Discard it on any error. */

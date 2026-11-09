@@ -170,7 +170,7 @@ static void es_confirm(void) {
         }
         es_name_begin();return;
     }
-    if(es.mode==4){if(es_latest(es.slot,&r,0)&&es.slot!=es.current){es.mode=5;return;}es_commit();return;}
+    if(es.mode==4){if(es_latest(es.slot,&r,0)&&(es.slot!=es.current||es_directory[es.slot].state==3)){es.mode=5;return;}es_commit();return;}
     if(es.mode==5)es_commit();
     else if(es.mode==6){es.mode=4;es_confirm();}
 }

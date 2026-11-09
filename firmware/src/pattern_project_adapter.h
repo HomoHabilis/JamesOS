@@ -15,6 +15,8 @@
 #define FM1_PROJECT_BUSY (-13)
 /* The access policy positively certified an absent working record. */
 #define FM1_PROJECT_SAFE_EMPTY 3
+/* A fenced scan found an incompatible working record; no data was changed. */
+#define FM1_PROJECT_FOREIGN_WORKING 4
 /* All operations require exclusive audio/editor quiescence. The callbacks
  * must keep that condition and the exported bank immutable until completion.
  * Adoption transfers destination arena ownership; caller must keep it alive.

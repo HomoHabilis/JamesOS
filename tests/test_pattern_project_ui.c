@@ -16,9 +16,9 @@ int main(void) {
  br_app_init(); fm1_ms=2000; es.mode=1;
  assert(br_quiescent_transaction_begin()); es_scan_slot(0); br_quiescent_transaction_end(); assert(es_directory[0].state==2);
  es.slot=0; es.mode=4; strcpy(es.name,"TEST"); es_confirm(); assert(saves==1 && es.current==0 && es.mode==0);
- es_directory[1].state=3; es.slot=1; es.mode=4; es_confirm(); assert(es.mode==5); es_confirm(); assert(saves==1 && !strcmp(es.error,"USED DATA"));
- es_directory[1].state=2; save_result=PFS_FULL; es.mode=4; es_confirm(); assert(saves==2 && es.current==0 && !strcmp(es.error,"PROJECT STORE FULL"));
- load_result=PFS_INVALID; es.pending=1; es.target=0; es.mode=2; es_finish_pending(); assert(loads==1 && es.current==0 && es.mode==2);
+ es_directory[1].state=3; es.slot=1; es.mode=4; es_confirm(); assert(es.mode==5); es_confirm(); assert(saves==2 && es.current==1);
+ es_directory[1].state=2; save_result=PFS_FULL; es.mode=4; es_confirm(); assert(saves==3 && es.current==1 && !strcmp(es.error,"STORE FULL"));
+ load_result=PFS_INVALID; es.pending=1; es.target=0; es.mode=2; es_finish_pending(); assert(loads==1 && es.current==1 && es.mode==2);
  load_result=FM1_PROJECT_WORKING_FAILED; es.target=1; es_finish_pending(); assert(es.current==1 && !strcmp(es.error,"LOADED; WORK SAVE FAILED"));
  es.target=0; load_result=PFS_OK; es_finish_pending(); assert(loads==3 && es.current==0 && es.mode==0);
  es.pending=2; es.mode=2; es_finish_pending(); assert(inits==1 && es.current==-1 && es.mode==0);

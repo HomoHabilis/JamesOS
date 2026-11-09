@@ -67,5 +67,11 @@ int main(void){
    save_result=PFS_FULL;es_quick_save();assert(!strcmp(br_ui.message,"STORE FULL"));
    assert(br_ui.message_until-fm1_ms==normal+2000u);save_result=PFS_OK;
  }
+ /* Incompatible slots remain visible and require explicit overwrite. */
+ { int prior=saves;br_app_init();fm1_ms=12000u;es_project_boot_state=0u;
+   recover_result=FM1_PROJECT_FOREIGN_WORKING;assert(br_project_target_recover()==FM1_PROJECT_FOREIGN_WORKING&&es_project_boot_state==1u);
+   es_directory[3].state=3;es.slot=3;es.current=-1;es.mode=4;strcpy(es.name,"REPLACED");
+   es_confirm();assert(es.mode==5&&saves==prior);es_confirm();assert(saves==prior+1&&es_directory[3].state==1);
+ }
  puts("SAVE menu navigation, silence and failure notice timing passed");return 0;
 }

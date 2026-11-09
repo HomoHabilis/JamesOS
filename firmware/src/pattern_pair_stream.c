@@ -12,9 +12,9 @@ static int blank(const uint8_t*p,uint32_t n){while(n--)if(*p++!=255u)return 0;re
 static int overlap(const void*a,size_t an,const void*b,size_t bn){uintptr_t x=(uintptr_t)a,y=(uintptr_t)b;return an&&bn&&(x<=y?y-x<an:x-y<bn);}
 static int config(const pps_store*s,uint32_t slot,const void*scratch){uint32_t i;unsigned nonzero=0,nonff=0;if(!s||!scratch||!s->read||!s->program||!s->erase||!s->validate||slot>=PS_TOTAL_SLOTS||s->base%PS_SECTOR||s->base>UINT32_MAX-PS_TOTAL_SLOTS*2u*PS_SECTOR)return 0;for(i=0;i<sizeof s->role;i++){nonzero|=s->role[i]!=0;nonff|=s->role[i]!=255u;}return nonzero&&nonff;}
 static uint32_t addr(const pps_store*s,uint32_t slot,unsigned copy){return s->base+(slot*2u+copy)*PS_SECTOR;}
-typedef struct {const pps_store*s;uint32_t start,len;} reader;
+typedef struct {const pps_store*s;uint32_t start,len;int io_error;} reader;
 static int bounded_read(const pps_store*s,uint32_t off,void*out,uint32_t n){uint8_t*p=out;uint32_t part;while(n){part=n>PAGE?PAGE:n;if(s->read(s->ctx,off,p,part))return -1;off+=part;p+=part;n-=part;}return 0;}
-static int storage_read(void*v,uint32_t off,void*out,uint32_t n){reader*r=v;if(!r||(!out&&n)||off>r->len||n>r->len-off)return -1;return bounded_read(r->s,r->start+off,out,n);}
+static int storage_read(void*v,uint32_t off,void*out,uint32_t n){reader*r=v;int rc;if(!r||(!out&&n)||off>r->len||n>r->len-off)return -1;rc=bounded_read(r->s,r->start+off,out,n);if(rc)r->io_error=1;return rc;}
 static int scan_blank(const pps_store*s,uint32_t off,uint8_t*scratch){uint32_t i;for(i=0;i<PS_SECTOR;i+=PAGE){if(s->read(s->ctx,off+i,scratch,PAGE))return PS_IO;if(!blank(scratch,PAGE))return PS_CORRUPT;}return PS_EMPTY;}
 static int inspect(const pps_store*s,uint32_t slot,unsigned copy,uint8_t*scratch,uint8_t head[PAGE]){uint8_t again[PAGE];uint32_t i,n,remaining,c=~0u,part;reader r;
  if(s->read(s->ctx,addr(s,slot,copy),head,PAGE))return PS_IO;
@@ -22,10 +22,11 @@ static int inspect(const pps_store*s,uint32_t slot,unsigned copy,uint8_t*scratch
  remaining=n;
  for(i=1;i<16;i++){if(s->read(s->ctx,addr(s,slot,copy)+i*PAGE,scratch,PAGE))return PS_IO;part=remaining<PAGE?remaining:PAGE;if(part){c=crcadd(c,scratch,part);remaining-=part;}if(!blank(scratch+part,PAGE-part))return PS_CORRUPT;}
  if(remaining||~c!=get(head+36)||!blank(head+56,32))return PS_CORRUPT;
- r.s=s;r.start=addr(s,slot,copy)+PAGE;r.len=n;if(s->validate(s->validate_ctx,storage_read,&r,n)!=1)return PS_CORRUPT;
+ r.s=s;r.start=addr(s,slot,copy)+PAGE;r.len=n;r.io_error=0;{int valid=s->validate(s->validate_ctx,storage_read,&r,n);if(r.io_error)return PS_IO;if(valid!=1)return PS_CORRUPT;}
  if(s->read(s->ctx,addr(s,slot,copy),again,PAGE))return PS_IO;if(memcmp(head,again,PAGE))return PS_IO;return PS_OK;
 }
 static int select_pair(const pps_store*s,uint32_t slot,uint8_t*scratch,uint8_t head[2][PAGE],int*selected,int state[2]){uint32_t a,b;state[0]=inspect(s,slot,0,scratch,head[0]);state[1]=inspect(s,slot,1,scratch,head[1]);if(state[0]==PS_IO||state[1]==PS_IO)return PS_IO;if(state[0]!=PS_OK&&state[1]!=PS_OK){*selected=-1;return PS_EMPTY;}if(state[0]==PS_OK&&state[1]!=PS_OK){*selected=0;return PS_OK;}if(state[1]==PS_OK&&state[0]!=PS_OK){*selected=1;return PS_OK;}a=get(head[0]+28);b=get(head[1]+28);if(a==b||(a>b?a-b:b-a)!=1)return PS_CORRUPT;*selected=a>b?0:1;return PS_OK;}
+int pps_incompatible_mask(const pps_store*s,uint32_t slot,void*scratch,unsigned*mask){uint8_t head[PAGE];unsigned bits=0;int state,r;if(!mask||!config(s,slot,scratch)||overlap(mask,sizeof *mask,scratch,PAGE)||overlap(s,sizeof *s,scratch,PAGE))return PS_INVALID;for(unsigned i=0;i<2;i++){state=inspect(s,slot,i,scratch,head);if(state==PS_IO)return PS_IO;if(state==PS_OK)continue;r=scan_blank(s,addr(s,slot,i),scratch);if(r==PS_IO)return PS_IO;if(r==PS_CORRUPT)bits|=1u<<i;}*mask=bits;return PS_OK;}
 int pps_erase_allowed(const pps_store*s,uint32_t slot,unsigned target,void*scratch){uint8_t heads[2][PAGE];int state[2],selected,r;
  if(!config(s,slot,scratch)||target>1||overlap(s,sizeof *s,scratch,PAGE))return 0;
  r=select_pair(s,slot,scratch,heads,&selected,state);

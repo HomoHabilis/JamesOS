@@ -9,7 +9,7 @@ static pps_store stale_store;
 static fm1_pair_bridge pair_backend;
 static fm1_fixed_stage pair_stage;
 static unsigned park_releases,raw_erases,raw_writes,stale_rejected;
-static int independent_authority,deny_handoff,force_unpark,lose_working_fence;
+static int independent_authority,deny_handoff,force_unpark,lose_working_fence,fail_project_read;
 static int host_ok(void *v){(void)v;return 0;}
 static int host_release(void *v){(void)v;park_releases++;return 0;}
 static int host_parked(void *v){(void)v;return !force_unpark;}
@@ -18,7 +18,7 @@ static int host_parked(void *v){(void)v;return !force_unpark;}
 static int host_may_erase(void *v,uint32_t a){(void)v;return independent_authority&&(a<2u*PS_SECTOR||(a>=24u*PS_SECTOR&&a<26u*PS_SECTOR));}
 static void host_hold(void *v){(void)v;}
 static int host_contained(void *v){(void)v;return 1;}
-static int raw_read(void *v,uint32_t a,void *p,uint32_t n){(void)v;return pair_rd(0,a,p,n);}
+static int raw_read(void *v,uint32_t a,void *p,uint32_t n){(void)v;if(fail_project_read)return -1;return pair_rd(0,a,p,n);}
 static int raw_program(void *v,uint32_t a,const void *p,uint32_t n){int rc;(void)v;raw_writes++;rc=pair_pg(0,a,p,n);if(lose_working_fence&&a>=24u*PS_SECTOR)force_unpark=1;return rc;}
 static int raw_erase(void *v,uint32_t a){(void)v;raw_erases++;return pair_erase(0,a);}
 static int live_fence(void *v){(void)v;return realpark.fenced==1&&!force_unpark;}
