@@ -20,10 +20,10 @@ int main(void) {
  assert(!br_project_target_factory(0,factory_copy,sizeof factory_copy));
  assert(br_quiescent_transaction_begin()); assert(br_project_target_factory(0,factory_copy,sizeof factory_copy)); br_quiescent_transaction_end();
  assert(!memcmp(factory_copy,&es.factory,sizeof factory_copy));
- ready_state=0; es.action=0; es_confirm(); assert(!strcmp(es.error,"PROJECT STORE LOCKED") && !saves && !loads); ready_state=1;
- es_confirm(); assert(!strcmp(es.error,"PROJECT STORE LOCKED") && !saves && !loads);
+ ready_state=0; es.action=0; es_confirm(); assert(!strcmp(es.error,"STORE LOCKED") && !saves && !loads); ready_state=1;
+ es_confirm(); assert(!strcmp(es.error,"STORE LOCKED") && !saves && !loads);
  recover_result=FM1_PROJECT_BUSY; assert(br_project_target_recover()==FM1_PROJECT_BUSY && !es_project_boot_state);
- es_confirm(); assert(!strcmp(es.error,"PROJECT STORE LOCKED") && !saves && !loads);
+ es_confirm(); assert(!strcmp(es.error,"STORE LOCKED") && !saves && !loads);
  recover_result=PFS_EMPTY; assert(br_project_target_recover()==PFS_EMPTY && !es_project_boot_state);
  recover_result=FM1_PROJECT_SAFE_EMPTY; assert(br_project_target_recover()==FM1_PROJECT_SAFE_EMPTY && es_project_boot_state==1u);
  es_scan_slot(0); assert(es_directory[0].state==2);
@@ -37,7 +37,7 @@ int main(void) {
  init_result=FM1_PROJECT_NEW_WORKING_ONLY; es_finish_pending(); assert(inits==2 && es.current==0 && es.mode==2 && !strcmp(es.error,"WORK SAVED; INIT FAILED"));
  init_result=PFS_OK; es_finish_pending(); assert(inits==3 && es.current==-1 && es.mode==0);
  scan_result=FM1_PROJECT_ROLLBACK_FAILED; es_scan_slot(1);
- assert(es_project_fault && !es_slot_retry(1) && !strcmp(es.error,"PROJECT RECOVERY NEEDED"));
- es.mode=1; es.action=0; es_confirm(); assert(es.mode==1 && !strcmp(es.error,"PROJECT RECOVERY NEEDED"));
+ assert(es_project_fault && !es_slot_retry(1) && !strcmp(es.error,"RECOVERY NEEDED"));
+ es.mode=1; es.action=0; es_confirm(); assert(es.mode==1 && !strcmp(es.error,"RECOVERY NEEDED"));
  puts("target project UI guarded hooks passed"); return 0;
 }
