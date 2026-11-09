@@ -1,6 +1,6 @@
 # JamesOS 1.0a alpha
 
-**Current update: build 2104 (9 November 2026).** The keyboard repeat fix was tested on one FM-1: loader 904 installed the standard package from 2103, the unit restarted, and the owner reported no stuck notes during repeated and alternating rapid key presses. The settings protection flag was already active and remained active; its cause is unresolved. The 2104 combined package for installation from V15 has not been hardware-tested. See the README for package hashes and limitations. The 2014 record below is historical.
+**Current update: build 2105 (9 November 2026).** The USB product name is `FM-1` for broader tool compatibility. The application-only package installed from JamesOS 2104 and restarted on one FM-1. Its combined V15 package contains the same boot area and official loader as the hardware-tested 2104 combined package, and the same application as the installed 2105 package; the exact 2105 V15 package has not been tested on hardware. macOS may retain an old MIDI name. A tested M-Flasher restart entered USB rescue rather than the normal application; normal startup returned after a power cycle. See the README for hashes and limitations. The 2014 record below is historical.
 
 JamesOS is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1. The owner froze the 1.0a alpha candidate on distribution build 2014 on 8 November 2026.
 

@@ -14,11 +14,7 @@ program = r'''
 #include <string.h>
 ''' + strings + r'''
 int main(void) {
-#ifdef FELUCCA_LOADER
-    const char *expected = "JamesOS Update";
-#else
-    const char *expected = "JamesOS";
-#endif
+    const char *expected = "FM-1";
     size_t n = strlen(expected);
     assert(sizeof STR2 == 2 + 2 * n && STR2[0] == sizeof STR2 && STR2[1] == 3);
     for (size_t i = 0; i < n; ++i) {
@@ -41,4 +37,4 @@ from fm1_install import PORT_RE
 for name in ('JamesOS', 'JamesOS Update', 'Felucca', 'Felucca Update', 'FM-1'):
     assert PORT_RE.search(name), name
 assert not PORT_RE.search('Unrelated Keyboard')
-print('PASS: JamesOS app and update USB strings, with legacy port discovery')
+print('PASS: FM-1 app and update USB strings, with legacy port discovery')
