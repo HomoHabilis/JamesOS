@@ -287,6 +287,51 @@ static int ota_ufw(uint8_t *hdr, uint32_t *fl_off, uint32_t *fl_len, uint32_t *o
     return 0;
 }
 
+/* Validate the key-bearing configuration in a package head or the installed
+ * head, without assuming that matching keys establish boot compatibility. */
+static int ota_head_key(uint32_t fl_off, int device, uint32_t *key)
+{
+    uint8_t e[32], blob[34]; uint32_t off, pos, i, sum, k;
+    for (off = 32; off < 0x400u; off += 32u) {
+        if (device ? ota_fread(off,e,32) : ota_read(fl_off+off,e,32)) return -1;
+        ota_jl_enc(e,32);
+        if (ota_crc16(e+2,30,0) != ota_rd16(e)) return -1;
+        if (!ota_memeq(e+16,(const uint8_t *)"isd_config.ini",15)) {
+            if (ota_rd16(e+14)) return -1;
+            continue;
+        }
+        pos=ota_rd32(e+4);
+        if (pos > 0x4000u-34u || ota_rd32(e+8)<34u || ota_rd32(e+8)>0x4000u-pos) return -1;
+        if (device ? ota_fread(pos,blob,34) : ota_read(fl_off+pos,blob,34)) return -1;
+        if (ota_crc16(blob,32,0)!=ota_rd16(blob+32)) return -1;
+        for (i=0,sum=0;i<16u;i++) sum+=blob[i];
+        sum &= 0xffu; sum=sum>=0xe0u?0xaau:sum<=0x10u?0x55u:sum;
+        for (i=0,k=0;i<16u;i++) if ((uint32_t)(blob[16+i]^blob[15-i])<sum) k|=1u<<i;
+        *key=k; return 0;
+    }
+    return -1;
+}
+
+/* A mismatching official head may be passed only after checking both chip
+ * keys, the encrypted app header and the entire declared flash image CRC.
+ * CRC is not authentication; the host must supply stable, trusted bytes. */
+static int ota_official_compatible(uint32_t off,uint32_t len,uint32_t want,uint8_t b[512])
+{
+    uint32_t current, target, i, j, k, c=0, n;
+    if (len<0x4020u || len>0x93000u || ota_head_key(0,1,&current) ||
+        ota_head_key(off,0,&target) || current!=target) return 0;
+    if (ota_read(off+0x4000u,b,32)) return 0;
+    k=current;
+    for (j=0;j<32u;j++) { b[j]^=(uint8_t)k; k=((k<<1)^(k&0x8000u?0x1021u:0u))&0xffffu; }
+    if (ota_crc16(b+2,30,0)!=ota_rd16(b)) return 0;
+    for (i=0;i<len;i+=n) {
+        n=len-i>512u?512u:len-i;
+        if (ota_read(off+i,b,n)) return 0;
+        c=ota_crc16(b,n,c);
+    }
+    return c==want;
+}
+
 static int ota_stage(void)                       /* steps 1..6; 0 = host said success */
 {
     static uint8_t hdr[0x400], b[512], mine[512];
@@ -312,14 +357,17 @@ static int ota_stage(void)                       /* steps 1..6; 0 = host said su
         own = ota_memeq(b + i, (const uint8_t *)"FELUCCA-LOADER-1", 16) && ota_rd32(b + 0x20 + 4) <= 0x14000u;
     if (!official && !own)
         return -7;
-    if (official) {                    /* the official loader writes the head: it must equal ours */
+    if (official) {                    /* official loader can write the head */
+        uint32_t mismatch=0, total=ota_rd32(hdr+4);
+        if (fl_len<0x4000u || fl_off<0x400u || fl_off>total || fl_len>total-fl_off ||
+            ota_off>total || ota_len>total-ota_off) return -3;
         ota_show(2, 0);
         for (i = 0; i < 0x4000u; i += 512u) {
             if (ota_read(fl_off + i, b, 512) || ota_fread(i, mine, 512))
                 return -4;
-            if (!ota_memeq(b, mine, 512))
-                return -5;
+            if (!ota_memeq(b, mine, 512)) mismatch=1;
         }
+        if (mismatch && !ota_official_compatible(fl_off,fl_len,fl_crc,b)) return -5;
     }
     /* 4. stage the package's loader: erase, body, verify, head last */
     ota_show(3, 0);
