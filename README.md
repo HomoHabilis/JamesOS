@@ -23,7 +23,7 @@ Screens shown above were rendered from the 1.0a firmware source in the host emul
 
 Release candidates are identified by source tags and matching firmware packages. Hardware compatibility, update and recovery coverage are documented for each candidate.
 
-The proposed **JamesOS 1.0a alpha** candidate and its validation status are described in [the alpha release record](docs/RELEASE-1.0a.md).
+The frozen **JamesOS 1.0a alpha** candidate and its validation limits are described in [the alpha release record](docs/RELEASE-1.0a.md).
 
 ## Source layout
 

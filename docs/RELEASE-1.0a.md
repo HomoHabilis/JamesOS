@@ -1,8 +1,8 @@
-# JamesOS 1.0a alpha candidate
+# JamesOS 1.0a alpha
 
-JamesOS is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1. This replacement 1.0a candidate is **under validation and not yet frozen**.
+JamesOS is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1. The owner froze the 1.0a alpha candidate on distribution build 2014 on 8 November 2026.
 
-The distribution test build is `FM-1_9262014` and the matching development test build is `FM-1_9262013`; both use update loader `ota-FM-1_904`. Firmware switching can overwrite another firmware's saved data. The candidate identifies incompatible project slots and permits a confirmed save to replace them. It does not convert projects from other firmware.
+The distribution build is `FM-1_9262014` and the matching development build is `FM-1_9262013`; both use update loader `ota-FM-1_904`. Firmware switching can overwrite another firmware's saved data. JamesOS identifies incompatible project slots and permits a confirmed save to replace them. It does not convert projects from other firmware.
 
 | Test package | SHA-256 |
 | --- | --- |
