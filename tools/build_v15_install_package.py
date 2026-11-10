@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Reproduce the build 2105 V15 install package from two independently held inputs.
+"""Reproduce the build 2108 V15 install package from two independently held inputs.
 
 This is the test-specific combined boot/app image, not a universal installer.
 It writes the boot head and requires hardware/recovery qualification.
@@ -13,9 +13,9 @@ from pathlib import Path
 from fm1pkg_make import ufw, chipkey_decode
 from validate_package import decrypt
 
-APP_SHA = '320ea899311024ef558f12f7b61ac0aaa9bb63024a292135202e017089c46fb4'
+APP_SHA = 'e597224b7845a6f9cbef30016f5208fe1e8e7cee1647f1c30fa8ff4675f54942'
 V14_SHA = '7e7b6d260163cdf9d716f7fab44f19be600edeffcd390de74370b83c917fd0c6'
-OUTPUT_SHA = 'fa6fb07ecfa0ae92a34ddd3c09b09b37308cf5f41384f4c14dd6535941a334e1'
+OUTPUT_SHA = '75c0ea9251db9ab08d3886bfc784a7ddd1638a679257b16f714975cff597c729'
 
 def read_files(path, expected):
     raw = path.read_bytes()
@@ -51,7 +51,7 @@ def main():
     if len(flash)!=0x93000: raise ValueError('Unexpected flash image size')
     entry=decrypt(flash[64:96]); pos=struct.unpack_from('<I',entry,4)[0]
     if pos>0x4000-32 or chipkey_decode(flash[pos:pos+32])!=0x980f: raise ValueError('Unexpected boot key')
-    result=ufw(flash,boot[100],'FM-1_9262105')
+    result=ufw(flash,boot[100],'FM-1_9262108')
     if OUTPUT_SHA and hashlib.sha256(result).hexdigest()!=OUTPUT_SHA: raise ValueError('Output hash mismatch')
     a.output.write_bytes(result);print(hashlib.sha256(result).hexdigest())
 

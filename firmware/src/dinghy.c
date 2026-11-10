@@ -1396,6 +1396,15 @@ static void br_app_tick_inner(void)
 {
     if (br_engine_pipeline_uncontained_fault_get() ||
         br_diagnostic_restore_in_progress) return;
+#if defined(FM1_DEVICE)
+    if (midi_in_overflow) {
+        uint32_t irq_state;
+        if (!br_foreground_mutation_begin(&irq_state)) return;
+        mi_r = mi_w; midi_in_overflow = 0u;
+        br_midi_before_session_restore();
+        br_foreground_mutation_end(irq_state);
+    }
+#endif
     uint32_t released, keys, handled_down = 0u;
     uint32_t buttons = fm1_input_edges(&released);
 #if defined(FM1_DEVICE) && (!defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS)

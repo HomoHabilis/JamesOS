@@ -13,3 +13,5 @@ Operational work is retained in both configurations:
 - Installer identity and transfer use the OTA protocol. Session status, guarded upload and restore, protection status and their buffers remain available; these are operational recovery paths, despite historical `diagnostic` names in their implementation.
 
 `build-settings.json` records the selected configuration. The source and build checks do not by themselves qualify a release: installer, upgrade, recovery, saves and hardware behavior must be checked against the exact candidate package. See the project release tracker for current evidence and outstanding hardware coverage.
+
+Build 2108 retains small physical-MIDI receive activity counters in the distribution image. They are not exposed by a distribution diagnostic command.

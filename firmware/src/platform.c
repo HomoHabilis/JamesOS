@@ -468,12 +468,13 @@ static int32_t fm1_battery_level(void) { return fm1_battery_bars(&fm1_battery, f
 #define FELUCCA_OTA 1
 #define FELUCCA_CDC 0
 #define FELUCCA_UAC 1
-#define FELUCCA_UART 0
+#define FELUCCA_UART 1
 #define FM1_MIDI_TIMESTAMP() fm1_ticks()
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
 #define FM1_MIDI_GENERATION() br_midi_clock_generation
 #endif
 #include "usb.c"
+#include "midi_uart.c"
 
 /* ---- flash: read anywhere; erase / program only the update's staging area and the settings sector */
 #define SETTINGS_AT 0x000FC000u                 /* one 4 KiB sector of Felucca's globals area */
@@ -916,6 +917,10 @@ FM1_TIMER5_RAM_ATTR void fm1_timer5_irq(void)
         journal_store_timer_fn(fm1_timer5_interrupted_reti(), fm1_ticks());
     }
 #endif
+    if (usb_due) {
+        void (* volatile uart_poll_fn)(void) = uart_midi_poll;
+        uart_poll_fn();
+    }
     if (in_audio) {
         if (usb_due) {
             void (* volatile uac_service_fn)(void) = uac_service;
@@ -1399,8 +1404,25 @@ static void platform_poll(void)
     ota_service();
     if (usb.ota_req) {
         usb.ota_req = 0;
-        if (flash_ok)
+        if (flash_ok) {
+            uint32_t irq = irq_save();
+            /* The update service does not consume the musical input queue.
+             * Pause the unthrottleable jack input so it cannot fill that queue
+             * and prevent USB from receiving the updater's responses. */
+            uart_midi_paused = 1u;
+            mi_r = mi_w;
+            irq_restore(irq);
             ota_session();                      /* returns only if nothing was committed */
+            irq = irq_save();
+            /* Discard wire bytes accumulated during a failed/refused update;
+             * the foreground releases any notes whose offs may have been lost. */
+            memset(&um, 0, sizeof um);
+            uart_midi_init();
+            mi_r = mi_w;
+            midi_in_overflow = 1u;
+            uart_midi_paused = 0u;
+            irq_restore(irq);
+        }
     }
     if (usb.uboot_req) {
         if (flash_worker_park()) return;          /* never leave XIP with the worker running */
@@ -2208,6 +2230,7 @@ void fm1_cstart(void)
     fm1_adc_init();
     fm1_audio_init(abuf, HALF_WORDS, isr_alnk0, 3);   /* (abuf is zero: .bss) */
     usb_start();
+    uart_midi_init();
     fm1_timer5_start(isr_timer5, 4);
     fm1_guard_lock_top();
     fm1_irq_enable_all();
