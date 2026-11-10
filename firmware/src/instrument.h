@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "instrument_failure_job_profile.h"
 #include "instrument_modules.h"
+#include "midi_out_schedule.h"
 #include "../hal/fm1_audio_block.h"
 
 /* Private fixed-eight foreground planner prototype. Off unless explicitly enabled. */
@@ -271,6 +272,8 @@ uint32_t br_audio_kit_meter_epoch(void);
 extern br_part_t br_part[BR_PARTS];
 extern volatile uint32_t br_bpm, br_playing, br_transport_phase;
 extern volatile uint8_t br_midi_channels[7], br_midi_clock_enabled, br_midi_clock_active;
+extern volatile uint8_t br_midi_clock_out;
+extern fm1_midi_out_schedule_t br_midi_out_schedule;
 extern volatile uint32_t br_midi_clock_bpm;
 extern volatile uint32_t br_midi_clock_generation;
 extern volatile uint32_t br_solo_mask, br_global_beat;
@@ -294,6 +297,8 @@ static br_part_t br_part[BR_PARTS];
 static volatile uint32_t br_bpm = 120, br_playing;
 static volatile uint8_t br_midi_channels[7] = {1,2,3,4,5,6,7};
 static volatile uint8_t br_midi_clock_enabled, br_midi_clock_active;
+static volatile uint8_t br_midi_clock_out;
+static fm1_midi_out_schedule_t br_midi_out_schedule;
 static volatile uint32_t br_midi_clock_bpm;
 static volatile uint32_t br_midi_clock_generation;
 static volatile uint32_t br_transport_phase;

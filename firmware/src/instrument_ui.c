@@ -643,8 +643,9 @@ static br_control_t br_control(uint32_t k)
         if (page >= 7u && page <= 8u) {
             static const char *const channel_labels[7] = {"T1 CH", "T2 CH", "T3 CH", "D1 CH", "D2 CH", "D3 CH", "D4 CH"};
             if (page == 7u && k == 3u) {
-                c.label = "CLOCK SOURCE"; c.value = br_midi_clock_enabled; c.high = 1;
-                c.text = c.value ? "USB/MIDI" : "OFF";
+                static const char *const clock_text[3] = {"OFF", "RECEIVE", "SEND"};
+                c.label = "MIDI CLOCK"; c.value = br_midi_clock_enabled ? 1 : br_midi_clock_out ? 2 : 0; c.high = 2;
+                c.text = clock_text[c.value];
             } else {
                 uint32_t channel = page == 7u ? k : 3u + k;
                 c.label = channel_labels[channel]; c.value = br_midi_channels[channel]; c.low = 0; c.high = 16;
@@ -1123,9 +1124,10 @@ static void br_control_turn(uint32_t k, int32_t turn)
         if (key != br_ui.edit_key || fm1_ms - br_ui.edit_time > 600u) br_remember();
         if (page == 7u && k == 3u) {
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT && defined(FM1_DEVICE)
-            br_engine_clock_source_changed(fm1_ticks());
+            if ((v == 1) != (br_midi_clock_enabled != 0u)) br_engine_clock_source_changed(fm1_ticks());
 #endif
-            br_midi_clock_enabled = (uint8_t)v;
+            br_midi_clock_enabled = (uint8_t)(v == 1);
+            br_midi_clock_out = (uint8_t)(v == 2);
         }
         else br_midi_channel_set(page == 7u ? k : 3u + k, (uint8_t)v);
         br_ui.edit_key = key; br_ui.edit_time = fm1_ms; br_ui.redraw = 1u;
@@ -2084,16 +2086,23 @@ static uint32_t br_midi_output_destination(uint32_t part, uint32_t note)
     return part < BR_SYNTH_PARTS ? part : BR_SYNTH_PARTS + br_drum_lane(note);
 }
 
+/* A key's note to MIDI out on its destination's channel; velocity 0 is a note off. */
+static void br_midi_output_note(uint32_t part, uint32_t note, uint32_t velocity)
+{
+    uint32_t channel = br_midi_channels[br_midi_output_destination(part, note)];
+    if (channel) midi_send((velocity ? 0x90u : 0x80u) | (channel - 1u), note, velocity);
+}
+
 static void br_midi_output_release_destination(uint32_t destination)
 {
     for (uint32_t k = 0u; k < 27u; ++k) {
         uint32_t note = br_ui.held_note[k], part = br_ui.held_part[k];
         if (br_midi_out_held[k] && note && br_midi_output_destination(part, note - 1u) == destination) {
-            midi_send(0x80u | part, note - 1u, 0); br_midi_out_held[k] = 0u;
+            br_midi_output_note(part, note - 1u, 0u); br_midi_out_held[k] = 0u;
         }
         note = br_ui.sustain_note[k]; part = br_ui.sustain_part[k];
         if (br_midi_out_sustain[k] && note && br_midi_output_destination(part, note - 1u) == destination) {
-            midi_send(0x80u | part, note - 1u, 0); br_midi_out_sustain[k] = 0u;
+            br_midi_output_note(part, note - 1u, 0u); br_midi_out_sustain[k] = 0u;
         }
     }
 }
@@ -2106,7 +2115,7 @@ static void br_hold_release_all(void)
         if (!note) continue;
         if (br_ui.sustain_gen[k]) br_record_note_finish(p, note - 1u, br_ui.sustain_gen[k]);
         br_engine_note_off(p, note - 1u);
-        if (br_midi_out_sustain[k]) midi_send(0x80u | p, note - 1u, 0);
+        if (br_midi_out_sustain[k]) br_midi_output_note(p, note - 1u, 0u);
         br_midi_out_sustain[k] = 0u;
         br_ui.sustain_note[k] = 0u; br_ui.sustain_gen[k] = 0u;
     }
@@ -2249,7 +2258,7 @@ static void br_key_down(uint32_t key, int held)
     br_ui.held_note[key] = note + 1u; br_ui.held_part[key] = p;
     br_engine_note_on(p, note, 100);
     br_midi_out_held[key] = br_midi_channels[br_midi_output_destination(p, note)] != 0u;
-    if (br_midi_out_held[key]) midi_send(0x90u | p, note, 100);
+    if (br_midi_out_held[key]) br_midi_output_note(p, note, 100u);
     if (key < 27u)
         br_record_key_generation[key] = br_record_note_begin(
             p, note, 100u, kit, kit ? br_drum_lane(note) : 0u, 0u);
@@ -2280,7 +2289,7 @@ static void br_key_up(uint32_t key)
             uint32_t old = br_ui.sustain_note[key] - 1u, op = br_ui.sustain_part[key];
             if (br_ui.sustain_gen[key]) br_record_note_finish(op, old, br_ui.sustain_gen[key]);
             br_engine_note_off(op, old);
-            if (br_midi_out_sustain[key]) midi_send(0x80u | op, old, 0);
+            if (br_midi_out_sustain[key]) br_midi_output_note(op, old, 0u);
         }
         br_ui.sustain_note[key] = note; br_ui.sustain_part[key] = p;
         br_midi_out_sustain[key] = br_midi_out_held[key]; br_midi_out_held[key] = 0u;
@@ -2294,7 +2303,7 @@ static void br_key_up(uint32_t key)
         br_record_note_finish(p, note - 1u, br_record_key_generation[key]);
     if (key < 27u) br_record_key_generation[key] = 0u;
     br_engine_note_off(p, note - 1u);
-    if (br_midi_out_held[key]) midi_send(0x80u | p, note - 1u, 0);
+    if (br_midi_out_held[key]) br_midi_output_note(p, note - 1u, 0u);
     br_midi_out_held[key] = 0u;
     br_ui.held_note[key] = 0;
     if (br_recording && !br_playing && br_ui.page == BR_PAGE_SEQ && p == br_ui.part &&
@@ -2306,7 +2315,8 @@ static void br_key_up(uint32_t key)
 
 static void br_midi_channel_set(uint32_t destination, uint8_t channel)
 {
-    if (destination < 7u && channel == 0u && br_midi_channels[destination] != 0u)
+    /* Held keys are released on the channel they were sent on. */
+    if (destination < 7u && channel != br_midi_channels[destination] && br_midi_channels[destination] != 0u)
         br_midi_output_release_destination(destination);
     uint32_t affected = br_midi_route_set(&br_midi_routes, br_midi_channels, destination, channel);
     for (uint32_t p = 0u; p < BR_PARTS; ++p) if (affected & (1u << p)) {

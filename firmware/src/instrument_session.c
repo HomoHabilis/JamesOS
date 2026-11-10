@@ -156,7 +156,7 @@ static int br_session_v14_valid(const br_session_t *s);
 static int br_session_v15_valid(const br_session_t *s);
 static int br_session_v16_valid(const br_session_t *s);
 extern volatile uint8_t br_midi_channels[7];
-extern volatile uint8_t br_midi_clock_enabled;
+extern volatile uint8_t br_midi_clock_enabled, br_midi_clock_out;
 #if defined(__ELF__) && !defined(DINGHY_HOST) && !defined(DINGHY_WEB)
 static br_session_t br_pending_save __attribute__((section(".pool"), aligned(4)));
 static br_session_t br_undo __attribute__((section(".pool"), aligned(4)));
@@ -817,7 +817,8 @@ static int br_session_v16_valid(const br_session_t *s)
     uint32_t i, word;
     if (!br_session_full_valid(s, 16u)) return 0;
     word = br_session_midi_word(s);
-    if ((word & (1u << 29u)) || (s->kit_retrig[4][2] & 0x80u)) return 0;
+    /* Bit 28 follows an external clock and bit 29 sends the clock: never both. */
+    if ((word >> 28u) == 3u || (s->kit_retrig[4][2] & 0x80u)) return 0;
     for (i = 0u; i < 7u; ++i) {
         uint32_t at = 15u + i / 2u;
         if ((s->kit_retrig[at / BR_DRUM_LANES][at % BR_DRUM_LANES] & (1u << (6u + i % 2u))) &&
@@ -830,6 +831,7 @@ static void br_session_midi_defaults(void)
     uint32_t i;
     for (i = 0u; i < 7u; ++i) br_midi_channels[i] = (uint8_t)(i + 1u);
     br_midi_clock_enabled = 0u;
+    br_midi_clock_out = 0u;
 }
 static void br_session_midi_restore(const br_session_t *s, uint32_t version)
 {
@@ -842,6 +844,7 @@ static void br_session_midi_restore(const br_session_t *s, uint32_t version)
                                (1u << (6u + i % 2u))) ? 0u : (uint8_t)(((word >> (i * 4u)) & 15u) + 1u);
     }
     br_midi_clock_enabled = (uint8_t)((word >> 28u) & 1u);
+    br_midi_clock_out = (uint8_t)((word >> 29u) & 1u);
 }
 static uint16_t br_session_timed_length(uint16_t length, int8_t offset)
 { return (uint16_t)((length & 0x7ffu) | (((uint16_t)offset & 31u) << 11)); }
@@ -907,7 +910,8 @@ static int br_capture(br_session_t *s)
     }
     {
         uint32_t word = 0u;
-        if (br_midi_clock_enabled > 1u) return 0;
+        if (br_midi_clock_enabled > 1u || br_midi_clock_out > 1u ||
+            (br_midi_clock_enabled && br_midi_clock_out)) return 0;
         for (p = 0u; p < 7u; ++p) {
             uint32_t channel = br_midi_channels[p];
             if (channel > 16u) return 0;
@@ -917,7 +921,7 @@ static int br_capture(br_session_t *s)
                 s->kit_retrig[at / BR_DRUM_LANES][at % BR_DRUM_LANES] |= (uint8_t)(1u << (6u + p % 2u));
             }
         }
-        word |= (uint32_t)br_midi_clock_enabled << 28u;
+        word |= (uint32_t)br_midi_clock_enabled << 28u | (uint32_t)br_midi_clock_out << 29u;
         for (p = 0u; p < 15u; ++p)
             s->kit_retrig[p / BR_DRUM_LANES][p % BR_DRUM_LANES] |= (uint8_t)(((word >> (p * 2u)) & 3u) << 6u);
     }

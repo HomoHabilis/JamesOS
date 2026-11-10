@@ -283,7 +283,13 @@ static void platform_poll(void)                 /* one call = one millisecond */
         uint32_t i;
         owed -= 1000u * HALF_FRAMES;
         memset(blk, 0, sizeof blk);
+        fm1_midi_out_block_start(&br_midi_out_schedule, 0u);
         app_audio(blk, HALF_FRAMES);
+        {                                       /* the timed MIDI output, as the USB service sends it */
+            uint32_t pkt;
+            while (fm1_midi_out_pop(&br_midi_out_schedule, 0x7fffffffu, &pkt))
+                midi_send(pkt >> 8 & 255u, pkt >> 16 & 255u, pkt >> 24);
+        }
         wav = realloc(wav, (wav_n + HALF_FRAMES) * 4u);
         for (i = 0; i < 2u * HALF_FRAMES; i++) {
             int32_t v = blk[i];                 /* (USB audio at the MASTER knob all the way up) */

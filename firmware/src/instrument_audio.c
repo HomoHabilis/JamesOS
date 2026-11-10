@@ -2411,8 +2411,114 @@ static void br_live_note_off(uint32_t p, uint32_t note)
     else br_release_note(p, note);
 }
 
+/* MIDI output of what the sequencer and the arp play, on each track's own
+ * channel (OFF sends nothing), with the MIDI clock and transport. Notes that
+ * arrive over MIDI are never echoed. The events of one block are kept in
+ * time order and handed to the timed output ring when the block's sequencing
+ * is done. */
+#define BR_MIDI_OUT_BLOCK_EVENTS 32u
+#define BR_MIDI_OUT_TICKS_Q8 FM1_MIDI_OUT_TICKS_PER_FRAME_Q8(24000000u, FS)
+enum { BR_MIDI_OUT_SEQ, BR_MIDI_OUT_ARP, BR_MIDI_OUT_SOURCES };
+static struct { uint32_t packet; uint32_t frame; } br_midi_out_block[BR_MIDI_OUT_BLOCK_EVENTS];
+static uint32_t br_midi_out_block_count;
+static uint32_t br_midi_out_frame;                 /* frame of the block the sequencer has reached */
+static uint8_t br_midi_out_note[BR_MIDI_OUT_SOURCES][BR_SYNTH_PARTS];      /* note + 1, 0 = none */
+static uint8_t br_midi_out_channel[BR_MIDI_OUT_SOURCES][BR_SYNTH_PARTS];
+static uint32_t br_clock_out_phase;                /* frames * 24 since the last pulse */
+static uint8_t br_clock_out_running;               /* the other gear was told START */
+
+static void br_midi_out_add_at(uint32_t packet, uint32_t frame)
+{
+    uint32_t i = br_midi_out_block_count;
+    if (i >= BR_MIDI_OUT_BLOCK_EVENTS) return;
+    for (; i && br_midi_out_block[i - 1u].frame > frame; --i)
+        br_midi_out_block[i] = br_midi_out_block[i - 1u];
+    br_midi_out_block[i].packet = packet;
+    br_midi_out_block[i].frame = frame;
+    ++br_midi_out_block_count;
+}
+
+static void br_midi_out_note_off(uint32_t source, uint32_t p)
+{
+    if (p >= BR_SYNTH_PARTS || !br_midi_out_note[source][p]) return;
+    br_midi_out_add_at(fm1_midi_out_note_packet(br_midi_out_channel[source][p],
+                           br_midi_out_note[source][p] - 1u, 0u), br_midi_out_frame);
+    br_midi_out_note[source][p] = 0u;
+}
+
+static void br_midi_out_note_on(uint32_t source, uint32_t p, uint32_t note, uint32_t velocity)
+{
+    uint32_t channel;
+    if (p >= BR_SYNTH_PARTS) return;
+    br_midi_out_note_off(source, p);
+    channel = br_midi_channels[p];
+    if (!channel || note > 127u) return;
+    if (!velocity) velocity = 1u;
+    br_midi_out_add_at(fm1_midi_out_note_packet(channel, note, velocity), br_midi_out_frame);
+    br_midi_out_note[source][p] = (uint8_t)(note + 1u);
+    br_midi_out_channel[source][p] = (uint8_t)channel;
+}
+
+/* A drum hit has no length of its own: its note-off follows at once. */
+static void br_midi_out_kit_hit(uint32_t lane, uint32_t velocity)
+{
+    uint32_t channel = lane < BR_DRUM_LANES ? br_midi_channels[BR_SYNTH_PARTS + lane] : 0u;
+    uint32_t note;
+    if (!channel) return;
+    note = br_drum_lane_note(lane);
+    if (!velocity) velocity = 1u;
+    br_midi_out_add_at(fm1_midi_out_note_packet(channel, note, velocity), br_midi_out_frame);
+    br_midi_out_add_at(fm1_midi_out_note_packet(channel, note, 0u), br_midi_out_frame);
+}
+
+/* The clock master: 24 pulses a beat at the internal tempo, sent while
+ * stopped too so the other gear knows the tempo before START. START goes out
+ * with its downbeat pulse as the sequencer starts, STOP as it stops or as
+ * the clock output is turned off. Never while following an external clock. */
+static void br_midi_out_clock(uint32_t n)
+{
+    uint32_t quarter = br_tempo_quarter_frames(), frame = 0u, left = n;
+    if (!br_midi_clock_out || br_midi_clock_enabled) {
+        if (br_clock_out_running)
+            br_midi_out_add_at(fm1_midi_out_realtime_packet(0xFCu), 0u);
+        br_clock_out_running = 0u;
+        br_clock_out_phase = 0u;
+        return;
+    }
+    if (br_playing && !br_clock_out_running) {
+        br_midi_out_add_at(fm1_midi_out_realtime_packet(0xFAu), 0u);
+        br_midi_out_add_at(fm1_midi_out_realtime_packet(0xF8u), 0u);
+        br_clock_out_phase = 0u;
+    } else if (!br_playing && br_clock_out_running) {
+        br_midi_out_add_at(fm1_midi_out_realtime_packet(0xFCu), 0u);
+    }
+    br_clock_out_running = (uint8_t)(br_playing != 0u);
+    for (;;) {
+        /* A faster tempo can leave the phase past the new, shorter beat. */
+        uint32_t need = br_clock_out_phase >= quarter ? 0u :
+            (quarter - br_clock_out_phase + 23u) / 24u;
+        if (need > left) { br_clock_out_phase += left * 24u; break; }
+        frame += need; left -= need;
+        br_clock_out_phase = need ? br_clock_out_phase + need * 24u - quarter : 0u;
+        br_midi_out_add_at(fm1_midi_out_realtime_packet(0xF8u), frame);
+    }
+}
+
+static void br_midi_out_flush(uint32_t n)
+{
+    uint32_t i, tick = br_midi_out_schedule.block_tick, frames = br_midi_out_schedule.block_frames;
+    for (i = 0u; i < br_midi_out_block_count; ++i)
+        (void)fm1_midi_out_push(&br_midi_out_schedule, br_midi_out_block[i].packet,
+            tick + fm1_midi_out_frame_ticks(frames + br_midi_out_block[i].frame, BR_MIDI_OUT_TICKS_Q8));
+    br_midi_out_block_count = 0u;
+    br_midi_out_frame = 0u;
+    br_midi_out_schedule.block_frames = frames + n;
+}
+
 static void br_stop_part(uint32_t p)
 {
+    br_midi_out_note_off(BR_MIDI_OUT_SEQ, p);
+    br_midi_out_note_off(BR_MIDI_OUT_ARP, p);
     br_deferred_start_drop(p);
     if (p < BR_SYNTH_PARTS) br_live_count[p] = 0u;
 #if BR_AUDIO_FOREGROUND_FIXED8_PLAN
@@ -2549,8 +2655,10 @@ static void br_midi_apply_transport(uint32_t status)
             br_playing = br_transport_prev = 1u;
             for (p = 0u; p < BR_SYNTH_PARTS; ++p)
                 if (br_seq_note[p] != 255u && br_seq_gate_frames[p] &&
-                    !br_seq_deferred_off[p])
+                    !br_seq_deferred_off[p]) {
                     br_start_note(p, br_seq_note[p], br_midi_paused_velocity[p], 0u);
+                    br_midi_out_note_on(BR_MIDI_OUT_SEQ, p, br_seq_note[p], br_midi_paused_velocity[p]);
+                }
         } else if (!br_playing) {
             /* With no paused position, Continue starts at the beginning. */
             br_transport_reset_position();
@@ -2991,6 +3099,7 @@ static uint32_t br_seq_length_frames(uint32_t duration, uint32_t units)
 static void br_seq_note_expire(uint32_t p)
 {
     if (br_seq_note[p] != 255u) br_release_note(p, br_seq_note[p]);
+    br_midi_out_note_off(BR_MIDI_OUT_SEQ, p);
     br_seq_note[p] = 255u;
     br_seq_tie[p] = 0u;
     br_seq_gate_frames[p] = 0u;
@@ -3010,6 +3119,7 @@ static void br_start_sequence_kit_voice(uint32_t p, uint32_t lane,
     br_mod_note_on(&br_mod_state[p], &br_cached_mod[p],
                    (uint32_t)pitched_note, velocity);
     br_env_start(p, (uint32_t)pitched_note, velocity, sound, 0u);
+    if (p == BR_DRUM_PART) br_midi_out_kit_hit(lane, velocity);
 #if defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
     if (sound->preset == BR_KIT_PLAITS) {
 #if BR_AUDIO_FUSION_FOUR_WAY_KIT
@@ -3109,7 +3219,10 @@ static void br_seq_fire_timed(uint32_t p, uint32_t pos, uint32_t event_lane, uin
                 prev_tied && br_seq_note[p] == note;
             if (br_seq_note[p] != 255u && !sustain && !slide)
                 br_release_note(p, br_seq_note[p]);
-            if (!sustain) br_start_note(p, note, velocity, slide);
+            if (!sustain) {
+                br_start_note(p, note, velocity, slide);
+                br_midi_out_note_on(BR_MIDI_OUT_SEQ, p, note, velocity);
+            }
             br_seq_note[p] = (uint8_t)note;
             br_seq_tie[p] = (uint8_t)tie;
             br_seq_deferred_off[p] = 0u;
@@ -3492,6 +3605,7 @@ static void br_seq_process(uint32_t p, uint32_t n)
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
         br_clock_experiment.block_offset = n - remaining;
 #endif
+        br_midi_out_frame = n - remaining;
         if (!br_seq_frames[p]) br_seq_step(p);
         br_micro_due(p);
         if (p == BR_DRUM_PART) {
@@ -3550,6 +3664,7 @@ static void br_seq_process(uint32_t p, uint32_t n)
                 br_start_sequence_kit_voice(p, lane, r->voice, r->velocity, r->pitch);
             }
         }
+    br_midi_out_frame = 0u;
     br_record_position[p].revision++; RING_PUBLISH();
     br_record_position[p].step = br_step_pos[p];
     br_record_position[p].duration = br_seq_current_duration[p];
@@ -7657,6 +7772,7 @@ static void br_arp_stop_note(uint32_t p, br_arp_state_t *a)
 {
     if (!a->sounding) return;
     br_release_note(p, a->sounding - 1u);
+    br_midi_out_note_off(BR_MIDI_OUT_ARP, p);
     br_arp_record(p, a->sounding - 1u, 0u);
     a->sounding = 0u;
     a->gate_left = 0u;
@@ -7670,6 +7786,7 @@ static void br_arp_play(uint32_t p, br_arp_state_t *a, uint32_t note,
     uint32_t gate = br_bound(br_part[p].arp_gate, 127u), length;
     br_arp_stop_note(p, a);
     br_start_note(p, note, 100u, 0u);
+    br_midi_out_note_on(BR_MIDI_OUT_ARP, p, note, 100u);
     br_arp_record(p, note, 1u);
     a->sounding = (uint8_t)(note + 1u);
     length = gate >= 127u ? frames : frames * (gate + 1u) / 128u;
@@ -8006,6 +8123,7 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
         br_transport_reset_position();
     }
     br_transport_prev = br_playing;
+    br_midi_out_clock(n);
 #if defined(FM1_PATTERN_AUDIO_IRQ_PROTOTYPE) && FM1_PATTERN_AUDIO_IRQ_PROTOTYPE
     br_pattern_irq_normalize_internal();
     br_pattern_irq_check_external_gap();
@@ -8033,6 +8151,7 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
     }
     for (p = 0; p < BR_SYNTH_PARTS; ++p) br_arp_process(p, n);
     for (p = 0; p < BR_PARTS; ++p) br_seq_process(p, n);
+    br_midi_out_flush(n);
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
     if (br_clock_experiment.anchor.valid) br_clock_experiment.render_frame += n;
 #endif
