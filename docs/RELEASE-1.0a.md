@@ -1,6 +1,6 @@
 # JamesOS 1.0a alpha
 
-**Current update: build 2108 (9 November 2026).** Physical MIDI input was tested on one FM-1: the owner confirmed notes, note release, channel OFF and external clock using a sequencer. A short diagnostic-build audio timing test reported zero overruns, and the distribution build was restored. The exact combined 2108 package was not tested on hardware; an earlier test unexpectedly entered rescue once, without a confirmed cause. See the README for package hashes, update-path details and limitations. The 2014 record below is historical.
+**Current update: build 2108 (9 November 2026).** Physical MIDI input was tested on one FM-1: the owner confirmed notes and external clock on build 2108, and note release and channel OFF on the earlier 2106 test build, using a sequencer. A short diagnostic-build audio timing test reported zero overruns, and the distribution build was restored. The exact combined 2108 package was not tested on hardware; an earlier test unexpectedly entered rescue once, without a confirmed cause. See the README for package hashes, update-path details and limitations. The 2014 record below is historical.
 
 JamesOS is an independent firmware project by Aaron Grando (a.k.a. James Os) and Gjelly for the M-VAVE FM-1. The owner froze the 1.0a alpha candidate on distribution build 2014 on 8 November 2026.
 
