@@ -29,7 +29,8 @@ int main(void){static const uint32_t legacy_lengths[]={240,240,900,908,916,920,9
  /* Unknown/truncated settings stay protected and never reset the live take. */
  old=current;old.v3.version=99;assert(!settings_save(&old,sizeof old));memcpy(saved,host_store,sizeof saved);br_load_session();
  assert(br_session_save_blocked()&&br_capture(&after)&&!memcmp(&before,&after,sizeof before)&&!memcmp(saved,host_store,sizeof saved));
- old=current;old.kit_retrig[3][2]|=0x80u;assert(!br_session_v16_valid(&old));assert(!settings_save(&old,sizeof old));memcpy(saved,host_store,sizeof saved);br_load_session();
+ /* Clock receive and clock send together are not a valid setting. */
+ old=current;old.kit_retrig[3][2]|=0xc0u;assert(!br_session_v16_valid(&old));assert(!settings_save(&old,sizeof old));memcpy(saved,host_store,sizeof saved);br_load_session();
  assert(br_session_save_blocked()&&br_capture(&after)&&!memcmp(&before,&after,sizeof before)&&!memcmp(saved,host_store,sizeof saved));
  /* A blank-looking header does not make programmed payload safe to erase. */
  memset(host_store,0,sizeof host_store);host_store_len=0;host_store[100]=0x7e;memcpy(saved,host_store,sizeof saved);br_load_session();

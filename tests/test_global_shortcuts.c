@@ -58,9 +58,9 @@ int main(void)
         assert(!strcmp(text,"1"));
     }
     br_midi_clock_enabled=0u;
-    { br_control_t c=br_control(3u); assert(!strcmp(c.label,"CLOCK SOURCE") && !strcmp(c.text,"OFF")); }
+    { br_control_t c=br_control(3u); assert(!strcmp(c.label,"MIDI CLOCK") && !strcmp(c.text,"OFF")); }
     br_control_turn(3u,1);
-    { br_control_t c=br_control(3u); assert(br_midi_clock_enabled && !strcmp(c.text,"USB/MIDI")); }
+    { br_control_t c=br_control(3u); assert(br_midi_clock_enabled && !strcmp(c.text,"RECEIVE")); }
     br_ui.screen[BR_PAGE_MIX]=8u;
     /* Capture a clean MIDI 2 page and compare the incremental 1 -> 2
      * transition. Verify every lane label and knob badge has visible ink. */

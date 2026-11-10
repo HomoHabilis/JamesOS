@@ -8,6 +8,8 @@ br_part_t br_part[BR_PARTS];
 volatile uint32_t br_bpm = 120u, br_playing;
 volatile uint8_t br_midi_channels[7] = {1,2,3,4,5,6,7};
 volatile uint8_t br_midi_clock_enabled, br_midi_clock_active;
+volatile uint8_t br_midi_clock_out;
+fm1_midi_out_schedule_t br_midi_out_schedule;
 volatile uint32_t br_midi_clock_bpm;
 volatile uint32_t br_midi_clock_generation;
 volatile uint32_t br_transport_phase;

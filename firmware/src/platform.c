@@ -54,6 +54,12 @@ static void br_engine_clock_dma_edge(uint32_t tick, uint32_t half, uint32_t lead
 static void br_engine_clock_dma_invalid(void);
 #endif
 #endif
+#include "midi_out_schedule.h"
+#ifdef BR_SPLIT_AUDIO
+extern fm1_midi_out_schedule_t br_midi_out_schedule;
+#else
+static fm1_midi_out_schedule_t br_midi_out_schedule;
+#endif
 void br_audio_source_job_timing_reset(void);
 #if defined(BR_SPLIT_AUDIO)
 void br_audio_late_drop_reset(void);
@@ -470,6 +476,7 @@ static int32_t fm1_battery_level(void) { return fm1_battery_bars(&fm1_battery, f
 #define FELUCCA_UAC 1
 #define FELUCCA_UART 1
 #define FM1_MIDI_TIMESTAMP() fm1_ticks()
+#define FM1_MIDI_OUT_SCHEDULE (&br_midi_out_schedule)
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
 #define FM1_MIDI_GENERATION() br_midi_clock_generation
 #endif
@@ -1283,6 +1290,7 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
         fm1_audio_cpu1_join_valid = 0u;
 #endif
         uac_render_start();
+        fm1_midi_out_block_start(&br_midi_out_schedule, render_start);
         br_engine_pipeline_source_deadline_set(
             render_start + BR_AUDIO_PIPELINE_SOURCE_BUDGET_TICKS);
         render_result = platform_audio_render_half(o, HALF_FRAMES);

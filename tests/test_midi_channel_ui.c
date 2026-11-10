@@ -36,11 +36,11 @@ int main(int argc, char **argv)
     br_midi_channel_set(0u,0u);
     assert(host_midi_out_count==2u && host_midi_out_last_status==0x80u);
     br_key_up(0u); assert(host_midi_out_count==2u);
-    /* Each drum lane has its own OFF state while output retains its existing channel. */
+    /* Each drum lane has its own OFF state and sends on its own channel. */
     br_ui.part=BR_DRUM_PART; br_midi_channels[3]=0u; br_midi_channels[4]=5u;
     host_midi_out_count=0u; br_key_down(0u,1); br_key_up(0u); assert(!host_midi_out_count);
-    br_key_down(1u,1); assert(host_midi_out_count==1u && host_midi_out_last_status==0x93u);
-    br_key_up(1u); assert(host_midi_out_count==2u && host_midi_out_last_status==0x83u);
+    br_key_down(1u,1); assert(host_midi_out_count==1u && host_midi_out_last_status==0x94u);
+    br_key_up(1u); assert(host_midi_out_count==2u && host_midi_out_last_status==0x84u);
     /* OFF also ends a held/sustained outgoing note without a duplicate later. */
     br_ui.part=0u; br_midi_channel_set(0u,1u); br_hold_on=1u;host_midi_out_count=0u;
     br_key_down(0u,1);br_key_up(0u);assert(host_midi_out_count==1u);

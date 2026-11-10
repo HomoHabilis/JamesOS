@@ -960,14 +960,21 @@ static void ota_frame_done(void)
 }
 #endif
 
+/* The app's timed MIDI output (midi_out_schedule.h); the loader has none. */
+#ifdef FM1_MIDI_OUT_SCHEDULE
+#define EP1_SCHEDULED_PENDING() fm1_midi_out_pending(FM1_MIDI_OUT_SCHEDULE)
+#else
+#define EP1_SCHEDULED_PENDING() 0
+#endif
+
 static void ep1_tx(void)
 {
     uint32_t csr, n = 0;
 #if FELUCCA_OTA
-    if (mo_w == mo_r && so_w == so_r)
+    if (mo_w == mo_r && so_w == so_r && !EP1_SCHEDULED_PENDING())
         return;
 #else
-    if (mo_w == mo_r)
+    if (mo_w == mo_r && !EP1_SCHEDULED_PENDING())
         return;
 #endif
     sie_wr(S_INDEX, 1);
@@ -986,6 +993,21 @@ static void ep1_tx(void)
         n += 4u;
         so_r++;
     }
+    if (!sx_busy && so_r == so_w)
+#endif
+    {
+#ifdef FM1_MIDI_OUT_SCHEDULE
+        uint32_t pkt, now = FM1_MIDI_TIMESTAMP();       /* clock and sequencer notes first: they are timed */
+        while (n < 64u && fm1_midi_out_pop(FM1_MIDI_OUT_SCHEDULE, now, &pkt)) {
+            ep1tx[n] = (uint8_t)pkt;
+            ep1tx[n + 1] = (uint8_t)(pkt >> 8);
+            ep1tx[n + 2] = (uint8_t)(pkt >> 16);
+            ep1tx[n + 3] = (uint8_t)(pkt >> 24);
+            n += 4u;
+        }
+#endif
+    }
+#if FELUCCA_OTA
     while (!sx_busy && so_r == so_w && mo_r != mo_w && n < 64u) {
 #else
     while (mo_r != mo_w && n < 64u) {
@@ -1405,6 +1427,10 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
         ep1_rx();
     if (usb.config)
         ep1_tx();
+#ifdef FM1_MIDI_OUT_SCHEDULE
+    else
+        fm1_midi_out_drop(FM1_MIDI_OUT_SCHEDULE);
+#endif
 #if FELUCCA_CDC
     if (usb.config) {
         if (ir & 0x08u)

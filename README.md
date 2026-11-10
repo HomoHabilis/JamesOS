@@ -44,6 +44,25 @@ python3 tools/build_v15_install_package.py --app releases/JamesOS-1.0a-build-210
 
 The combined package SHA-256 is `75c0ea9251db9ab08d3886bfc784a7ddd1638a679257b16f714975cff597c729`; the standard package SHA-256 is `e597224b7845a6f9cbef30016f5208fe1e8e7cee1647f1c30fa8ff4675f54942`.
 
+## MIDI output
+
+This fork sends what the FM-1 plays to other gear over USB MIDI, after SLOOP:
+
+- The sequencer's and the arp's notes go out on each track's channel (`T1 CH`…`T3 CH`), and the drum lanes' hits on theirs (`D1 CH`…`D4 CH`). The keys go out on the same channels. `OFF` sends nothing for that track or lane. Notes received over MIDI are not sent back.
+- `MIDI CLOCK` on the mixer's MIDI page is `OFF`, `RECEIVE` (follow clock and transport from USB or the MIDI IN jack) or `SEND`. With `SEND` the FM-1 is the clock master: 24 pulses a beat at its tempo, also while stopped, with START as the sequencer starts and STOP as it stops.
+
+The setting is saved with the project. A project saved with `SEND` is not accepted by JamesOS builds without this feature. These changes pass the host tests (`python3 tests/run_midi_seq_out.py`) and have not been tested on hardware.
+
+## Web installer
+
+`web/` holds a browser installer after SLOOP's (Web MIDI: Chrome or Edge on a computer, Chrome on Android). GitHub Actions builds the firmware and publishes the page with GitHub Pages from `main`; enable it once under Settings → Pages → Source: GitHub Actions. The page:
+
+- updates an FM-1 that runs JamesOS to this build;
+- installs the released build 2108 from-V15 package on an FM-1 that runs the official firmware, then updates it in a second pass;
+- returns an FM-1 to the official V15 from the unmodified `FM-1.fwsc` the user selects, which is how an FM-1 on SLOOP gets here.
+
+`node web/test_web.mjs` runs its checks against a simulated FM-1. The page has not been used with hardware.
+
 ## Source layout
 
 - `firmware/` contains the firmware, loader, hardware layer and synthesis libraries.
