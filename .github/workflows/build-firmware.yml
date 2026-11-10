@@ -1,4 +1,4 @@
-name: Build firmware
+name: Build firmware and installer site
 
 on:
   push:
@@ -31,6 +31,8 @@ jobs:
           python3 tests/run_midi_seq_out.py
           python3 tests/run_midi_channel_ui.py --reuse-dsp
           python3 tests/run_midi_session_v16.py --reuse-dsp
+      - name: Web installer tests
+        run: node web/test_web.mjs
 
   firmware:
     runs-on: ubuntu-24.04
@@ -58,3 +60,35 @@ jobs:
             build/**/*.fwsc
             build/**/build-settings.json
           if-no-files-found: error
+
+  # The web installer on GitHub Pages (Settings > Pages > Source: GitHub Actions), from main only.
+  site:
+    if: github.ref == 'refs/heads/main'
+    needs: [host-tests, firmware]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: jamesos-firmware
+          path: package
+      - name: Make the site
+        run: |
+          python3 web/make_site.py "$(find package -name '*.fwsc' | head -n 1)" \
+            "1.0a MIDI out, build ${{ github.run_number }}" site \
+            --source "${{ github.server_url }}/${{ github.repository }}"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
