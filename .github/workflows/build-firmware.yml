@@ -55,6 +55,6 @@ jobs:
         with:
           name: jamesos-firmware
           path: |
-            build/*.fwsc
-            build/build-settings.json
+            build/**/*.fwsc
+            build/**/build-settings.json
           if-no-files-found: error
