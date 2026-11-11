@@ -3,12 +3,13 @@
 //
 // Node checks of the installer's JS (no browser, no hardware). Run from the repo root:
 //   node web/test_web.mjs
-// - fm1pkg.js: productOf and logicalImage on the released packages
+// - fm1pkg.js: productOf and logicalImage on the base package (FM1_BASE_PACKAGE, default
+//   build/base/jamesos-base-from-v15.fwsc as web/base_package.py writes it; skipped when absent)
 // - fm1ota.js: installs, resumes and unplugs against a simulated FM-1
 // - installer.js: which package each firmware and each update loader gets, over the whole route
 //   SLOOP -> official V15 -> JamesOS base -> this build
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logicalImage, productOf, validateStockPackage, STOCK_V15_SIZE } from "./fm1pkg.js";
@@ -21,11 +22,14 @@ const eq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 
 /* ------------------------------------------------------------- packages (fm1pkg.js) --- */
-for (const name of ["JamesOS-1.0a-build-2108.fwsc", "JamesOS-1.0a-build-2108-from-v15.fwsc"]) {
-  const raw = new Uint8Array(readFileSync(join(HERE, "../releases", name)));
-  const image = logicalImage(raw);
-  ok(productOf(raw) === "FM-1_9262108" && image.length === raw.length - 20 && image[47] === raw[48],
-    `fm1pkg.js: identity and logical image of ${name}`);
+{
+  const base = process.env.FM1_BASE_PACKAGE || join(HERE, "../build/base/jamesos-base-from-v15.fwsc");
+  if (existsSync(base)) {
+    const raw = new Uint8Array(readFileSync(base));
+    const image = logicalImage(raw);
+    ok(productOf(raw) === "FM-1_9262108" && image.length === raw.length - 20 && image[47] === raw[48],
+      "fm1pkg.js: identity and logical image of the base package");
+  } else console.log("fm1pkg.js: no base package (run web/base_package.py): skipped");
 }
 
 /* ------------------------------------------------- update protocol (fm1ota.js) --- */

@@ -1,0 +1,25 @@
+name: Host tests
+description: The MIDI output host tests and the web installer tests.
+runs:
+  using: composite
+  steps:
+    - name: Use clang as cc and c++
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/bin"
+        ln -sf "$(command -v clang)" "$RUNNER_TEMP/bin/cc"
+        ln -sf "$(command -v clang++)" "$RUNNER_TEMP/bin/c++"
+        echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+    - name: MIDI output tests
+      shell: bash
+      run: |
+        python3 tests/run_midi_seq_out.py
+        python3 tests/run_midi_channel_ui.py --reuse-dsp
+        python3 tests/run_midi_session_v16.py --reuse-dsp
+        python3 tests/run_pattern_v16_only.py
+        python3 tests/test_release_tag.py
+    - name: Web installer tests
+      shell: bash
+      run: |
+        python3 web/base_package.py build/base/jamesos-base-from-v15.fwsc
+        node web/test_web.mjs
