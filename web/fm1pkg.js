@@ -25,12 +25,17 @@ export function logicalImage(fwsc) {
   return out;
 }
 
-// The official FM-1 V15 (M-VAVE Downloads -> PC Firmware -> FM-1 V15, FM-1.fwsc), for the return to the
-// official firmware: only that exact file is accepted (its SHA-256 pins every byte: the loader, the app, the
+// The official FM-1 V15 (FM-1_015.fwsc, which M-VAVE publishes under Apache-2.0 in m-vave/fm1_open), for the
+// return to the official firmware: only that exact file is accepted (its SHA-256 pins every byte: the loader, the app, the
 // layout; the name of the file proves nothing). The digest is the one Felucca 1.0 pins.
 export const STOCK_V15_SHA256 = "db1642b2b6fa5c2cccb11ffd13878068bb28601678d3644049f99dc40e7edb8a";
 export const STOCK_V15_SIZE = 699956;
 export const STOCK_V15_PRODUCT = "FM-1_015";
+
+// That file at a fixed commit in M-VAVE's repository, which allows cross-origin reads: the page's fallback
+// when the copy it bundles cannot be read.
+export const STOCK_V15_URL =
+  "https://raw.githubusercontent.com/m-vave/fm1_open/3be7fbdbd3bb137bacbd65d68412c210eb977870/sdk/firmware/FM-1_015.fwsc";
 
 export async function sha256hex(bytes) {
   const d = await crypto.subtle.digest("SHA-256", bytes);
@@ -41,4 +46,17 @@ export async function validateStockPackage(bytes) {
   if (bytes.length !== STOCK_V15_SIZE || await sha256hex(bytes) !== STOCK_V15_SHA256 || productOf(bytes) !== STOCK_V15_PRODUCT)
     throw new Error("select the unmodified official FM-1 V15 file (FM-1.fwsc)");
   return { product: STOCK_V15_PRODUCT, image: logicalImage(bytes) };
+}
+
+// The official V15 from the first of `urls` that serves the exact file.
+export async function loadStockPackage(urls, get = globalThis.fetch) {
+  let last = null;
+  for (const url of urls) {
+    try {
+      const r = await get(url, { cache: "no-cache" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await validateStockPackage(new Uint8Array(await r.arrayBuffer()));
+    } catch (e) { last = e; }
+  }
+  throw last || new Error("no source");
 }

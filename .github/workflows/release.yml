@@ -88,6 +88,8 @@ jobs:
           cp "$PACKAGE" "dist/JamesOS-${TAG#v}.fwsc"
           cp "$(dirname "$PACKAGE")/build-settings.json" "dist/build-settings-${TAG#v}.json"
           python3 web/base_package.py dist/JamesOS-1.0a-2108-base-from-v15.fwsc
+          python3 web/base_package.py --v15 dist/FM-1_015-official-V15.fwsc
+          cp web/licenses/Apache-2.0.txt web/licenses/FM-1_015-NOTICE.txt dist/
           (cd dist && sha256sum * > SHA256SUMS)
           cat dist/SHA256SUMS
       - uses: actions/upload-artifact@v4
@@ -158,6 +160,7 @@ jobs:
         run: |
           python3 web/make_site.py "dist/JamesOS-${TAG#v}.fwsc" "${TAG#v}" site \
             --base dist/JamesOS-1.0a-2108-base-from-v15.fwsc \
+            --v15 dist/FM-1_015-official-V15.fwsc \
             --source "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
       - uses: actions/upload-pages-artifact@v3
         with:

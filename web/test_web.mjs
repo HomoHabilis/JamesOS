@@ -4,7 +4,9 @@
 // Node checks of the installer's JS (no browser, no hardware). Run from the repo root:
 //   node web/test_web.mjs
 // - fm1pkg.js: productOf and logicalImage on the base package (FM1_BASE_PACKAGE, default
-//   build/base/jamesos-base-from-v15.fwsc as web/base_package.py writes it; skipped when absent)
+//   build/base/jamesos-base-from-v15.fwsc as web/base_package.py writes it; skipped when absent), and
+//   loadStockPackage with the official V15 (FM1_STOCK_V15, default build/base/FM-1_015.fwsc as
+//   web/base_package.py --v15 writes it; skipped when absent)
 // - fm1ota.js: installs, resumes and unplugs against a simulated FM-1
 // - installer.js: which package each firmware and each update loader gets, over the whole route
 //   SLOOP -> official V15 -> JamesOS base -> this build
@@ -12,7 +14,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { logicalImage, productOf, validateStockPackage, STOCK_V15_SIZE } from "./fm1pkg.js";
+import { logicalImage, productOf, validateStockPackage, loadStockPackage, STOCK_V15_SIZE, STOCK_V15_URL } from "./fm1pkg.js";
 import { Updater, pack7, unpack7, FM1_PORT, OUR_LOADER } from "./fm1ota.js";
 import { firmwareKind, packageFor, packageForLoader, totalReads } from "./installer.js";
 
@@ -30,6 +32,27 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
     ok(productOf(raw) === "FM-1_9262108" && image.length === raw.length - 20 && image[47] === raw[48],
       "fm1pkg.js: identity and logical image of the base package");
   } else console.log("fm1pkg.js: no base package (run web/base_package.py): skipped");
+}
+
+/* the official V15: the page's own copy, else M-VAVE's */
+{
+  const file = process.env.FM1_STOCK_V15 || join(HERE, "../build/base/FM-1_015.fwsc");
+  const tried = [];
+  const host = (files) => async (url) => { tried.push(url); return files[url] ? new Response(files[url]) : new Response(null, { status: 404 }); };
+  const urls = ["firmware/FM-1_015.fwsc", STOCK_V15_URL];
+
+  const e1 = await loadStockPackage(urls, host({})).then(() => null, (x) => x);
+  ok(e1 && /HTTP 404/.test(e1.message) && tried.length === 2, "fm1pkg.js: no V15 anywhere is reported after every source");
+  const e2 = await loadStockPackage(urls, host({ [urls[0]]: new Uint8Array(STOCK_V15_SIZE) })).then(() => null, (x) => x);
+  ok(e2 && /HTTP 404/.test(e2.message), "fm1pkg.js: a wrong V15 copy is never used");
+  if (existsSync(file)) {
+    const v15 = new Uint8Array(readFileSync(file));
+    tried.length = 0;
+    const a = await loadStockPackage(urls, host({ [urls[0]]: v15, [urls[1]]: v15 }));
+    ok(a.product === "FM-1_015" && tried.length === 1, "fm1pkg.js: the bundled V15 is used first");
+    const b = await loadStockPackage(urls, host({ [urls[0]]: v15.subarray(1), [urls[1]]: v15 }));
+    ok(eq(b.image, a.image), "fm1pkg.js: a damaged bundled V15 falls back to M-VAVE's copy");
+  } else console.log("fm1pkg.js: no official V15 file (run web/base_package.py --v15): skipped");
 }
 
 /* ------------------------------------------------- update protocol (fm1ota.js) --- */

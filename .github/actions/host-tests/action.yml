@@ -22,4 +22,5 @@ runs:
       shell: bash
       run: |
         python3 web/base_package.py build/base/jamesos-base-from-v15.fwsc
+        python3 web/base_package.py --v15 build/base/FM-1_015.fwsc
         node web/test_web.mjs

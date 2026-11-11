@@ -52,6 +52,7 @@ def main():
     ap.add_argument("version")
     ap.add_argument("out", type=Path)
     ap.add_argument("--base", type=Path, default=ROOT / "build" / "base" / "jamesos-base-from-v15.fwsc")
+    ap.add_argument("--v15", type=Path, default=ROOT / "build" / "base" / "FM-1_015.fwsc")
     ap.add_argument("--source", default="https://github.com/aarongrando/JamesOS")
     a = ap.parse_args()
 
@@ -65,14 +66,17 @@ def main():
     base = base_package.fetch(a.base)
     if hashlib.sha256(base).hexdigest() != base_package.SHA256 or not IDENTITY.fullmatch(product_of(base)):
         raise SystemExit(f"{a.base}: not the released build 2108 from-V15 package")
+    v15 = base_package.fetch_v15(a.v15)
 
     html = (HERE / "index_pkg.html").read_text(encoding="utf-8")
     lib = "\n".join(strip_module((HERE / f).read_text(encoding="utf-8"))
                     for f in ("fm1pkg.js", "fm1ota.js", "installer.js"))
     app_name = f"jamesos-{re.sub(r'[^A-Za-z0-9.-]', '-', a.version)}.fwsc"
     base_name = "jamesos-base-from-v15.fwsc"
+    v15_name = "FM-1_015.fwsc"
     meta = json.dumps({"version": a.version, "source": a.source,
-                       "app": entry(app, app_name, loader=loader), "base": entry(base, base_name)})
+                       "app": entry(app, app_name, loader=loader), "base": entry(base, base_name),
+                       "stock": entry(v15, v15_name)})
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"index_pkg.html must contain {mark} once; update make_site.py")
@@ -84,9 +88,14 @@ def main():
         old.unlink()
     (fw / app_name).write_bytes(app)
     (fw / base_name).write_bytes(base)
+    (fw / v15_name).write_bytes(v15)
+    licenses = a.out / "licenses"
+    licenses.mkdir(exist_ok=True)
+    for f in (HERE / "licenses").glob("*.txt"):
+        (licenses / f.name).write_bytes(f.read_bytes())
     (a.out / "index.html").write_text(html, encoding="utf-8")
     (a.out / ".nojekyll").write_text("", encoding="utf-8")
-    print(f"site: {a.out}: index.html ({len(html)} B), {app_name} ({len(app)} B, {product}, {loader}), {base_name}")
+    print(f"site: {a.out}: index.html ({len(html)} B), {app_name} ({len(app)} B, {product}, {loader}), {base_name}, {v15_name} with its licence")
 
 
 if __name__ == "__main__":

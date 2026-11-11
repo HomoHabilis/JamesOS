@@ -65,19 +65,22 @@
 
   <hr>
   <h2>Return to the official firmware (V15)</h2>
-  <p class="small">Download the official FM-1 V15,
-    <a href="https://github.com/m-vave/fm1_open/raw/main/sdk/firmware/FM-1_015.fwsc" target="_blank" rel="noopener">FM-1_015.fwsc</a>,
-    which M-VAVE publishes in its <a href="https://github.com/m-vave/fm1_open" target="_blank" rel="noopener">fm1_open</a> repository
-    (m-vave.com now offers only V16), and select it here unmodified. The file is checked in this browser and is not sent anywhere.</p>
+  <p class="small">This page carries the official V15 itself and checks that it is the exact official file before writing it.</p>
   <p class="small">The official firmware cannot open the projects of JamesOS or SLOOP. Back them up first with that firmware's own tools.
     From JamesOS this return is not yet confirmed on hardware; from SLOOP it is SLOOP's own documented path.</p>
   <p class="small"><label><input id="stock-saved" type="checkbox"> I backed up what I want to keep</label></p>
-  <p class="small"><label>The official FM-1.fwsc<br><input id="stock-file" type="file" accept=".fwsc"></label></p>
   <p><button id="stock-go" disabled>Install the official V15</button></p>
+  <p class="small"><label>If the page cannot read its copy, select
+    <a id="stock-link" href="#" target="_blank" rel="noopener">FM-1_015.fwsc</a> yourself, unmodified:<br>
+    <input id="stock-file" type="file" accept=".fwsc"></label></p>
   <p class="small">M-VAVE's own updater, M-UPGRADE, works too.</p>
 
   <hr>
-  <p class="small" style="margin-top:18px">JamesOS is a Gjelly project by Aaron Grando, built on Dinghy and the Felucca platform with SLOOP contributions.
+  <p class="small" style="margin-top:18px">The official FM-1 V15 firmware (FM-1_015.fwsc) is © 珠海笙科智能科技有限公司 (M-VAVE),
+    redistributed unmodified under the <a href="licenses/Apache-2.0.txt">Apache License 2.0</a> from
+    <a href="https://github.com/m-vave/fm1_open" target="_blank" rel="noopener">github.com/m-vave/fm1_open</a>
+    (sdk/firmware/FM-1_015.fwsc). <a href="licenses/FM-1_015-NOTICE.txt">Notice</a>.</p>
+  <p class="small">JamesOS is a Gjelly project by Aaron Grando, built on Dinghy and the Felucca platform with SLOOP contributions.
     This installer is derived from the Felucca / SLOOP web installer by Leo Kuroshita (@kurogedelic), Hügelton Instruments.
     M-VAVE and FM-1 are trademarks of their respective owners; this project is not affiliated with them.<br>
     GPL-3.0, no warranty. Source: <a id="source" href="#" target="_blank" rel="noopener"></a></p>
@@ -105,6 +108,7 @@ const TEXT = {
   foreign: "The FM-1 is in the update mode of another firmware. Finish that update with its own updater first: ",
   leave: "Writing. Do not close the page.",
   stockValid: "Official V15 verified", stockBad: "Not the official V15: ",
+  stockGet: "Reading the official V15", stockGetFail: "Could not read the official V15. Nothing was written. Select the file below instead: ",
   stockConfirm: "Install the official V15 on the FM-1? It cannot open JamesOS or SLOOP projects. Did you back up?",
   stockFinish: "The FM-1 is in the update mode of a community firmware. Finish that update with its own installer first, then return to the official V15.",
 };
@@ -120,7 +124,7 @@ let writing = false, stock = null;
 const lockAll = (on) => {
   writing = on;
   $("go").disabled = on || !images.app || !images.base;
-  $("stock-go").disabled = on || !stock || !$("stock-saved").checked;
+  $("stock-go").disabled = on || !$("stock-saved").checked;
   $("stock-file").disabled = on;
 };
 window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault(); e.returnValue = TEXT.leave; } });
@@ -202,6 +206,7 @@ $("go").addEventListener("click", async () => {
 
 /* Back to the official V15: only the exact official file, through the same update path as M-UPGRADE;
    an FM-1 left in the official updater's mode is finished. */
+$("stock-link").href = STOCK_V15_URL;
 $("stock-saved").addEventListener("change", () => lockAll(writing));
 $("stock-file").addEventListener("change", async () => {
   const f = $("stock-file").files[0];
@@ -213,9 +218,14 @@ $("stock-file").addEventListener("change", async () => {
   lockAll(writing);
 });
 $("stock-go").addEventListener("click", async () => {
-  if (writing || !stock || !$("stock-saved").checked || !confirm(TEXT.stockConfirm)) return;
+  if (writing || !$("stock-saved").checked || !confirm(TEXT.stockConfirm)) return;
   lockAll(true);
   $("bar").value = 0;
+  if (!stock) {
+    say("stockGet");
+    try { stock = await loadStockPackage([meta.stock.pkg, STOCK_V15_URL]); }
+    catch (e) { say("stockGetFail", e.message); lockAll(false); return; }
+  }
   const midi = await midiAccess();
   if (!midi) { lockAll(false); return; }
   try {

@@ -59,15 +59,15 @@ The setting is saved with the project. A project saved with `SEND` is not accept
 
 - updates an FM-1 that runs JamesOS to this build;
 - installs the released build 2108 from-V15 package on an FM-1 that runs the official V15, then updates it in a second pass;
-- returns an FM-1 to the official V15 from the unmodified `FM-1.fwsc` the user selects, which is how an FM-1 on SLOOP or on the official V16 gets here. M-VAVE publishes that V15 file in [m-vave/fm1_open](https://github.com/m-vave/fm1_open/blob/main/sdk/firmware/FM-1_015.fwsc); m-vave.com now offers only V16.
+- returns an FM-1 to the official V15, which is how an FM-1 on SLOOP or on the official V16 gets here. The page and each release carry M-VAVE's `FM-1_015.fwsc` from [m-vave/fm1_open](https://github.com/m-vave/fm1_open/blob/main/sdk/firmware/FM-1_015.fwsc), unmodified, under Apache-2.0 (licence and notice in `web/licenses/`); m-vave.com now offers only V16. If the page cannot read its copy it falls back to M-VAVE's, then to a file the user selects.
 
-`node web/test_web.mjs` runs its checks against a simulated FM-1 (after `python3 web/base_package.py build/base/jamesos-base-from-v15.fwsc` for the package checks). The page has not been used with hardware.
+`node web/test_web.mjs` runs its checks against a simulated FM-1 (after `python3 web/base_package.py build/base/jamesos-base-from-v15.fwsc` and `python3 web/base_package.py --v15 build/base/FM-1_015.fwsc` for the package checks). The page has not been used with hardware.
 
 ## Releases
 
 Run **Actions → Release → Run workflow** on `main`. Leave the tag empty and the workflow reuses a release tag already on that commit, or names the next build: `v1.0a-midi-2150`, then `2151`, and so on. The build number is also the package identity (`FM-1_9262150`). A tag typed in is released at its own commit when it exists, and created on the run's commit when it does not.
 
-The workflow runs the host tests, builds and validates the firmware with that identity, and only then pushes the tag and publishes the release with the package, upstream's 2108 base and their SHA-256 sums. For a run on the default branch it then publishes the installer page from the same files. Pushes to `main` and `claude/**` branches still run the tests and a test build (identity `FM-1_9262149`), but they no longer change the page.
+The workflow runs the host tests, builds and validates the firmware with that identity, and only then pushes the tag and publishes the release with the package, upstream's 2108 base, M-VAVE's official V15 with its licence and notice, and their SHA-256 sums. For a run on the default branch it then publishes the installer page from the same files. Pushes to `main` and `claude/**` branches still run the tests and a test build (identity `FM-1_9262149`), but they no longer change the page.
 
 ## Source layout
 
