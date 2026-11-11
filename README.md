@@ -25,7 +25,7 @@ Release candidates are identified by source tags and matching firmware packages.
 
 The **1.0a alpha** release now uses build 2108. It adds input from the FM-1’s 3.5 mm MIDI IN jack alongside USB MIDI. Both use the same track and drum-lane channel settings; `OFF` disables input and suppresses that destination’s keyboard MIDI output. The external clock setting accepts clock and transport from either input. Use one clock source at a time.
 
-The `releases/` directory contains two build 2108 packages:
+Upstream keeps two build 2108 packages in its `releases/` directory (tag `v1.0a-2108`). This fork no longer tracks them in the tree; its releases are on the GitHub Releases page (see Releases below), and the installer fetches the combined package from the last commit that held it, checked against its SHA-256:
 
 - `JamesOS-1.0a-build-2108.fwsc` is the application update package, installed and restarted on one FM-1.
 - `JamesOS-1.0a-build-2108-from-v15.fwsc` includes the 396 MHz boot configuration. Its boot area and official loader match the hardware-tested 2104 combined package, and its application matches the installed 2108 package. The exact combined 2108 package has not been tested on hardware.
@@ -39,7 +39,7 @@ On a Mac that previously recognized the device as JamesOS, the MIDI name may rem
 To reproduce the 2108 combined package, provide a separately obtained official V14 firmware package (SHA-256 `7e7b6d260163cdf9d716f7fab44f19be600edeffcd390de74370b83c917fd0c6`):
 
 ```sh
-python3 tools/build_v15_install_package.py --app releases/JamesOS-1.0a-build-2108.fwsc --v14 /path/to/official-v14.fwsc --output /tmp/jamesos-2108-from-v15.fwsc
+python3 tools/build_v15_install_package.py --app /path/to/JamesOS-1.0a-build-2108.fwsc --v14 /path/to/official-v14.fwsc --output /tmp/jamesos-2108-from-v15.fwsc
 ```
 
 The combined package SHA-256 is `75c0ea9251db9ab08d3886bfc784a7ddd1638a679257b16f714975cff597c729`; the standard package SHA-256 is `e597224b7845a6f9cbef30016f5208fe1e8e7cee1647f1c30fa8ff4675f54942`.
@@ -55,13 +55,19 @@ The setting is saved with the project. A project saved with `SEND` is not accept
 
 ## Web installer
 
-`web/` holds a browser installer after SLOOP's (Web MIDI: Chrome or Edge on a computer, Chrome on Android). GitHub Actions builds the firmware and publishes the page with GitHub Pages from `main`; enable it once under Settings → Pages → Source: GitHub Actions. The page:
+`web/` holds a browser installer after SLOOP's (Web MIDI: Chrome or Edge on a computer, Chrome on Android). The Release workflow publishes it with GitHub Pages (Settings → Pages → Source: GitHub Actions), so the page always installs the latest release. The page:
 
 - updates an FM-1 that runs JamesOS to this build;
-- installs the released build 2108 from-V15 package on an FM-1 that runs the official firmware, then updates it in a second pass;
-- returns an FM-1 to the official V15 from the unmodified `FM-1.fwsc` the user selects, which is how an FM-1 on SLOOP gets here.
+- installs the released build 2108 from-V15 package on an FM-1 that runs the official V15, then updates it in a second pass;
+- returns an FM-1 to the official V15, which is how an FM-1 on SLOOP or on the official V16 gets here. The page and each release carry M-VAVE's `FM-1_015.fwsc` from [m-vave/fm1_open](https://github.com/m-vave/fm1_open/blob/main/sdk/firmware/FM-1_015.fwsc), unmodified, under Apache-2.0 (licence and notice in `web/licenses/`); m-vave.com now offers only V16. If the page cannot read its copy it falls back to M-VAVE's, then to a file the user selects.
 
-`node web/test_web.mjs` runs its checks against a simulated FM-1. The page has not been used with hardware.
+`node web/test_web.mjs` runs its checks against a simulated FM-1 (after `python3 web/base_package.py build/base/jamesos-base-from-v15.fwsc` and `python3 web/base_package.py --v15 build/base/FM-1_015.fwsc` for the package checks). The page has not been used with hardware.
+
+## Releases
+
+Run **Actions → Release → Run workflow** on `main`. Leave the tag empty and the workflow reuses a release tag already on that commit, or names the next build: `v1.0a-midi-2150`, then `2151`, and so on. The build number is also the package identity (`FM-1_9262150`). A tag typed in is released at its own commit when it exists, and created on the run's commit when it does not.
+
+The workflow runs the host tests, builds and validates the firmware with that identity, and only then pushes the tag and publishes the release with the package, upstream's 2108 base, M-VAVE's official V15 with its licence and notice, and their SHA-256 sums. For a run on the default branch it then publishes the installer page from the same files. Pushes to `main` and `claude/**` branches still run the tests and a test build (identity `FM-1_9262149`), but they no longer change the page.
 
 ## Source layout
 

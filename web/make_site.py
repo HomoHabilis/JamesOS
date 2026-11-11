@@ -9,14 +9,14 @@
   web/make_site.py APP.fwsc VERSION OUT_DIR [--base BASE.fwsc] [--source URL]
 
 The page installs only bytes that match the identities and SHA-256 digests
-recorded here. The base package defaults to the released build 2108 one and
-must match the digest the README publishes for it.
+recorded here. The base package is upstream's build 2108 from-V15 package
+(web/base_package.py): fetched into build/ when --base is not given, and
+accepted only with its published digest.
 """
 import argparse
 import hashlib
 import json
 import re
-import shutil
 import sys
 from pathlib import Path
 
@@ -24,9 +24,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import validate_package  # noqa: E402
+import base_package  # noqa: E402
 
-BASE = ROOT / "releases" / "JamesOS-1.0a-build-2108-from-v15.fwsc"
-BASE_SHA256 = "75c0ea9251db9ab08d3886bfc784a7ddd1638a679257b16f714975cff597c729"
 BLOCKS, BLK, KEEP = 20, 0x30, 0x2F
 IDENTITY = re.compile(r"FM-1_9262\d{3}")
 
@@ -52,7 +51,8 @@ def main():
     ap.add_argument("app", type=Path)
     ap.add_argument("version")
     ap.add_argument("out", type=Path)
-    ap.add_argument("--base", type=Path, default=BASE)
+    ap.add_argument("--base", type=Path, default=ROOT / "build" / "base" / "jamesos-base-from-v15.fwsc")
+    ap.add_argument("--v15", type=Path, default=ROOT / "build" / "base" / "FM-1_015.fwsc")
     ap.add_argument("--source", default="https://github.com/aarongrando/JamesOS")
     a = ap.parse_args()
 
@@ -63,17 +63,20 @@ def main():
     loader = validate_package.validate(app, expected_identity=product).get("loader_identity")
     if not isinstance(loader, str) or not re.fullmatch(r"ota-FM-1_9\d\d", loader):
         raise SystemExit(f"{a.app}: validation did not identify the embedded update loader")
-    base = a.base.read_bytes()
-    if hashlib.sha256(base).hexdigest() != BASE_SHA256 or not IDENTITY.fullmatch(product_of(base)):
+    base = base_package.fetch(a.base)
+    if hashlib.sha256(base).hexdigest() != base_package.SHA256 or not IDENTITY.fullmatch(product_of(base)):
         raise SystemExit(f"{a.base}: not the released build 2108 from-V15 package")
+    v15 = base_package.fetch_v15(a.v15)
 
     html = (HERE / "index_pkg.html").read_text(encoding="utf-8")
     lib = "\n".join(strip_module((HERE / f).read_text(encoding="utf-8"))
                     for f in ("fm1pkg.js", "fm1ota.js", "installer.js"))
     app_name = f"jamesos-{re.sub(r'[^A-Za-z0-9.-]', '-', a.version)}.fwsc"
     base_name = "jamesos-base-from-v15.fwsc"
+    v15_name = "FM-1_015.fwsc"
     meta = json.dumps({"version": a.version, "source": a.source,
-                       "app": entry(app, app_name, loader=loader), "base": entry(base, base_name)})
+                       "app": entry(app, app_name, loader=loader), "base": entry(base, base_name),
+                       "stock": entry(v15, v15_name)})
     for mark in ("/*LIB*/", "/*META*/"):
         if html.count(mark) != 1:
             raise SystemExit(f"index_pkg.html must contain {mark} once; update make_site.py")
@@ -84,10 +87,15 @@ def main():
     for old in fw.glob("*.fwsc"):
         old.unlink()
     (fw / app_name).write_bytes(app)
-    shutil.copy(a.base, fw / base_name)
+    (fw / base_name).write_bytes(base)
+    (fw / v15_name).write_bytes(v15)
+    licenses = a.out / "licenses"
+    licenses.mkdir(exist_ok=True)
+    for f in (HERE / "licenses").glob("*.txt"):
+        (licenses / f.name).write_bytes(f.read_bytes())
     (a.out / "index.html").write_text(html, encoding="utf-8")
     (a.out / ".nojekyll").write_text("", encoding="utf-8")
-    print(f"site: {a.out}: index.html ({len(html)} B), {app_name} ({len(app)} B, {product}, {loader}), {base_name}")
+    print(f"site: {a.out}: index.html ({len(html)} B), {app_name} ({len(app)} B, {product}, {loader}), {base_name}, {v15_name} with its licence")
 
 
 if __name__ == "__main__":

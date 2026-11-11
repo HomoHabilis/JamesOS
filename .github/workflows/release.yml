@@ -1,0 +1,169 @@
+name: Release
+
+# Run from Actions > Release > Run workflow. Leave the tag empty to reuse a release tag already on the
+# chosen commit, or to name the next build (v1.0a-midi-2150, then 2151, ...). An existing tag is
+# released at its own commit; a new tag is created on the commit the workflow runs on. The tag is
+# only pushed once the tests and the firmware build have passed.
+#
+# The installer page (GitHub Pages) is published from here only, and only for a release run from
+# the default branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release, e.g. v1.0a-midi-2151 (empty = reuse or name the next one)
+        required: false
+        default: ""
+      prerelease:
+        description: Mark the release as a pre-release
+        type: boolean
+        default: true
+      page:
+        description: Publish the installer page from this release (default branch only)
+        type: boolean
+        default: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      version: ${{ steps.pick.outputs.version }}
+      build: ${{ steps.pick.outputs.build }}
+      product: ${{ steps.pick.outputs.product }}
+      commit: ${{ steps.pick.outputs.commit }}
+      create: ${{ steps.pick.outputs.create }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: pick
+        env:
+          TAG: ${{ inputs.tag }}
+        run: python3 tools/release_tag.py --tag "$TAG" | tee -a "$GITHUB_OUTPUT"
+      - name: The release must not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pick.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists. Delete it first or choose another tag."
+            exit 1
+          fi
+
+  host-tests:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: ./.github/actions/host-tests
+
+  firmware:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - id: build
+        uses: ./.github/actions/build-firmware
+        with:
+          product: ${{ needs.prepare.outputs.product }}
+      - name: Name the release files
+        env:
+          PACKAGE: ${{ steps.build.outputs.package }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          mkdir dist
+          cp "$PACKAGE" "dist/JamesOS-${TAG#v}.fwsc"
+          cp "$(dirname "$PACKAGE")/build-settings.json" "dist/build-settings-${TAG#v}.json"
+          python3 web/base_package.py dist/JamesOS-1.0a-2108-base-from-v15.fwsc
+          python3 web/base_package.py --v15 dist/FM-1_015-official-V15.fwsc
+          cp web/licenses/Apache-2.0.txt web/licenses/FM-1_015-NOTICE.txt dist/
+          (cd dist && sha256sum * > SHA256SUMS)
+          cat dist/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist
+          if-no-files-found: error
+
+  release:
+    needs: [prepare, host-tests, firmware]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          PRODUCT: ${{ needs.prepare.outputs.product }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          PAGE: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          {
+            echo "JamesOS ${TAG#v} with MIDI output: package identity \`$PRODUCT\`."
+            echo
+            echo "Install it from the browser installer: $PAGE"
+            echo
+            echo "- \`JamesOS-${TAG#v}.fwsc\`: the application update for an FM-1 that already runs JamesOS."
+            echo "- \`JamesOS-1.0a-2108-base-from-v15.fwsc\`: upstream's build 2108 base, which the installer writes over the official V15 first."
+            echo
+            echo "Not tested on hardware unless noted below. Installing firmware can overwrite saved projects."
+            echo
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+          } > notes.md
+          flags=(--repo "$GITHUB_REPOSITORY" --title "JamesOS ${TAG#v}" --notes-file notes.md --generate-notes --target "$COMMIT")
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "${flags[@]}" dist/*
+
+  page:
+    needs: [prepare, firmware, release]
+    if: inputs.page && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - name: Make the site
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          python3 web/make_site.py "dist/JamesOS-${TAG#v}.fwsc" "${TAG#v}" site \
+            --base dist/JamesOS-1.0a-2108-base-from-v15.fwsc \
+            --v15 dist/FM-1_015-official-V15.fwsc \
+            --source "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

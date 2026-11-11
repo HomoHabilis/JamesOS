@@ -1,13 +1,9 @@
-name: Build firmware and installer site
+name: Build firmware
 
 on:
   push:
     branches: [main, 'claude/**']
   workflow_dispatch:
-    inputs:
-      product:
-        description: FM-1 package identity (FM-1_ followed by digits)
-        default: FM-1_9262150
 
 permissions:
   contents: read
@@ -15,80 +11,20 @@ permissions:
 jobs:
   host-tests:
     runs-on: ubuntu-24.04
-    env:
-      CC: clang
-      CXX: clang++
     steps:
       - uses: actions/checkout@v4
-      - name: Use clang as cc and c++
-        run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          ln -s "$(command -v clang)" "$RUNNER_TEMP/bin/cc"
-          ln -s "$(command -v clang++)" "$RUNNER_TEMP/bin/c++"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: MIDI output tests
-        run: |
-          python3 tests/run_midi_seq_out.py
-          python3 tests/run_midi_channel_ui.py --reuse-dsp
-          python3 tests/run_midi_session_v16.py --reuse-dsp
-      - name: Web installer tests
-        run: node web/test_web.mjs
+      - uses: ./.github/actions/host-tests
 
   firmware:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: JieLi toolchain
-        run: |
-          sh tools/get_toolchain.sh "$HOME/.jieli"
-          echo "JIELI_TOOLCHAIN=$HOME/.jieli/toolchain" >> "$GITHUB_ENV"
-      - name: JieLi AC79 SDK
-        run: |
-          git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
-            https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$HOME/fw-AC79_AIoT_SDK"
-          echo "AC79_SDK=$HOME/fw-AC79_AIoT_SDK" >> "$GITHUB_ENV"
-      - name: Build the distribution package
-        run: |
-          python3 -m pip install --user Pillow
-          python3 tools/build.py --pattern-device-candidate --app-opt Oz \
-            --product "${{ inputs.product || 'FM-1_9262150' }}" \
-            --diagnostics distribution --sdk "$AC79_SDK"
+      - id: build
+        uses: ./.github/actions/build-firmware
+        with:
+          product: FM-1_9262149
       - uses: actions/upload-artifact@v4
         with:
-          name: jamesos-firmware
-          path: |
-            build/**/*.fwsc
-            build/**/build-settings.json
+          name: jamesos-firmware-test
+          path: ${{ steps.build.outputs.package }}
           if-no-files-found: error
-
-  # The web installer on GitHub Pages (Settings > Pages > Source: GitHub Actions), from main only.
-  site:
-    if: github.ref == 'refs/heads/main'
-    needs: [host-tests, firmware]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: jamesos-firmware
-          path: package
-      - name: Make the site
-        run: |
-          python3 web/make_site.py "$(find package -name '*.fwsc' | head -n 1)" \
-            "1.0a MIDI out, build ${{ github.run_number }}" site \
-            --source "${{ github.server_url }}/${{ github.repository }}"
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deploy
-        uses: actions/deploy-pages@v4

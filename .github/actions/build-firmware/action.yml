@@ -1,0 +1,37 @@
+name: Build the firmware package
+description: Fetch the JieLi toolchain and AC79 SDK, build the distribution package and validate it.
+inputs:
+  product:
+    description: Package identity, FM-1_ followed by digits
+    required: true
+outputs:
+  package:
+    description: Path of the built .fwsc package
+    value: ${{ steps.build.outputs.package }}
+runs:
+  using: composite
+  steps:
+    - name: JieLi toolchain
+      shell: bash
+      run: |
+        sh tools/get_toolchain.sh "$HOME/.jieli"
+        echo "JIELI_TOOLCHAIN=$HOME/.jieli/toolchain" >> "$GITHUB_ENV"
+    - name: JieLi AC79 SDK
+      shell: bash
+      run: |
+        git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+          https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$HOME/fw-AC79_AIoT_SDK"
+        echo "AC79_SDK=$HOME/fw-AC79_AIoT_SDK" >> "$GITHUB_ENV"
+    - name: Build and validate the distribution package
+      id: build
+      shell: bash
+      env:
+        PRODUCT: ${{ inputs.product }}
+      run: |
+        python3 -m pip install --user Pillow
+        python3 tools/build.py --pattern-device-candidate --app-opt Oz \
+          --product "$PRODUCT" --diagnostics distribution --sdk "$AC79_SDK"
+        package="$(ls build/pattern-device-candidate-distribution/*.fwsc)"
+        test "$(echo "$package" | wc -l)" = 1
+        python3 tools/validate_package.py "$package" --identity "$PRODUCT"
+        echo "package=$package" >> "$GITHUB_OUTPUT"
