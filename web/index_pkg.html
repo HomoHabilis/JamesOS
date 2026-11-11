@@ -55,7 +55,7 @@
   </ol>
   <p class="small">An FM-1 on the official firmware gets JamesOS in two passes: the first writes the JamesOS base with its boot
     configuration, the second updates it to this build. Press Install again when the first pass is done.
-    An FM-1 on SLOOP or another community firmware must return to the official V15 first (below).</p>
+    An FM-1 on another official version (such as V16), SLOOP or another community firmware must return to the official V15 first (below).</p>
   <p><button id="go" disabled>Install</button></p>
   <progress id="bar" max="100" value="0"></progress>
   <p id="status" role="status" aria-live="polite"></p>
@@ -65,9 +65,10 @@
 
   <hr>
   <h2>Return to the official firmware (V15)</h2>
-  <p class="small">Download the official FM-1 V15 from
-    <a href="https://www.m-vave.com/download" target="_blank" rel="noopener">www.m-vave.com/download</a>
-    (PC Firmware → FM-1 V15) and select the FM-1.fwsc inside it, unmodified. The file is checked in this browser and is not sent anywhere.</p>
+  <p class="small">Download the official FM-1 V15,
+    <a href="https://github.com/m-vave/fm1_open/raw/main/sdk/firmware/FM-1_015.fwsc" target="_blank" rel="noopener">FM-1_015.fwsc</a>,
+    which M-VAVE publishes in its <a href="https://github.com/m-vave/fm1_open" target="_blank" rel="noopener">fm1_open</a> repository
+    (m-vave.com now offers only V16), and select it here unmodified. The file is checked in this browser and is not sent anywhere.</p>
   <p class="small">The official firmware cannot open the projects of JamesOS or SLOOP. Back them up first with that firmware's own tools.
     From JamesOS this return is not yet confirmed on hardware; from SLOOP it is SLOOP's own documented path.</p>
   <p class="small"><label><input id="stock-saved" type="checkbox"> I backed up what I want to keep</label></p>
@@ -90,6 +91,7 @@ const TEXT = {
   start: "Starting", verify: "Verifying", loader: "Switching to update mode", write: "Writing", reboot: "Restarting",
   done: "Done: the FM-1 runs ", stopped: "Stopped. Replug the USB cable and press the same button again.",
   baseDone: "First pass done: the JamesOS base is installed. Press Install again to update it to this build.",
+  viaV15: "This FM-1 runs an official version JamesOS is not made for. Nothing was written. Install the official V15 first (below), then press Install: ",
   viaStock: "This FM-1 runs another community firmware. Return it to the official V15 first (below), then press Install: ",
   unknown: "This FM-1 reports a firmware this page does not know. Nothing was written: ",
   error: "Error: ",
@@ -189,7 +191,7 @@ $("go").addEventListener("click", async () => {
       dev.link.close();
       if (dev.id.model !== "FM-1") { say("model"); lockAll(false); return; }
       const which = packageFor(dev.id.text);
-      if (!which) { say(firmwareKind(dev.id.text) === "felucca" ? "viaStock" : "unknown", dev.id.text); lockAll(false); return; }
+      if (!which) { say({ felucca: "viaStock", "official-other": "viaV15" }[firmwareKind(dev.id.text)] || "unknown", dev.id.text); lockAll(false); return; }
       reads = totalReads(images[which].length);
       await up.install(images[which], meta[which].product, step);
       finished(which);

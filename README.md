@@ -58,8 +58,8 @@ The setting is saved with the project. A project saved with `SEND` is not accept
 `web/` holds a browser installer after SLOOP's (Web MIDI: Chrome or Edge on a computer, Chrome on Android). The Release workflow publishes it with GitHub Pages (Settings → Pages → Source: GitHub Actions), so the page always installs the latest release. The page:
 
 - updates an FM-1 that runs JamesOS to this build;
-- installs the released build 2108 from-V15 package on an FM-1 that runs the official firmware, then updates it in a second pass;
-- returns an FM-1 to the official V15 from the unmodified `FM-1.fwsc` the user selects, which is how an FM-1 on SLOOP gets here.
+- installs the released build 2108 from-V15 package on an FM-1 that runs the official V15, then updates it in a second pass;
+- returns an FM-1 to the official V15 from the unmodified `FM-1.fwsc` the user selects, which is how an FM-1 on SLOOP or on the official V16 gets here. M-VAVE publishes that V15 file in [m-vave/fm1_open](https://github.com/m-vave/fm1_open/blob/main/sdk/firmware/FM-1_015.fwsc); m-vave.com now offers only V16.
 
 `node web/test_web.mjs` runs its checks against a simulated FM-1 (after `python3 web/base_package.py build/base/jamesos-base-from-v15.fwsc` for the package checks). The page has not been used with hardware.
 

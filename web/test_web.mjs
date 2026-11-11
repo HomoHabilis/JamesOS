@@ -140,12 +140,13 @@ const APP = "FM-1_9262150", BASE = "FM-1_9262108", APP_LOADER = "ota-FM-1_904";
 /* ------------------------------------------------------------- the route (installer.js) --- */
 ok(firmwareKind("FM-1_015") === "official" && firmwareKind("FM-1_9262108") === "jamesos" && firmwareKind(APP) === "jamesos" &&
    firmwareKind("FM-1_927") === "felucca" && firmwareKind("FM-1_900") === "felucca" && firmwareKind("FM-2_015") === "other" &&
-   firmwareKind("FM-1_92621080") === "other", "installer.js: official, JamesOS, SLOOP / Felucca and unknown identities");
+   firmwareKind("FM-1_92621080") === "other" && firmwareKind("FM-1_016") === "official-other", "installer.js: official, JamesOS, SLOOP / Felucca and unknown identities");
 ok(packageFor("FM-1_015") === "base" && packageFor(BASE) === "app" && packageFor(APP) === "app" &&
-   packageFor("FM-1_927") === null && packageFor("FM-1_1234") === null,
+   packageFor("FM-1_927") === null && packageFor("FM-1_016") === null && packageFor("FM-1_1234") === null,
   "installer.js: official gets the base, JamesOS the update, anything else nothing");
 ok(packageForLoader(APP_LOADER, APP_LOADER) === "app" && packageForLoader("OTA-FM-1_904", APP_LOADER) === "app" &&
-   packageForLoader("ota-FM-1_015", APP_LOADER) === "base" && packageForLoader("ota-FM-1_900", APP_LOADER) === null,
+   packageForLoader("ota-FM-1_015", APP_LOADER) === "base" && packageForLoader("ota-FM-1_900", APP_LOADER) === null &&
+   packageForLoader("ota-FM-1_016", APP_LOADER) === null,
   "installer.js: each loader is finished with its own package; SLOOP's loader is left alone");
 ok(OUR_LOADER({ text: APP_LOADER }) && !OUR_LOADER({ text: "ota-FM-1_015" }) && totalReads(1024) === 76 && totalReads(1025) === 77,
   "installer.js: loader family and progress total");

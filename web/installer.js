@@ -7,9 +7,11 @@
 // An FM-1 under another community firmware (SLOOP, Felucca) first returns to
 // the official V15, which that firmware's own update path supports.
 
-// "official", "jamesos", "felucca" (SLOOP, Felucca and their 9XX identities) or "other"
+// "official" (V15, the only official version the base package is made for), "official-other" (any other
+// official version, such as V16), "jamesos", "felucca" (SLOOP, Felucca and their 9XX identities) or "other"
 export function firmwareKind(text) {
-  if (/^FM-1_0\d\d$/.test(text)) return "official";
+  if (text === "FM-1_015") return "official";
+  if (/^FM-1_0\d\d$/.test(text)) return "official-other";
   if (/^FM-1_9262\d{3}$/.test(text)) return "jamesos";
   if (/^FM-1_9\d\d$/.test(text)) return "felucca";
   return "other";
@@ -22,10 +24,10 @@ export function packageFor(text) {
 }
 
 // The package that finishes an update left in a loader: this build's own loader takes the app package,
-// the official loader takes the base package (its own layout), any other loader is left alone.
+// the official V15 loader takes the base package (its own layout), any other loader is left alone.
 export function packageForLoader(text, appLoader) {
   if (text.toLowerCase() === appLoader.toLowerCase()) return "app";
-  if (/^ota-FM-1_0\d\d$/i.test(text)) return "base";
+  if (/^ota-FM-1_015$/i.test(text)) return "base";
   return null;
 }
 
