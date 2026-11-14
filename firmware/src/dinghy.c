@@ -1123,7 +1123,7 @@ static uint32_t app_audio(int32_t *out, uint32_t n)
         br_tail_stamp[BR_TAIL_FX_START] = start;
 #endif
         br_fx_output_gain_q12 = master_q12;
-        br_fx_output_scale_request = 1u;
+        br_fx_output_scale_request = !fm1_usb_audio_full_now();   /* FULL: CPU0 taps USB before the gain */
         br_fx_output_prescaled = 0u;
 #endif
 #if !BR_AUDIO_FUSION_ONLY_BUILD

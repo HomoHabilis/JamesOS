@@ -1118,11 +1118,12 @@ static __attribute__((noinline)) void uac_render_start(void)   /* audio ISR, bef
     }
 }
 
-/* platform_audio_block_done is the sole tap caller and clamps every sample
- * to [-32767,32767] before entering this function. Retain the output clamp
- * after the 48k FIR, whose sum can exceed that input interval. */
+/* platform_audio_block_done is the sole tap caller. With USB AUDIO = FULL it
+ * taps the block before the MASTER gain clamps it, so the input is clamped
+ * here. Retain the output clamp after the 48k FIR, whose sum can exceed the
+ * input interval. */
 #ifndef FM1_UAC_INPUT_PRECLIPPED
-#define FM1_UAC_INPUT_PRECLIPPED 1
+#define FM1_UAC_INPUT_PRECLIPPED 0
 #endif
 
 static inline int32_t uac_s16(int32_t v)
