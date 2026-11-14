@@ -49,8 +49,11 @@ int main(void)
     assert(!br_session_v16_valid(&old) && !br_restore(&old));
     old = s; old.kit_retrig[3][3] |= 0x40u; /* OFF flag with a nonzero channel nibble */
     assert(!br_session_v16_valid(&old) && !br_restore(&old));
-    old = s; old.kit_retrig[4][2] |= 0x80u; /* unused OFF flag bit */
-    assert(!br_session_v16_valid(&old) && !br_restore(&old));
+    old = s; old.kit_retrig[4][2] |= 0x80u; /* after the OFF flags: USB AUDIO = FULL */
+    fm1_usb_audio_full = 0u;
+    assert(br_session_v16_valid(&old) && br_restore(&old) && fm1_usb_audio_full == 1u);
+    { br_session_t round; assert(br_capture(&round) && !memcmp(&round, &old, sizeof old)); }
+    assert(br_restore(&s) && fm1_usb_audio_full == 0u);
     old = s; old.kit_retrig[4][3] |= 0x40u; /* past the OFF flags */
     assert(!br_session_v16_valid(&old) && !br_restore(&old));
     old = s;

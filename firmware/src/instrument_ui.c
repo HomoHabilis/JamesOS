@@ -222,7 +222,7 @@ static uint32_t br_screen_count(void)
     case BR_PAGE_ENV: return 3u;
     case BR_PAGE_FX: return 5u;
     case BR_PAGE_PUNCH: return 2u;
-    case BR_PAGE_MIX: return br_ui.screen[BR_PAGE_MIX] >= 7u ? 2u : 7u;
+    case BR_PAGE_MIX: return br_ui.screen[BR_PAGE_MIX] >= 7u ? 3u : 7u;
     case BR_PAGE_SEQ: return 2u;
     case BR_PAGE_PATTERN: return 1u;
     case BR_PAGE_SCALE: return 1u; /* sounds/kit browser only */
@@ -247,8 +247,8 @@ static void br_select_screen(int32_t turn)
             br_ui.page = BR_PAGE_ROUTE; br_ui.screen[BR_PAGE_ROUTE] = (uint32_t)at - BR_LFOS;
         }
     } else if (br_ui.page == BR_PAGE_MIX && at >= 7) {
-        int32_t midi = (at - 7 + turn) % 2;
-        br_ui.screen[BR_PAGE_MIX] = 7u + (uint32_t)(midi < 0 ? midi + 2 : midi);
+        int32_t midi = (at - 7 + turn) % 3;
+        br_ui.screen[BR_PAGE_MIX] = 7u + (uint32_t)(midi < 0 ? midi + 3 : midi);
     } else if (br_ui.page == BR_PAGE_MIX) {
         /* Keep the existing page IDs for controls and shortcuts; only navigation changes. */
         static const uint8_t order[7] = {0u, 1u, 3u, 6u, 4u, 5u, 2u};
@@ -272,7 +272,7 @@ static void br_open_module(uint32_t module)
     if (br_gate_page()) br_gate_select_lane(br_ui.lane);
     br_ui.redraw = 1;
 }
-/* The MIDI pages are a separate two-page Global shortcut, not extra stops in
+/* The MIDI pages and USB AUDIO are a separate three-page Global shortcut, not extra stops in
  * the ordinary Global cycle. Repeating the chord returns to the mixer. */
 static void br_open_midi_settings(void)
 {
@@ -640,7 +640,13 @@ static br_control_t br_control(uint32_t k)
         }
         }
     } else if (br_ui.page == BR_PAGE_MIX) {
-        if (page >= 7u && page <= 8u) {
+        if (page == 9u) {
+            static const char *const usb_text[2] = {"MASTER", "FULL"};
+            if (!k) {
+                c.label = "USB AUDIO"; c.value = fm1_usb_audio_full ? 1 : 0; c.high = 1;
+                c.text = usb_text[c.value];
+            }
+        } else if (page >= 7u && page <= 8u) {
             static const char *const channel_labels[7] = {"T1 CH", "T2 CH", "T3 CH", "D1 CH", "D2 CH", "D3 CH", "D4 CH"};
             if (page == 7u && k == 3u) {
                 static const char *const clock_text[3] = {"OFF", "RECEIVE", "SEND"};
@@ -1119,10 +1125,11 @@ static void br_control_turn(uint32_t k, int32_t turn)
         return;
     }
     if (br_ui.page == BR_PAGE_MIX && page == 2u && k == 1u && br_midi_clock_active) return;
-    if (br_ui.page == BR_PAGE_MIX && (page == 7u || page == 8u)) {
+    if (br_ui.page == BR_PAGE_MIX && page >= 7u && page <= 9u) {
         if (v == c.value) return;
         if (key != br_ui.edit_key || fm1_ms - br_ui.edit_time > 600u) br_remember();
-        if (page == 7u && k == 3u) {
+        if (page == 9u) fm1_usb_audio_full = (uint8_t)(v != 0);
+        else if (page == 7u && k == 3u) {
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT && defined(FM1_DEVICE)
             if ((v == 1) != (br_midi_clock_enabled != 0u)) br_engine_clock_source_changed(fm1_ticks());
 #endif
@@ -2830,7 +2837,7 @@ static uint32_t br_control_widget(uint32_t k, const br_control_t *c)
     }
     if (br_ui.page == BR_PAGE_MIX && page == 3u) return BR_WIDGET_TRACK_PAN;
     if (br_ui.page == BR_PAGE_MIX && page == 4u && !k) return BR_WIDGET_COMP_SOURCE;
-    if (br_ui.page == BR_PAGE_MIX && page == 7u && k == 3u) return BR_WIDGET_CHOICE;
+    if (br_ui.page == BR_PAGE_MIX && ((page == 7u && k == 3u) || page == 9u)) return BR_WIDGET_CHOICE;
     if (br_ui.page == BR_PAGE_MIX && (page == 7u || page == 8u)) return BR_WIDGET_MIDI_CHANNEL;
     if (c->high == 1 && c->text && (br_widget_is(c->text, "ON") || br_widget_is(c->text, "OFF"))) return BR_WIDGET_TOGGLE;
     if (br_gate_page()) {
@@ -3278,7 +3285,7 @@ static const char *br_header_title(void)
     }
     case BR_PAGE_MIX: {
         static const char *const titles[]={"MIXER","GLOBAL / FILTER","SETTINGS","GLOBAL / PAN","COMPRESSOR","COMP KNOBS","GLOBAL / HEAT"};
-        return screen<7u?titles[screen]:screen==7u?"MIDI / 1":screen==8u?"MIDI / 2":"";
+        return screen<7u?titles[screen]:screen==7u?"MIDI / 1":screen==8u?"MIDI / 2":screen==9u?"USB AUDIO":"";
     }
     case BR_PAGE_SEQ: return "SEQUENCER";
 #ifdef BR_PATTERN_SONG_EXPERIMENT

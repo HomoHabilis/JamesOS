@@ -203,6 +203,10 @@ enum { BTN_OCT_DOWN = 0, BTN_OCT_UP = 1, BTN_FX = 2, BTN_SEL = 3, BTN_ENV = 4, B
 enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB3 = 4, ENC_KNOB4 = 5, ENC_PRESETS = 6 };
 #define KEY_LED(k) (14u + (k))
 
+/* USB AUDIO, saved with the project: 0 MASTER (the knob sets USB audio too), 1 FULL (USB audio as with
+ * the knob all the way up; the knob sets only the speaker and phones). */
+static volatile uint8_t fm1_usb_audio_full;
+
 #ifdef DINGHY_HOST
 #include "../../tests/host.c"                  /* on a computer: a fake FM-1 (tests/host.c) */
 #if FM1_RUNTIME_CHUNK_PROFILE
@@ -1071,16 +1075,31 @@ static void fm1_tail_detail_capture(uint32_t join, uint32_t ack)
 #if defined(FM1_DEVICE)
 extern volatile uint32_t br_fx_output_prescaled;
 #endif
+/* USB AUDIO = FULL while the computer records: the block goes to USB before the knob scales it. */
+static inline uint32_t fm1_usb_audio_full_now(void)
+{
+#if FELUCCA_UAC
+    return fm1_usb_audio_full && uac.feed;
+#else
+    return 0u;
+#endif
+}
 static void platform_audio_block_done(int32_t *out, uint32_t n)
 {
+    uint32_t scaled = 0u, tapped = 0u;
 #if defined(FM1_DEVICE)
-    if (br_fx_output_prescaled) br_fx_output_prescaled = 0u;   /* CPU1 applied the same gain */
-    else
+    if (br_fx_output_prescaled) { br_fx_output_prescaled = 0u; scaled = 1u; }   /* CPU1 applied the same gain */
 #endif
-    fm1_scale_q12_clip_block(out, 2u * n, &master_q12);
+    if (!scaled) {
 #if FELUCCA_UAC
-    uac_tap(out, n);
+        if (fm1_usb_audio_full_now()) { uac_tap(out, n); tapped = 1u; }
 #endif
+        fm1_scale_q12_clip_block(out, 2u * n, &master_q12);
+    }
+#if FELUCCA_UAC
+    if (!tapped) uac_tap(out, n);
+#endif
+    (void)tapped;
     ++audio_block_commits;
 }
 /* Read-only debugger diagnostics in crystal ticks, including nested USB/key IRQs.

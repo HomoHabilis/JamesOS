@@ -156,6 +156,23 @@ int main(void)
         br_midi_clock_enabled = 0u; br_midi_clock_out = 0u;
         assert(br_capture(&s) && br_restore(&s) && !br_midi_clock_out);
     }
+    /* USB AUDIO: MASTER or FULL on the third MIDI settings page, saved with the project. */
+    {
+        br_session_t s;
+        br_app_init(); fm1_ms = 9000u; fm1_usb_audio_full = 0u;
+        br_ui.page = BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX] = 8u;
+        br_select_screen(1); assert(br_ui.screen[BR_PAGE_MIX] == 9u && br_screen_count() == 3u);
+        { br_control_t c = br_control(0u); assert(!strcmp(c.label, "USB AUDIO") && !strcmp(c.text, "MASTER") && c.high == 1); }
+        { br_control_t c = br_control(1u); assert(!c.label[0]); }
+        br_control_turn(1u, 1); assert(!fm1_usb_audio_full);           /* the empty knobs do nothing */
+        br_control_turn(0u, 1); assert(fm1_usb_audio_full == 1u);
+        { br_control_t c = br_control(0u); assert(!strcmp(c.text, "FULL")); }
+        assert(br_capture(&s) && br_session_v16_valid(&s));
+        fm1_usb_audio_full = 0u; assert(br_restore(&s) && fm1_usb_audio_full == 1u);
+        br_control_turn(0u, -1); assert(!fm1_usb_audio_full);
+        br_select_screen(1); assert(br_ui.screen[BR_PAGE_MIX] == 7u);
+        br_select_screen(-1); assert(br_ui.screen[BR_PAGE_MIX] == 9u);
+    }
     puts("MIDI sequencer, arp, drum, clock and transport output passed");
     return 0;
 }

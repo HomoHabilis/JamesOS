@@ -51,7 +51,14 @@ This fork sends what the FM-1 plays to other gear over USB MIDI, after SLOOP:
 - The sequencer's and the arp's notes go out on each track's channel (`T1 CH`…`T3 CH`), and the drum lanes' hits on theirs (`D1 CH`…`D4 CH`). The keys go out on the same channels. `OFF` sends nothing for that track or lane. Notes received over MIDI are not sent back.
 - `MIDI CLOCK` on the mixer's MIDI page is `OFF`, `RECEIVE` (follow clock and transport from USB or the MIDI IN jack) or `SEND`. With `SEND` the FM-1 is the clock master: 24 pulses a beat at its tempo, also while stopped, with START as the sequencer starts and STOP as it stops.
 
-The setting is saved with the project. A project saved with `SEND` is not accepted by JamesOS builds without this feature. These changes pass the host tests (`python3 tests/run_midi_seq_out.py`) and have not been tested on hardware.
+## USB audio level
+
+`USB AUDIO`, on the third MIDI settings page (hold GLOBAL and press OCT DOWN, then turn to the third page), is `MASTER` or `FULL`, as in SLOOP:
+
+- `MASTER`: the MASTER knob sets the speaker, the phones and the audio sent to the computer over USB.
+- `FULL`: the computer gets the mix as with MASTER all the way up, and the MASTER knob sets only the speaker and the phones. Turn MASTER down to silence the FM-1 while recording or monitoring over USB.
+
+These settings are saved with the project. A project saved with `SEND` or `FULL` is not accepted by JamesOS builds without these features. These changes pass the host tests (`python3 tests/run_midi_seq_out.py`) and have not been tested on hardware.
 
 ## Web installer
 
