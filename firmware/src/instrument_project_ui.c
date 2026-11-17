@@ -1,6 +1,19 @@
 /* Shared project workflow and display for device and emulator. */
 static uint32_t es_knob_active = 4u, es_knob_time, es_knob_mode;
 static void es_menu_icon(int kind,int x,int y,uint16_t color) {
+    { /* Disk (shutter, label, clipped corner), folder with a raised tab, or a note with a plus: fine strokes. */
+        static const int8_t seg[24][4]={
+            {0,0,12,0},{12,0,14,2},{14,2,14,14},{14,14,0,14},{0,14,0,0},{3,0,3,4},{3,4,10,4},{10,4,10,0},{8,1,8,3},
+            {2,14,2,8},{2,8,12,8},{12,8,12,14},
+            {0,3,5,3},{5,3,7,5},{7,5,14,5},{0,3,0,14},{0,14,14,14},{14,5,14,14},{1,7,13,7},
+            {5,1,5,11},{5,1,10,0},{10,7,16,7},{13,4,13,10}
+        };
+        int i0=kind==0?0:kind==1?12:19, i1=kind==0?12:kind==1?19:23;
+        for(int i=i0;i<i1;i++)
+            hd_line_q8((x+seg[i][0])*256+128,(y+seg[i][1])*256+128,(x+seg[i][2])*256+128,(y+seg[i][3])*256+128,384u,color);
+        if(kind==2)hd_circle_q8((x+3)*256+128,(y+11)*256,3*256,0,color);
+        return;
+    }
     if(kind==0){ /* Draw at native pixel resolution so the label stays open. */
         static const char *const disk[]={
             ".#############.", "###############", "###.......#####",
@@ -11,15 +24,6 @@ static void es_menu_icon(int kind,int x,int y,uint16_t color) {
         };
         for(int row=0;row<15;row++)for(int col=0;col<15;col++)
             if(disk[row][col]=='#')cv_pset(x+14-col,y+14-row,color);
-    } else if(kind==1){ /* Folder and raised tab. */
-        br_art_line(x,y+3,x+5,y+3,color);br_art_line(x+5,y+3,x+7,y+5,color);
-        br_art_line(x+7,y+5,x+14,y+5,color);br_art_line(x,y+3,x,y+14,color);
-        br_art_line(x,y+14,x+14,y+14,color);br_art_line(x+14,y+5,x+14,y+14,color);
-        br_art_line(x+1,y+7,x+13,y+7,color);
-    } else { /* Musical note with plus sign. */
-        br_art_line(x+5,y+1,x+5,y+11,color);br_art_line(x+5,y+1,x+10,y,color);
-        bw_circle(x+3,y+11,3,color,1u);br_art_line(x+10,y+7,x+16,y+7,color);
-        br_art_line(x+13,y+4,x+13,y+10,color);
     }
 }
 static void es_button_cue(int x,int y,int w,int h) {
@@ -28,14 +32,16 @@ static void es_button_cue(int x,int y,int w,int h) {
 }
 /* Project choices use the global section's accent. */
 static void es_selected_row(int y) {
-    br_art_rect(4,y-3,218,20,BR_GLOBAL_ACC);
-    br_art_rect(222,y-1,2,16,BR_GLOBAL_ACC);
+    hds_bar(y,BR_GLOBAL_ACC);
 }
 static void es_knob_icon(int x,int y,uint16_t color) { br_knob_icon(x,y,color); }
 static void es_slot_string(char *out, int slot, const char *suffix, uint32_t cap) {
     if(cap<4u)return;
     out[0]=(char)('0'+(slot+1)/10);out[1]=(char)('0'+(slot+1)%10);out[2]=0;
     br_text_append(out,suffix,cap);
+}
+static void es_draw_cue(void) {   /* the cue bar alone: its slides while a message shows */
+    br_draw_cue_bar(es.mode==1?2u:es.mode==3?10u:es.mode==4?9u:es.mode==5?5u:es.mode>=4?4u:3u,0u);
 }
 static void es_draw(void) {
     static const char *actions[]={"QUICKSAVE","SAVE AS","LOAD","INIT"};
@@ -50,38 +56,35 @@ static void es_draw(void) {
     const char *name=es.mode==1?"SAVE":es.mode==2?"SAVE FIRST?":
         es.mode==3?"CHOOSE SLOT":es.mode==4?"SAVE AS":
         es.mode==5?"OVERWRITE":"CONFIRM";
+    /* Drawn only when something it shows changed (h), in 10-row bands of which only those whose pixels
+     * changed go out (br_crc_blit), a pass's worth at a time (br_band). The header and strip are as on the
+     * main screen; entering from it is a new epoch, leaving it a layout change. */
+    static uint32_t es_old; static uint8_t es_next;
+    uint32_t h=((((((uint32_t)es.mode*8u+(uint32_t)es.action)*8u+(uint32_t)es.choice)*16u+(uint32_t)es.slot)*4u+
+        (uint32_t)es.slot_purpose)*16u+(uint32_t)es.cursor)*8u+es_knob_active*2u+(es_knob_mode==(uint32_t)es.mode);
+    h=h*31u+br_hash_text(es.name)+br_hash_text(name)*7u;
+    if(es.mode==3)for(int i=0;i<5;i++)h=h*31u+br_hash_text(slot_labels[i]);
+    if(br_draw_layout_old!=0xffffffffu){br_draw_layout_old=0xffffffffu;br_pass.epoch+=0x9e3779b9u;}
     /* Keep the cue bar intact while the body is refreshed. The last body
      * strip stops at row 215; clearing through row 239 caused visible flashes
      * before the separate cue-bar blit restored it. */
-    for(int y=0;y<216;y+=40){
-        uint32_t rows=(uint32_t)(216-y);if(rows>40u)rows=40u;
+    /* The header and strip as on the main screen, drawn by it (br_draw_top: a playing pattern moves only
+     * the metronome's arm and the playhead); the body below them in bands from h. */
+    br_top.name=name;br_top.battery=fm1_battery_level();br_top.save=1u;
+    br_draw_top(0u);
+    for(int y=32;y<216;y=y<40?40:y+10){   /* rows 32..39, then 10-row bands from row 40 */
+        uint32_t rows=y<40?8u:(uint32_t)(216-y);if(rows>10u)rows=10u;
+        if(!br_band(&es_old,&es_next,h,(uint32_t)(y-30)/10u,0u))continue;
         cv_begin(240,rows,BR_BACKGROUND);cv_oy=-y;
-        br_track_badge(6,2,p,0);
-        br_header_draw_title(name);
-        br_number(number,(int32_t)br_bpm);br_metronome_icon(197);
-        br_widget_text(223-br_widget_text_width(number)/2,13,number,C_WHITE);
-        br_battery_icon(fm1_battery_level());
-        for(uint32_t k=0;k<BR_BANK_STEPS;k++){
-            uint32_t at=br_ui.step_bank*BR_BANK_STEPS+k,step=br_part[p].step[at];
-            uint32_t active=br_is_kit(br_part[p].sound.preset)?(BR_STEP_HIT(step)>>br_ui.lane)&1u:(step&BR_STEP_ON)!=0;
-            int32_t x=8+(int32_t)k*14;
-            br_art_rect(x,26,11,4,at>=br_part[p].length?RGB(16,19,20):active?br_track_color(p):BR_LINE);
-            if(at==br_ui.cursor)br_art_rect(x,31,11,1,C_WHITE);
-            if(br_playing&&at==br_step_pos[p])br_art_rect(x+3,24,5,1,C_WHITE);
-        }
         /* The shared header and sequence strip stay fixed; move the menu body. */
         cv_oy=-y-8;
         if(es.mode==1 || es.mode==2 || es.mode==3){
             int top=es.mode==3?65:113, bottom=es.mode==3?195:es.mode==1?209:201;
-            cv_line(5,top,64,top,C_WHITE);
-            cv_line(3,top+2,3,bottom,C_WHITE);
-            cv_pset(4,top+1,C_WHITE);cv_pset(65,top+1,C_WHITE);
-            cv_line(66,top+2,66,top+14,C_WHITE);
-            cv_pset(65,top+15,C_WHITE);cv_line(3,top+16,64,top+16,C_WHITE);
             uint32_t active=es_knob_active==0u && es_knob_mode==(uint32_t)es.mode;
-            if(active)cv_rect(4,top+1,62,15,BR_GLOBAL_ACC);
+            hds_chip(3,top,C_WHITE,BR_GLOBAL_ACC,active);
+            hds_rule(top+20,bottom);
             es_knob_icon(8,top+3,active?C_BLACK:C_WHITE);
-            br_widget_text(24,top+5,"KNOB1",active?C_BLACK:C_WHITE);
+            br_widget_text(24,top+5,BR_PANEL_KNOB1,active?C_BLACK:C_WHITE);
         }
         if(es.mode==1){
             for(int i=0;i<4;i++){
@@ -99,7 +102,8 @@ static void es_draw(void) {
             }
         } else if(es.mode==3){
             br_widget_text(92,69,es.slot_purpose==1?"LOAD SLOT":"SAVE SLOT",BR_DIM);
-            es_slot_string(text,es.slot,"/12",sizeof text);br_widget_text(195,69,text,BR_DIM);
+            es_slot_string(text,es.slot,"/12",sizeof text);
+            br_widget_text(br_widget_text_reright(195,text,1),69,text,BR_DIM);   /* right edge where the pixel font ends */
             for(int i=0;i<5;i++){
                 int selected=first_slot+i==es.slot, row=88+i*22;
                 if(selected)es_selected_row(row);
@@ -109,33 +113,34 @@ static void es_draw(void) {
             int cell_x=8+es.cursor*14, center=cell_x+7;
             int tab_x=cell_x;
             br_widget_text_2x(8,47,"NAME",C_WHITE);
-            cv_line(8,68,71,68,C_WHITE);cv_line(8,68,8,84,C_WHITE);
-            cv_line(71,68,71,84,C_WHITE);cv_line(8,84,176,84,C_WHITE);
             uint32_t active1=es_knob_active==1u && es_knob_mode==4u;
             uint32_t active2=es_knob_active==0u && es_knob_mode==4u;
-            if(active1)cv_rect(9,69,62,15,BR_GLOBAL_ACC);
+            /* KNOB2 tab on the field's rail; a quiet cell per character, the cursor's cell raised in gold. */
+            hd_line(8,84,176,84,RGB(96,104,108));
+            hds_chip(8,68,C_WHITE,BR_GLOBAL_ACC,active1);
+            for(int i=0;i<12;i++)
+                if(i==es.cursor)hd_bevel(8+i*14,88,13,18,3,BR_GLOBAL_ACC);
+                else hd_rrect_grad(8+i*14,88,13,18,3,RGB(24,28,31),RGB(11,13,15));
             es_knob_icon(12,71,active1?C_BLACK:C_WHITE);
-            br_widget_text(28,73,"KNOB2",active1?C_BLACK:C_WHITE);
-            br_art_rect(cell_x,88,14,18,BR_GLOBAL_ACC);
+            br_widget_text(28,73,BR_PANEL_KNOB2,active1?C_BLACK:C_WHITE);
             for(int i=0;i<12;i++){
                 char glyph[2]={es.name[i],0};
-                br_widget_text_2x(8+i*14+1,90,glyph,i==es.cursor?C_BLACK:C_WHITE);
+                /* One character centred in each 13 px cell, whatever its width. */
+                br_widget_text_2x(8+i*14+(13-br_widget_text_width_scaled(glyph,2))/2,90,glyph,i==es.cursor?C_BLACK:C_WHITE);
             }
-            cv_line(center,106,center,110,BR_GLOBAL_ACC);
-            cv_line(tab_x,110,tab_x+63,110,BR_GLOBAL_ACC);cv_line(tab_x,110,tab_x,126,BR_GLOBAL_ACC);
-            cv_line(tab_x+63,110,tab_x+63,126,BR_GLOBAL_ACC);cv_line(tab_x,126,tab_x+63,126,BR_GLOBAL_ACC);
-            if(active2)cv_rect(tab_x+1,111,62,15,BR_GLOBAL_ACC);
+            hd_line(center,106,center,110,BR_GLOBAL_ACC);
+            hds_chip(tab_x,110,BR_GLOBAL_ACC,BR_GLOBAL_ACC,active2);
             es_knob_icon(tab_x+4,113,active2?C_BLACK:BR_GLOBAL_ACC);
-            br_widget_text(tab_x+20,115,"KNOB1",active2?C_BLACK:BR_GLOBAL_ACC);
+            br_widget_text(tab_x+20,115,BR_PANEL_KNOB1,active2?C_BLACK:BR_GLOBAL_ACC);
         } else if(es.mode==5){
             br_widget_text_2x(8,47,"OVERWRITE?",C_WHITE);br_text_copy(text,"SLOT ",sizeof text);es_slot_string(number,es.slot,"",sizeof number);br_text_append(text,number,sizeof text);br_widget_text_2x(8,82,text,BR_ACC);
         } else if(es.mode==6){
             br_widget_text_2x(8,47,"SAVE?",C_WHITE);br_text_copy(text,"SLOT ",sizeof text);es_slot_string(number,es.slot,"",sizeof number);br_text_append(text,number,sizeof text);br_widget_text(8,80,text,BR_DIM);
             br_widget_text_2x(8,99,es.name,C_WHITE);
         }
-        cv_oy=0;cv_blit(0,(uint32_t)y);
+        cv_oy=0;br_crc_blit(0,(uint32_t)y,&br_band_crc[(y-30)/10]);
     }
-    br_draw_cue_bar(es.mode==1?2u:es.mode==3?10u:es.mode==4?9u:es.mode==5?5u:es.mode>=4?4u:3u,1u);
+    if((int32_t)(br_ui.message_until-fm1_ms)<=0)es_draw_cue();   /* while a message shows, its 32 ms slides own the cue */
 }
 static void es_commit(void) {
     if(es.pending==1 && es.slot==es.target && es.current<0){es_error("CHOOSE DIFFERENT SLOT");return;}
@@ -165,12 +170,23 @@ static void es_confirm(void) {
             es_error(es_slot_retry(es.slot)?"RETRYING SLOT":br_playing?"STOP PLAYBACK":"SCANNING SLOTS");return;
         }
         if(es.slot_purpose==1){
-            if(!es_slot_loadable(es.slot)){es_error("SLOT UNAVAILABLE");return;}
+            if(!es_slot_loadable(es.slot)){es_error(es_directory[es.slot].state==3&&es_directory[es.slot].old?"OLD PROJECT - NOT LOADED":"SLOT UNAVAILABLE");return;}
             es.target=es.slot;es.pending=1;es.choice=0;es.mode=2;es.error[0]=0;return;
         }
         es_name_begin();return;
     }
+#if BR_PRODUCT_SMK37
+    if(es.mode==4){
+        if(es_latest(es.slot,&r,0) && (es.slot!=es.current
+#if !defined(DINGHY_EMULATOR_SAVE)
+            || es_directory[es.slot].state==3
+#endif
+        )){es.mode=5;return;}
+        es_commit();return;
+    }
+#else
     if(es.mode==4){if(es_latest(es.slot,&r,0)&&(es.slot!=es.current||es_directory[es.slot].state==3)){es.mode=5;return;}es_commit();return;}
+#endif
     if(es.mode==5)es_commit();
     else if(es.mode==6){es.mode=4;es_confirm();}
 }

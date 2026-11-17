@@ -13,7 +13,7 @@ static uint32_t half, lead_frames, timer_origin;
 static void setup_at(uint32_t lead, uint32_t origin)
 {
     br_app_init(); br_load_preset(0u, BR_FIRST_PLAITS);
-    br_part[0].length=3u; br_part[0].division=1u; br_part[0].swing=77u;
+    br_part[0].length=3u; br_part[0].division=1u; br_swing=77u;
     for (uint32_t i=0u;i<3u;++i) {
         br_part[0].step[i]=BR_NOTE_STEP(60u+i,100u);
         br_seq_synth_velocity[0][i]=255u; br_seq_synth_length[0][i]=16u;

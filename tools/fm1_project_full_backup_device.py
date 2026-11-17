@@ -31,9 +31,9 @@ class ReadOnlyLink:
   if len(q)!=32 or (struct.unpack_from('<I',q,4)[0]&31)!=24:raise RuntimeError('device is not stopped and quiet')
 
 def main():
- ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--expect',required=True,help='exact identity of the read-only backup firmware');ap.add_argument('--output',type=Path,required=True)
- a=ap.parse_args();backend=MidoBackend();names=[n for n in backend.input_names() if any(s in n.lower() for s in ('jamesos','felucca','fm-1'))]
- if len(names)!=1 or names[0] not in backend.output_names():raise RuntimeError('expected exactly one FM-1 MIDI endpoint')
+ ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--expect',required=True,help='exact identity of the read-only backup firmware');ap.add_argument('--output',type=Path,required=True);ap.add_argument('--port',help='exact MIDI port for the target FM-1')
+ a=ap.parse_args();backend=MidoBackend();names=[n for n in backend.input_names() if n in backend.output_names() and (n==a.port if a.port else any(s in n.lower() for s in ('jamesos','felucca','fm-1')))]
+ if len(names)!=1:raise RuntimeError('select one exact FM-1 MIDI endpoint with --port')
  link=backend.open(names[0],names[0])
  try:
   ident=handshake(link)

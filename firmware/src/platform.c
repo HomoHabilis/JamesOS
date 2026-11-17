@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* SMK-37 Pro (BR_PRODUCT_SMK37, firmware/product.h): JamesOS-K platform, inherited from Dinghy, SLOOP
+ * and Felucca. The device branch uses the SMK-37 panel (hal/smk37/smk37_input.h) and the host keeps
+ * its simulated panel; no UART (DIN) MIDI, no 396 MHz supply step at boot, its own flash windows
+ * (hal/smk37/smk37_flash_map.h), settings magic and identities. The FM-1 description follows. */
 /* Dinghy's platform: everything an FM-1 firmware needs before it can be fun, taken unchanged from
  * SLOOP / Felucca / sloopDX and wired up here. You should not need to touch this file.
  *
@@ -16,6 +20,7 @@
  *   static uint32_t app_audio(int32_t *out, uint32_t n) audio ISR: n stereo frames, L R L R, Q15 (+-32767), out is zero
  *   static void app_main(void)                        never returns; calls platform_poll() often (every few ms)
  */
+#include "../product.h"
 /* the panel by name: buttons (fm1_in.buttons, fm1_input_edges, fm1_led_key: bit / id), the encoders
  * (fm1_enc_take); the 27 note keys are fm1_in.notes bit 0 (F3) .. 26 (G5), LED id 14 + key */
 #include "audio_level.h"
@@ -53,6 +58,11 @@ static volatile uint32_t br_midi_clock_generation;
 static void br_engine_clock_dma_edge(uint32_t tick, uint32_t half, uint32_t lead_frames);
 static void br_engine_clock_dma_invalid(void);
 #endif
+#endif
+#if defined(BR_SPLIT_AUDIO)
+void br_engine_note_clock(uint32_t tick);
+#else
+static void br_engine_note_clock(uint32_t tick);
 #endif
 void br_audio_source_job_timing_reset(void);
 #if defined(BR_SPLIT_AUDIO)
@@ -196,6 +206,7 @@ enum { BTN_OCT_DOWN = 0, BTN_OCT_UP = 1, BTN_FX = 2, BTN_SEL = 3, BTN_ENV = 4, B
        BTN_GLO = 7, BTN_HOME = 8, BTN_SAVE = 9, BTN_ARP = 10, BTN_SEQ = 11, BTN_PLAY = 12, BTN_REC = 13 };
 enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB3 = 4, ENC_KNOB4 = 5, ENC_PRESETS = 6 };
 #define KEY_LED(k) (14u + (k))
+#include "ui_timing_diag.h"                     /* diagnostic builds only (BR_UI_TIMING_DIAG); else nothing */
 
 #ifdef DINGHY_HOST
 #include "../../tests/host.c"                  /* on a computer: a fake FM-1 (tests/host.c) */
@@ -248,12 +259,18 @@ void fm1_fault_diag_context_snapshot(uint32_t out[2]);
 #if FM1_DRUM_PROFILE
 #include "../hal/fm1_drum_profile.c"
 #endif
+#if BR_PRODUCT_SMK37
+#include "smk37/smk37_input.h"
+#else
 #include "fm1_input.h"
+#endif
 #include "fm1_timer.h"
 #include "fm1_foreground_journal.h"
 #include "fm1_lcd_hw.h"
 #include "fm1_audio.h"
+#if BR_PRODUCT_FM1
 #include "fm1_adc.h"
+#endif
 #include "bootguard.h"
 
 /* status, timeouts, CON0, CON5, CON6, CON9 from this boot */
@@ -439,7 +456,7 @@ static uint32_t fm1_cpu1_early_integrity(uint32_t state, uint32_t control, uint3
 }
 
 #ifndef APP_NAME
-#define APP_NAME "JAMESOS"
+#define APP_NAME BR_PRODUCT_APP_NAME            /* "JAMESOS", SMK-37 Pro "JAMESOS-K" */
 #endif
 #ifndef FELUCCA_ID
 #define FELUCCA_ID "FM-1_990"                   /* package identity: 99N = Dinghy build N (tools/build.py) */
@@ -451,7 +468,16 @@ static uint32_t fm1_cpu1_early_integrity(uint32_t state, uint32_t control, uint3
 bootguard_t bootguard __attribute__((section(".noinit")));
 static volatile uint32_t fm1_ms;                /* milliseconds since power-on (TIMER5) */
 static fm1_battery_state_t fm1_battery;
+#if BR_PRODUCT_SMK37
+static int32_t fm1_battery_level(void)
+{
+    if (!fm1_battery.valid || fm1_ms - fm1_battery.last_good_ms > 5000u) return -1;
+    int32_t raw = (fm1_battery.filtered_q5 + 16) / 32;
+    return raw >= 602 ? 3 : raw >= 560 ? 2 : raw >= 530 ? 1 : 0;
+}
+#else
 static int32_t fm1_battery_level(void) { return fm1_battery_bars(&fm1_battery, fm1_ms); }
+#endif
 
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #include "libc.c"
@@ -468,20 +494,38 @@ static int32_t fm1_battery_level(void) { return fm1_battery_bars(&fm1_battery, f
 #define FELUCCA_OTA 1
 #define FELUCCA_CDC 0
 #define FELUCCA_UAC 1
+#if BR_CAP_DIN_MIDI
 #define FELUCCA_UART 1
+#endif
+#if BR_PRODUCT_SMK37
+#define JAMESOS_K_USB 1                         /* USB product string "JamesOS-K" (usb.c) */
+#endif
 #define FM1_MIDI_TIMESTAMP() fm1_ticks()
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
 #define FM1_MIDI_GENERATION() br_midi_clock_generation
 #endif
 #include "usb.c"
+#if BR_CAP_DIN_MIDI
 #include "midi_uart.c"
+#endif
 
+#if BR_PRODUCT_SMK37
+/* The loader and app enforce independent write windows. */
+#include "smk37/smk37_flash_map.h"
+#define SETTINGS_AT SMK37_SETTINGS_LO
+#define FL_RANGE_OK(off, n) SMK37_APP_WRITE_OK(off, n)
+#else
 /* ---- flash: read anywhere; erase / program only the update's staging area and the settings sector */
 #define SETTINGS_AT 0x000FC000u                 /* one 4 KiB sector of Felucca's globals area */
 #define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, SETTINGS_AT, SETTINGS_AT + 0x1000u) || FL_IN(off, n, 0x97000u, 0xB1000u))
+#endif
 #include "fm1_flash.h"
 #include "fm1_cpu1_cache_start.h"
+#if BR_PRODUCT_SMK37
+static uint8_t flash_ok, ota_flash_ok;          /* storage claimed; flash chip known (updates, rescue) */
+#else
 static uint8_t flash_ok;
+#endif
 #if defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT
 /* Persists past a released worker fence if transaction completion faults. */
 static volatile uint32_t br_ps_project_quarantine;
@@ -494,8 +538,16 @@ static int st_read(uint32_t off, void *dst, uint32_t n)
     uint32_t parked = fm1_cpu1_worker_mailbox.cpu_id == 1u;
     if (flash_worker_park()) return -9;
     while (n) {
+#if BR_PRODUCT_SMK37
+        uint32_t k = n > 256u ? 256u : n;
+        uint32_t sector_left = SMK37_FLASH_SECTOR - (off & (SMK37_FLASH_SECTOR - 1u));
+        if (k > sector_left) k = sector_left;
+        uint32_t f = irq_save();
+        int rc = FL_FAR(fl_read_ram)(smk37_project_physical(off), d, k);
+#else
         uint32_t k = n > 256u ? 256u : n, f = irq_save();
         int rc = FL_FAR(fl_read_ram)(off, d, k);
+#endif
         irq_restore(f);
         if (rc) {
             if (parked) (void)flash_worker_resume();
@@ -508,6 +560,40 @@ static int st_read(uint32_t off, void *dst, uint32_t n)
     if (parked && flash_worker_resume()) return -9;
     return 0;
 }
+
+#if BR_PRODUCT_SMK37
+/* Claim only erased space. An existing stock or third-party store stays
+ * readable in its own firmware; JamesOS-K never reclaims it implicitly. */
+static int smk37_store_enable(void)
+{
+    const uint8_t tag[] = "JamesOS-K store 1";
+    uint8_t page[256];
+    uint32_t off, i;
+    int rc;
+    if (!ota_flash_ok || st_read(SMK37_STORE_OWNER, page, sizeof tag)) return 0;
+    for (i = 0; i < sizeof tag && page[i] == tag[i]; ++i) {}
+    if (i == sizeof tag) return 1;
+    for (off = SMK37_PROJECT_LO; off < SMK37_PROJECT_HI; off += sizeof page) {
+        if (st_read(off, page, sizeof page)) return 0;
+        for (i = 0; i < sizeof page; ++i)
+            if (page[i] != 0xffu) return 0;
+        fm1_wdt_feed();
+    }
+    for (off = SMK37_SETTINGS_LO; off < SMK37_STORE_HI; off += sizeof page) {
+        if (st_read(off, page, sizeof page)) return 0;
+        for (i = 0; i < sizeof page; ++i)
+            if (page[i] != 0xffu) return 0;
+        fm1_wdt_feed();
+    }
+    if (flash_worker_park()) return 0;
+    rc = fl_write(SMK37_STORE_OWNER, tag, sizeof tag);
+    if (flash_worker_resume() || rc) return 0;
+    if (st_read(SMK37_STORE_OWNER, page, sizeof tag)) return 0;
+    for (i = 0; i < sizeof tag; ++i)
+        if (page[i] != tag[i]) return 0;
+    return 1;
+}
+#endif
 
 static int flash_worker_park(void)
 {
@@ -538,7 +624,7 @@ static int flash_worker_resume(void)
 }
 
 static uint8_t recovery_active;
-#define OTA_IDENTITY (recovery_active ? "FM-1_000" : FELUCCA_ID)
+#define OTA_IDENTITY (recovery_active ? BR_PRODUCT_RESCUE_IDENTITY : FELUCCA_ID)   /* "FM-1_000" */
 #define OTA_APP_COMMAND fm1_app_command
 #define OTA_RESCUE_COMMAND fm1_rescue_command
 /* Rescue diagnostics: only fixed-size reads; never erase or program settings. */
@@ -722,6 +808,9 @@ static int fm1_rescue_command(uint32_t cmd, const uint8_t *body, uint32_t n,
 
 static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
                            uint8_t reply[128], uint32_t *reply_n);
+#if BR_PRODUCT_SMK37
+#define SMK37_UPDATES 1                         /* ota.c: the SMK app's staging window and checks */
+#endif
 #include "ota.c"
 static void recovery_poll(void);
 static uint32_t ota_now_ms(void) { return fm1_ms; }
@@ -772,7 +861,7 @@ static int ota_commit(const uint8_t *parm)
 
 /* ---- settings: [magic][length][crc32] then the bytes; settings_save erases the sector (~50 ms with
  * the interrupts off: the sound drops out), so save when nothing plays, not on every knob step */
-#define SETTINGS_MAGIC 0x59474E44u              /* "DNGY" */
+#define SETTINGS_MAGIC BR_PRODUCT_SETTINGS_MAGIC  /* 0x59474E44u "DNGY", SMK-37 Pro 0x4B534F4Au "JOSK" */
 /* The existing sector has room for the extended sequencer metadata. Keep the
  * CRC/header-last transaction and the same physical flash boundaries. */
 #define SETTINGS_CAPACITY (0x1000u - 3u * sizeof(uint32_t))
@@ -863,6 +952,10 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1: a message (st
     *d2 = (uint8_t)(pk >> 24);
     return 1;
 }
+/* Played-note timing (dinghy.c): the timer now, a MIDI message's arrival, a note key's last change. */
+#define BR_NOTE_NOW() fm1_ticks()
+#define BR_NOTE_MIDI_TICK() midi_last_timestamp
+#define BR_NOTE_KEY_TICK(k) fm1_input_note_tick(k)
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* from the main loop only */
 {
     midi_out_event((st >> 4) | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24);
@@ -917,10 +1010,12 @@ FM1_TIMER5_RAM_ATTR void fm1_timer5_irq(void)
         journal_store_timer_fn(fm1_timer5_interrupted_reti(), fm1_ticks());
     }
 #endif
+#if BR_CAP_DIN_MIDI
     if (usb_due) {
         void (* volatile uart_poll_fn)(void) = uart_midi_poll;
         uart_poll_fn();
     }
+#endif
     if (in_audio) {
         if (usb_due) {
             void (* volatile uac_service_fn)(void) = uac_service;
@@ -1076,42 +1171,47 @@ static void platform_audio_block_done(int32_t *out, uint32_t n)
 #endif
     ++audio_block_commits;
 }
-/* Read-only debugger diagnostics in crystal ticks, including nested USB/key IRQs.
- * Keep these outside the screen path and use them for device/CPU-emulator tests. */
+/* Audio load counters in crystal ticks, including nested USB/key IRQs. Kept in every build
+ * level (distribution too): diagnostic 0x60 reads them, 0x61 resets them, the MONITOR shows them.
+ * Written only by the audio IRQ (CPU0); readers copy with interrupts masked. Cost per half: a
+ * store, two compares, an increment and one shift-add (fm1_alnk0_irq; flash code, no RAM code).
+ *   worst_ticks >= window_max always (both cleared together by 0x61), so a new window maximum
+ *   is the only case that needs the second compare.
+ *   load_q6: exponential average of the half's ticks, times 64 (64 halves, about 0.37 s);
+ *   never reset. overruns: since boot or 0x61; overruns_boot: since boot. Both saturate. */
 typedef struct {
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
     uint32_t last_ticks, worst_ticks, overruns, blocks;
-#endif
-    /* A window for the on-screen monitor: taken and cleared by the on-screen monitor (fm1_audio_window_take). */
-    uint32_t window_sum, window_count;
+    uint32_t window_max;     /* the largest half since the monitor last took it (fm1_audio_window_take) */
+    uint32_t load_q6, overruns_boot;
 } fm1_audio_metrics_t;
 static volatile fm1_audio_metrics_t fm1_audio_metrics;
+#define FM1_AUDIO_LOAD_SHIFT 6u
 
 /* CPU0 audio-IRQ-owned diagnostics and the post-drop phase guard. The guard
  * filters an immediately repeated half indication; it does not establish a
  * full remaining DMA period or detect an even number of missed boundaries. */
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
-static volatile uint32_t fm1_audio_late_drops;
+static volatile uint32_t fm1_audio_late_drops;           /* kept in distribution builds (0xB2) */
 volatile uint32_t fm1_audio_late_contained_faults;
+static volatile uint32_t fm1_audio_late_contained_last_ticks;   /* the last such half's ticks (0xB2) */
 static volatile uint32_t fm1_audio_late_over_one_half;
 static volatile uint32_t fm1_audio_late_over_two_halves;
 static volatile uint32_t fm1_audio_late_resync_skips;
-#endif
 static volatile uint32_t fm1_audio_late_resync_active;
 static volatile uint32_t fm1_audio_late_resync_baseline;
 
-/* A host diagnostic SysEx can snapshot or reset these counters without
- * racing the audio or USB-audio interrupt updates. out[] is
- * last,worst,overruns,blocks,UAC-underruns,UAC-overruns,adjust-up,adjust-down. */
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
-static void fm1_audio_metrics_snapshot(uint32_t out[8])
+/* A host diagnostic SysEx (0x60, every build level) can snapshot or reset these counters
+ * without racing the audio or USB-audio interrupt updates. out[] is
+ * last,worst,overruns,blocks,UAC-underruns,UAC-overruns,adjust-up,adjust-down,
+ * average (ticks, exponential), overruns since boot. */
+#define FM1_AUDIO_METRICS_WORDS 10u
+static void fm1_audio_metrics_snapshot(uint32_t out[FM1_AUDIO_METRICS_WORDS])
 {
     uint32_t irq = irq_save();
     out[0] = fm1_audio_metrics.last_ticks;
     out[1] = fm1_audio_metrics.worst_ticks;
     out[2] = fm1_audio_metrics.overruns;
     out[3] = fm1_audio_metrics.blocks;
-#if FELUCCA_UAC
+#if FELUCCA_UAC && FM1_UAC_DEVELOPMENT_DIAGNOSTICS     /* USB-audio counters: development builds only */
     out[4] = uac.underruns;
     out[5] = uac.overruns;
     out[6] = uac.adj_up;
@@ -1119,9 +1219,10 @@ static void fm1_audio_metrics_snapshot(uint32_t out[8])
 #else
     out[4] = out[5] = out[6] = out[7] = 0u;
 #endif
+    out[8] = fm1_audio_metrics.load_q6 >> FM1_AUDIO_LOAD_SHIFT;
+    out[9] = fm1_audio_metrics.overruns_boot;
     irq_restore(irq);
 }
-#endif
 
 #if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
 /* Read-only UAC endpoint and ring snapshot for private diagnostic command 0x8A.
@@ -1173,25 +1274,25 @@ static void fm1_uac_diagnostic_snapshot(uint32_t out[19])
 #endif
 
 
-/* out: halves rendered, then their mean ticks, since the last call. The audio interrupt owns the counters, so
- * copy and clear them with interrupts masked. */
-static void fm1_audio_window_take(uint32_t out[2])
+/* For the MONITOR: out = average ticks (exponential), the largest half since the last call
+ * (then cleared), overruns since boot. Copied and cleared with interrupts masked. */
+static void fm1_audio_window_take(uint32_t out[3])
 {
     uint32_t irq = irq_save();
-    uint32_t count = fm1_audio_metrics.window_count;
-    uint32_t sum = fm1_audio_metrics.window_sum;
-    fm1_audio_metrics.window_sum = fm1_audio_metrics.window_count = 0u;
+    out[0] = fm1_audio_metrics.load_q6 >> FM1_AUDIO_LOAD_SHIFT;
+    out[1] = fm1_audio_metrics.window_max;
+    out[2] = fm1_audio_metrics.overruns_boot;
+    fm1_audio_metrics.window_max = 0u;
     irq_restore(irq);
-    out[0] = count;
-    out[1] = count ? sum / count : 0u;
 }
 
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
+/* 0x61. Clears the since-reset counters only: the average and the boot overrun count stay. */
 static void fm1_audio_metrics_reset(void)
 {
     uint32_t irq = irq_save();
     fm1_audio_metrics.last_ticks = 0u;
     fm1_audio_metrics.worst_ticks = 0u;
+    fm1_audio_metrics.window_max = 0u;   /* keeps worst_ticks >= window_max */
     fm1_audio_metrics.overruns = 0u;
     fm1_audio_metrics.blocks = 0u;
     fm1_audio_late_drops = 0u;
@@ -1205,7 +1306,7 @@ static void fm1_audio_metrics_reset(void)
 #if defined(FM1_DEVICE) && (!defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS)
     fm1_audio_tail_metrics_reset();
 #endif
-#if FELUCCA_UAC
+#if FELUCCA_UAC && FM1_UAC_DEVELOPMENT_DIAGNOSTICS
     uac.underruns = 0u;
     uac.overruns = 0u;
     uac.adj_up = 0u;
@@ -1214,7 +1315,6 @@ static void fm1_audio_metrics_reset(void)
     br_audio_source_job_timing_reset();
     irq_restore(irq);
 }
-#endif
 static uint32_t app_audio(int32_t *out, uint32_t n);
 void br_engine_pipeline_source_deadline_set(uint32_t absolute_tick);
 void br_engine_pipeline_source_deadline_clear(void);
@@ -1260,9 +1360,7 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
                 if (br_midi_clock_enabled) br_engine_clock_dma_invalid();
 #endif
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
                 ++fm1_audio_late_resync_skips;
-#endif
                 fm1_audio_ack_half();
                 in_audio = 0;
                 return;
@@ -1276,6 +1374,7 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
                 br_engine_clock_dma_edge(render_start, half, HALF_FRAMES);
         }
 #endif
+        br_engine_note_clock(render_start);      /* played notes: this half's place on the timer */
         int32_t *o = &abuf[half * HALF_WORDS];
         uint32_t i;
 #if defined(FM1_DEVICE) && (!defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS)
@@ -1297,19 +1396,23 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
         }
         br_engine_pipeline_source_deadline_clear();               /* guard and DSP profiles remain once per half */
         render_ticks = fm1_ticks() - render_start;
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
-        fm1_audio_metrics.last_ticks = render_ticks;
-        if (fm1_audio_metrics.last_ticks > fm1_audio_metrics.worst_ticks)
-            fm1_audio_metrics.worst_ticks = fm1_audio_metrics.last_ticks;
-        if (fm1_audio_metrics.last_ticks > FM1_AUDIO_HALF_TICKS)
-            ++fm1_audio_metrics.overruns;
-        ++fm1_audio_metrics.blocks;
-#endif
-        fm1_audio_metrics.window_sum += render_ticks;
-        ++fm1_audio_metrics.window_count;
+        {   /* the load counters, every build level (see fm1_audio_metrics_t) */
+            uint32_t load = fm1_audio_metrics.load_q6;
+            fm1_audio_metrics.last_ticks = render_ticks;
+            if (render_ticks > fm1_audio_metrics.window_max) {
+                fm1_audio_metrics.window_max = render_ticks;
+                if (render_ticks > fm1_audio_metrics.worst_ticks)
+                    fm1_audio_metrics.worst_ticks = render_ticks;
+            }
+            if (render_ticks > FM1_AUDIO_HALF_TICKS) {
+                fm1_audio_metrics.overruns += fm1_audio_metrics.overruns != UINT32_MAX;
+                fm1_audio_metrics.overruns_boot += fm1_audio_metrics.overruns_boot != UINT32_MAX;
+            }
+            ++fm1_audio_metrics.blocks;
+            fm1_audio_metrics.load_q6 = load + render_ticks - (load >> FM1_AUDIO_LOAD_SHIFT);
+        }
         if (render_result == FM1_AUDIO_RENDER_DROP_LATE ||
             render_result == FM1_AUDIO_RENDER_CONTAINED_FAULT) {
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
             if (render_result == FM1_AUDIO_RENDER_DROP_LATE) {
                 ++fm1_audio_late_drops;
                 if (render_ticks > FM1_AUDIO_HALF_TICKS)
@@ -1318,8 +1421,8 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
                     ++fm1_audio_late_over_two_halves;
             } else {
                 ++fm1_audio_late_contained_faults;
+                fm1_audio_late_contained_last_ticks = render_ticks;
             }
-#endif
             fm1_audio_ack_half();
             /* Take the baseline after ACK so a phase switch during the ACK
              * cannot make the just-observed half appear to be a fresh event. */
@@ -1391,6 +1494,12 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
 extern void isr_alnk0(void);
 
 /* ---- the main loop's duties: watchdog, USB, the installer's update request, the MASTER knob */
+#if BR_CAP_POLY && defined(FM1_DEVICE) && defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT
+static int br_poly_before_update(void);      /* polyphony (SMK-37 Pro): voices quiet before an update */
+#endif
+#if BR_CAP_READER
+static int br_reader_frame(const uint8_t *p, uint32_t n);   /* instrument_reader.h */
+#endif
 static void platform_poll(void)
 {
     static int32_t knob_avg = 512 * 16;
@@ -1401,9 +1510,22 @@ static void platform_poll(void)
     fm1_foreground_journal_store_poll(fm1_ticks());
 #endif
     usb_retry(fm1_ms);
+#if BR_CAP_READER
+    {   /* a screen reader's SysEx is taken before the updater looks at the frame */
+        const uint8_t *p;
+        uint32_t n;
+        if (ota_frame_get(&p, &n) && br_reader_frame(p, n)) ota_frame_done();
+    }
+#endif
     ota_service();
     if (usb.ota_req) {
+#if BR_CAP_POLY && defined(FM1_DEVICE) && defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT
+        if (!br_poly_before_update()) return;
+#endif
         usb.ota_req = 0;
+#if BR_PRODUCT_SMK37
+        if (ota_flash_ok) ota_session();
+#else
         if (flash_ok) {
             uint32_t irq = irq_save();
             /* The update service does not consume the musical input queue.
@@ -1423,8 +1545,12 @@ static void platform_poll(void)
             uart_midi_paused = 0u;
             irq_restore(irq);
         }
+#endif
     }
     if (usb.uboot_req) {
+#if BR_CAP_POLY && defined(FM1_DEVICE) && defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT
+        if (!br_poly_before_update()) return;
+#endif
         if (flash_worker_park()) return;          /* never leave XIP with the worker running */
         fm1_audio_stop();
         lcd_fill(0, 0, 240, 240, C_BLACK);
@@ -2019,18 +2145,22 @@ void fm1_cstart(void)
     uint32_t early_p33[6], early_p33_i;
     fm1_power_read_sample_t extra_entry;
     fm1_p33_checked_t extra_ctx, reset_ctx, wdt_ctx, early_ctx;
+#if BR_CAP_SUPPLY396
     uint32_t vp_executed,vp_rescue,vp_rc,prior_errors,next_boot_id,vp_sequence,early_clock[8];
     fm1_vp_target_t vp_target;
     fm1_vp_io_t vp_io;
     fm1_vp_report_t vp_report;
     volatile fm1_vpd_attempt_t *vp_attempt;
+#endif
     /* First C startup action: old BSS samples must never label this boot. */
 #if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
     fm1_power_read_entry_ready = 0u;
     fm1_vpd_ready = 0u;
 #endif
     fm1_fault_ram_code_barrier();
+#if BR_CAP_SUPPLY396
     vp_executed=0u;vp_rescue=0u;
+#endif
     extra_ctx.timeouts=0u;reset_ctx.timeouts=0u;wdt_ctx.timeouts=0u;early_ctx.timeouts=0u;
     fm1_p33_timeouts=0u;
     /* The no-journal hold helper may merely return success, so verify the
@@ -2081,6 +2211,7 @@ void fm1_cstart(void)
         (void)fm1_p33_checked_read(&early_ctx,0x09u,&early_p33[5]);
     early_p33[1]=early_ctx.timeouts;
     if(!fm1_cpu1_worker_hw_reset_held())for(;;) { }
+#if BR_CAP_SUPPLY396
     if(boot_mode==BOOT_NORMAL) {
         fm1_vp_target_init(&vp_target);
         fm1_vp_target_set_reset_profile(&vp_target,p3,rst_src);
@@ -2117,6 +2248,10 @@ void fm1_cstart(void)
             }
         }
     }
+#else
+    /* Keep the SMK-37 SPL clock and supply configuration. The FM-1
+     * 396 MHz voltage transition was qualified for a different boot profile. */
+#endif
     if (boot_mode == BOOT_ROM &&
         !(fm1_cpu1_early_record.magic == FM1_CPU1_EARLY_RESULT_MAGIC &&
           fm1_cpu1_early_record.state == FM1_CPU1_EARLY_IN_PROGRESS))
@@ -2148,6 +2283,7 @@ void fm1_cstart(void)
     fm1_fault_ram_code_barrier();
     fm1_power_read_entry_ready = FM1_POWER_READ_READY;
     fm1_fault_ram_code_barrier();
+#if BR_CAP_SUPPLY396
     if(vp_executed) {
         volatile uint32_t *dst=(volatile uint32_t *)&fm1_vpd_report;
         const uint32_t *src=(const uint32_t *)&vp_report;
@@ -2155,11 +2291,14 @@ void fm1_cstart(void)
         fm1_fault_ram_code_barrier();fm1_vpd_ready=FM1_VPD_READY;fm1_fault_ram_code_barrier();
     }
 #endif
+#endif
+#if BR_CAP_SUPPLY396
     if(vp_rescue) {
         fm1_boot.p3_rst=(uint8_t)p3;fm1_boot.rst_src=rst_src;fm1_boot.wdt_con=wdt_con;
         fm1_foreground_journal_begin(&previous_journal,previous_journal_mask);
         recovery_main();for(;;) { }
     }
+#endif
 #if defined(FM1_DEVICE) && FM1_RAM_IMAGE_CRC_DIAG
     fm1_ram_image_crc_capture(boot_mode);
 #endif
@@ -2212,11 +2351,23 @@ void fm1_cstart(void)
     fm1_boot.rst_src = rst_src;
     fm1_boot.wdt_con = wdt_con;
     fm1_foreground_journal_begin(&previous_journal, previous_journal_mask);
+#if BR_PRODUCT_SMK37
+    /* SMK-37 Pro: the flash chip is identified before rescue entry (rescue uses ota_flash_ok);
+     * the store is claimed after it (smk37_store_enable); no ota_boot_cleanup() here. */
+    if (!flash_worker_park()) {
+        ota_flash_ok = (uint8_t)fl_jedec_known(FL_FAR(fl_jedec_ram)());
+        (void)flash_worker_resume();
+    }
+#else
     /* The input matrix requires the LCD backlight pin configured first.
      * Leave panel initialization and flash cleanup until after rescue entry. */
     fm1_lcd_enable_backlight();
+#endif
     if (boot_mode == BOOT_RECOVERY || recovery_key())
         recovery_main();                        /* OCT- at power-on: the USB rescue */
+#if BR_PRODUCT_SMK37
+    flash_ok = (uint8_t)smk37_store_enable();
+#else
     if (flash_worker_park() == 0) {
         flash_ok = fl_jedec_known(FL_FAR(fl_jedec_ram)());
         (void)flash_worker_resume();
@@ -2224,13 +2375,24 @@ void fm1_cstart(void)
         flash_ok = 0u;
     }
     ota_boot_cleanup();
+#endif
     lcd_init();
     lcd_fill(0, 0, 240, 240, C_BLACK);
     fm1_input_init();
+#if BR_PRODUCT_SMK37
+    {
+        uint8_t trim[0x22Cu];
+        if (!st_read(SMK_TRIM_FLASH, trim, sizeof trim))
+            (void)smk_trim_load(trim);
+    }
+#else
     fm1_adc_init();
+#endif
     fm1_audio_init(abuf, HALF_WORDS, isr_alnk0, 3);   /* (abuf is zero: .bss) */
     usb_start();
+#if BR_CAP_DIN_MIDI
     uart_midi_init();
+#endif
     fm1_timer5_start(isr_timer5, 4);
     fm1_guard_lock_top();
     fm1_irq_enable_all();

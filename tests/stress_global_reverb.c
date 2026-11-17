@@ -14,7 +14,7 @@ int main(void)
     br_app_init(); fm1_ms = 1000u;
     for (uint32_t p = 0u; p < BR_SYNTH_PARTS; ++p) {
         br_part[p].revision++; br_part[p].sound.reverb = 100u + p * 10u; br_part[p].sound.delay = p ? 60u : 0u;
-        br_part[p].fx.reverb_engine = BR_REVERB_SPACE; br_part[p].fx.reverb_tone = 60u; publish(p);
+        br_master.reverb_engine = BR_REVERB_SPACE; br_master.reverb_decay = 60u; publish(p);
     }
     for (uint32_t blk = 0u; blk < 12000u; ++blk) {
         int32_t audio[BR_BLOCK * 2u] = {0};
@@ -26,7 +26,7 @@ int main(void)
         if (r % 17u == 0u) br_engine_note_off(r % 3u, 48u + (r >> 3) % 24u);
         if (r % 331u == 0u) {   /* change the shared reverb type and size mid-stream */
             uint32_t e = (r >> 5) % BR_REVERB_COUNT; if (e == BR_REVERB_SPRING) e = BR_REVERB_HALL;
-            for (uint32_t p = 0u; p < BR_PARTS; ++p) { br_part[p].revision++; br_part[p].fx.reverb_engine = e; br_part[p].sound.space = (r >> 9) & 127u; publish(p); }
+            for (uint32_t p = 0u; p < BR_PARTS; ++p) { br_part[p].revision++; br_master.reverb_engine = e; br_master.reverb_size = (r >> 9) & 127u; publish(p); }
         }
         if (r % 419u == 0u) { uint32_t p = (r >> 4) % 3u; br_part[p].revision++; br_part[p].sound.reverb = (r >> 8) & 127u; publish(p); }
         if (r % 1009u == 0u) { br_engine_part_off(0u); br_engine_part_off(1u); br_engine_part_off(2u); }

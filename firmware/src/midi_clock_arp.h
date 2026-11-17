@@ -2,6 +2,10 @@
 #define FM1_MIDI_CLOCK_ARP_H
 #include <stdint.h>
 #include "midi_clock_math.h"
+/* BR_COLD_SIZE: see instrument_audio.c; empty when this header is used on its own. */
+#ifndef BR_COLD_SIZE
+#define BR_COLD_SIZE
+#endif
 
 /* Continuous 24-PPQN grid. Phase is monotonic Q16 pulses. The caller starts
  * at a known transport phase and asks about successive [start,end) spans. */
@@ -10,12 +14,12 @@ typedef struct {
     uint32_t divisor, swing;
 } fm1_mca_t;
 
-static uint64_t fm1_mca_boundary(const fm1_mca_t *a, uint64_t index)
+BR_COLD_SIZE static uint64_t fm1_mca_boundary(const fm1_mca_t *a, uint64_t index)
 {
     uint64_t step = (uint64_t)((24u << 16) / a->divisor);
     return index * step + ((index & 1u) ? step * a->swing / 128u : 0u);
 }
-static int fm1_mca_start(fm1_mca_t *a, uint64_t phase_q16, uint32_t divisor, uint32_t swing)
+BR_COLD_SIZE static int fm1_mca_start(fm1_mca_t *a, uint64_t phase_q16, uint32_t divisor, uint32_t swing)
 {
     uint64_t step;
     if ((divisor != 2u && divisor != 3u && divisor != 4u && divisor != 6u && divisor != 8u) || swing > 77u)
@@ -30,7 +34,7 @@ static int fm1_mca_start(fm1_mca_t *a, uint64_t phase_q16, uint32_t divisor, uin
 /* 0: no onset, 1: one onset and its following gate basis in physical frames,
  * -1: invalid/nonmonotonic input or more than one onset in this span. The
  * caller must choose a fail-safe response to -1; no events are silently lost. */
-static int fm1_mca_advance(fm1_mca_t *a, uint64_t end_q16, uint64_t period_q16,
+BR_COLD_SIZE static int fm1_mca_advance(fm1_mca_t *a, uint64_t end_q16, uint64_t period_q16,
                            uint32_t *gate_frames)
 {
     uint64_t at, after, duration;

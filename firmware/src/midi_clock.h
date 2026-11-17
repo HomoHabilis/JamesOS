@@ -14,6 +14,10 @@
 #include <stdint.h>
 #include <string.h>
 #include "midi_clock_math.h"
+/* BR_COLD_SIZE: see instrument_audio.c; empty when this header is used on its own. */
+#ifndef BR_COLD_SIZE
+#define BR_COLD_SIZE
+#endif
 
 #define FM1_MC_START    1u
 #define FM1_MC_CONTINUE 2u
@@ -38,7 +42,7 @@ typedef struct {
 
 /* The accepted range is 30..300 BPM, at 24 pulses per quarter, with a
  * two-frame interval margin for timestamp quantization and boundary jitter. */
-static void fm1_mc_init(fm1_midi_clock_t *c, uint32_t sample_rate)
+BR_COLD_SIZE static void fm1_mc_init(fm1_midi_clock_t *c, uint32_t sample_rate)
 {
     memset(c, 0, sizeof *c);
     c->sample_rate = sample_rate;
@@ -52,7 +56,7 @@ static void fm1_mc_init(fm1_midi_clock_t *c, uint32_t sample_rate)
 /* Advances running musical phase in 1/65536 MIDI-clock pulses. Continue
  * advancing at the last estimate after loss: the owner decides whether to
  * stop/freeze. A single call must span no more than 0x00ffffff frames. */
-static uint32_t fm1_mc_advance(fm1_midi_clock_t *c, uint64_t frame)
+BR_COLD_SIZE static uint32_t fm1_mc_advance(fm1_midi_clock_t *c, uint64_t frame)
 {
     uint64_t delta, timeout, advance, limit;
     int64_t adjustment;
@@ -93,7 +97,7 @@ static uint32_t fm1_mc_advance(fm1_midi_clock_t *c, uint64_t frame)
 /* Returns action flags. START/CONTINUE become effective on the next F8;
  * STOP is immediate. Repeated/reordered timestamps must be rejected upstream
  * except simultaneous ordered events, which are allowed. */
-static uint32_t fm1_mc_event(fm1_midi_clock_t *c, uint8_t status, uint64_t frame)
+BR_COLD_SIZE static uint32_t fm1_mc_event(fm1_midi_clock_t *c, uint8_t status, uint64_t frame)
 {
     uint32_t result = fm1_mc_advance(c, frame);
     uint64_t elapsed, candidate, multiples, estimate, raw_elapsed = 0u;

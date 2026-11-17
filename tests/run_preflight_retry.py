@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Compile the actual preflight function with deterministic peripheral fakes."""
 from pathlib import Path
+import host_target
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-source = (root / "firmware/src/instrument_audio.c").read_text()
+source = host_target.select_product((root / "firmware/src/instrument_audio.c").read_text())  # the selected product's lines (BR_HOST_TARGET)
 start = source.index("static uint32_t br_audio_source_c1_late_preflight(")
 opening = source.index("{", start)
 depth = 0

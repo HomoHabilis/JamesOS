@@ -8,6 +8,47 @@
 int main(void)
 {
     br_app_init(); fm1_ms=2000u;
+#if BR_ENABLE_PLAITS
+    /* INIT restores the captured factory snapshot, not whatever the user was
+     * editing. Verify complete bank sounds and the kit both before and after. */
+    {
+        static const uint8_t defaults[BR_SYNTH_PARTS] = {0u, 23u, 12u};
+        br_bank_state_t expected, got;
+        br_kit_bank_state_t kit;
+        assert(!strcmp(br_bank[0].name, "LADDER SEQ"));
+        assert(!strcmp(br_bank[23].name, "FM ELECTRC"));
+        assert(!strcmp(br_bank[12].name, "FRENCH FLT"));
+        assert(!strcmp(br_kit_bank[9].name, "90S KIT"));
+        for (uint32_t pass = 0u; pass < 2u; ++pass) {
+            for (uint32_t p = 0u; p < BR_SYNTH_PARTS; ++p) {
+                memset(&expected, 0, sizeof expected); memset(&got, 0, sizeof got);
+                br_bank_state(&br_bank[defaults[p]], &expected);
+                br_bank_take(&got, &br_part[p].sound, &br_part[p].mod);
+                assert(!memcmp(&expected, &got, sizeof got));
+            }
+            br_kit_bank_take(&kit, &br_part[BR_DRUM_PART].sound);
+            assert(kit.preset == BR_KIT_PLAITS && kit.timbre == 76u && kit.color == 82u &&
+                   kit.harmonics == 70u && kit.decay == 78u && kit.snap == 92u && kit.tune == 0);
+            if (!pass) {
+                br_part[0].sound.timbre = 1u;
+                br_part[BR_DRUM_PART].sound.timbre = 1u;
+                assert(br_restore(&es.factory));
+            }
+        }
+        /* Existing captured projects keep their own sounds, not the new
+         * factory sounds, when restored. */
+        {
+            br_session_t custom;
+            br_part[1].sound.timbre = 21u;
+            br_part[1].sound.plaits_harmonics = 17u;
+            assert(br_capture(&custom));
+            br_part[1].sound.timbre = 99u;
+            assert(br_restore(&custom));
+            assert(br_part[1].sound.timbre == 21u && br_part[1].sound.plaits_harmonics == 17u);
+            assert(br_restore(&es.factory));
+        }
+    }
+#endif
     br_load_preset(0,BR_FIRST_PLAITS);
     br_ui.part=0; br_ui.page=BR_PAGE_SEQ; br_ui.screen[BR_PAGE_SEQ]=0;
     br_ui.cursor=7u;
@@ -40,6 +81,13 @@ int main(void)
     assert(br_control(0).value==68);
     /* Drum lane defaults are independent and survive edits to other lanes. */
     br_ui.part=BR_DRUM_PART; br_ui.lane=1u;
+    {
+        br_control_t c=br_control(0u); char text[24];
+        c.value=60; br_control_text(0u,&c,text); assert(!strcmp(text,"C4 (0)"));
+        c.value=63; br_control_text(0u,&c,text); assert(!strcmp(text,"D#4 (+3)"));
+        c.value=58; br_control_text(0u,&c,text); assert(!strcmp(text,"A#3 (-2)"));
+        for (int note=36; note<=84; ++note) { c.value=note; br_control_text(0u,&c,text); assert(br_widget_text_width(text)<=54); }
+    }
     br_control_turn(0,4); br_control_turn(1,20); br_control_turn(2,-10); br_control_turn(3,5);
     br_step_trigger_toggle(BR_DRUM_PART,4,1,1,0);
     assert(br_step_note_get(BR_DRUM_PART,4,1)==64);
@@ -72,20 +120,39 @@ int main(void)
     fm1_in.notes=1u << 9; host_note_pressed=1u << 9; br_app_tick();
     fm1_in.notes=0; br_app_tick();
     assert(!br_step_active(0,5,0,0));
-    /* Octave keys navigate the visible 16-step bank and stop at each end. */
-    br_ui.step_bank=0u; br_ui.cursor=3u; br_leds_mode(0);
-    assert(host_led_level_state[BTN_OCT_DOWN]==FM1_LED_OFF);
+    /* Octave keys wrap between the visible 16-step banks in the sequence. */
+    br_ui.step_bank=0u; br_ui.cursor=3u; br_part[0].length=16u; br_leds_mode(0);
+    assert(host_led_level_state[BTN_OCT_UP]==FM1_LED_OFF);
+    br_buttons(1u << BTN_OCT_UP); assert(br_ui.step_bank==0u && br_ui.cursor==3u);
+    br_part[0].length=BR_STEPS; br_leds_mode(0);
+    assert(host_led_level_state[BTN_OCT_DOWN]==FM1_LED_BRIGHT);
     assert(host_led_level_state[BTN_OCT_UP]==FM1_LED_BRIGHT);
-    br_buttons(1u << BTN_OCT_DOWN); assert(br_ui.step_bank==0u);
+    br_buttons(1u << BTN_OCT_DOWN); assert(br_ui.step_bank==BR_BANKS-1u);
+    br_buttons(1u << BTN_OCT_UP); assert(br_ui.step_bank==0u);
     br_buttons(1u << BTN_OCT_UP); assert(br_ui.step_bank==1u && br_ui.cursor==19u);
     br_leds_mode(0);
     assert(host_led_level_state[BTN_OCT_DOWN]==FM1_LED_BRIGHT);
     assert(host_led_level_state[BTN_OCT_UP]==FM1_LED_BRIGHT);
     br_buttons(1u << BTN_OCT_UP); br_buttons(1u << BTN_OCT_UP);
     assert(br_ui.step_bank==BR_BANKS-1u); br_leds_mode(0);
-    assert(host_led_level_state[BTN_OCT_UP]==FM1_LED_OFF);
-    br_buttons(1u << BTN_OCT_UP); assert(br_ui.step_bank==BR_BANKS-1u);
-    br_buttons(1u << BTN_OCT_DOWN); assert(br_ui.step_bank==BR_BANKS-2u);
+    assert(host_led_level_state[BTN_OCT_UP]==FM1_LED_BRIGHT);
+    br_buttons(1u << BTN_OCT_UP); assert(br_ui.step_bank==0u);
+    br_buttons(1u << BTN_OCT_DOWN); assert(br_ui.step_bank==BR_BANKS-1u);
+    memset((void *)br_part[0].step, 0, sizeof br_part[0].step);
+    br_part[0].length=16u; br_part[0].step[15]=BR_NOTE_STEP(60u,100u);
+    br_seq_synth_length[0][15]=40u;
+    assert(br_step_length_coverage(0,15,0,0)==16u);
+    assert(br_step_length_coverage(0,0,0,0)==16u);
+    assert(br_step_length_coverage(0,1,0,0)==8u);
+    assert(br_step_length_coverage(0,2,0,0)==0u);
+    br_part[0].length=BR_STEPS;
+    memset((void *)br_part[BR_DRUM_PART].step, 0, sizeof br_part[BR_DRUM_PART].step);
+    br_part[BR_DRUM_PART].length=16u; br_part[BR_DRUM_PART].step[15]=1u;
+    br_step_length_set(BR_DRUM_PART,15u,0u,40u);
+    assert(br_step_length_coverage(BR_DRUM_PART,0u,0u,1u)==16u);
+    assert(br_step_length_coverage(BR_DRUM_PART,1u,0u,1u)==8u);
+    assert(br_step_length_coverage(BR_DRUM_PART,0u,1u,1u)==0u);
+    br_part[BR_DRUM_PART].length=BR_STEPS;
     br_seq_press(); br_seq_release(); assert(br_ui.screen[BR_PAGE_SEQ]==1u);
     br_seq_press(); br_seq_release(); assert(br_ui.screen[BR_PAGE_SEQ]==0u);
     /* SEQ + KNOB1 remains a length gesture and does not open settings. */
@@ -94,13 +161,14 @@ int main(void)
     /* Held-step copy/paste consumes REC and PLAY, including on an empty destination. */
     br_ui.part=0u; br_ui.page=BR_PAGE_SEQ; br_ui.screen[BR_PAGE_SEQ]=0u; br_ui.step_bank=0u;
     br_playing=0; br_recording=0;
-    /* With nothing copied, PLAY is consumed and the empty step stays empty. */
+    /* With nothing copied, PLAY stays transport and the empty step stays empty. */
     assert(!br_step_clipboard.valid);
     br_part[0].step[2]=0;
     fm1_in.notes=1u<<4; host_note_pressed=1u<<4; br_app_tick();
     fm1_in.buttons=1u<<BTN_PLAY; host_pressed=1u<<BTN_PLAY; br_app_tick();
     fm1_in.buttons=0; host_released=1u<<BTN_PLAY; fm1_in.notes=0; br_app_tick();
-    assert(!br_playing && !br_step_active(0,2,0,0));
+    assert(br_playing && !br_step_active(0,2,0,0));
+    br_buttons(1u<<BTN_PLAY); assert(!br_playing);
     br_part[0].step[0]=BR_NOTE_STEP(67,91)|BR_STEP_TIE;
     br_step_length_set(0,0,0,37); br_step_condition_set(0,0,0,23); br_step_micro_set(0,0,0,-3);
     fm1_in.notes=1u; host_note_pressed=1u; br_app_tick();

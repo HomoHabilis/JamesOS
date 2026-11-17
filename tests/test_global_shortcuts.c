@@ -4,6 +4,7 @@
 #define main host_unused_main
 #include "../firmware/src/dinghy.c"
 #undef main
+#include "host_intro.h"
 #include <assert.h>
 
 static void tick(void) { ++fm1_ms; br_app_tick(); }
@@ -17,17 +18,37 @@ static void snap(uint32_t encoder, uint32_t start, int32_t direction, uint32_t e
     int8_t octave=br_ui.octave;
     br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=1u;
     br_master.fx.filter=start;
+    br_gf.valid=0u; br_master_snapshot_ram(); br_master_apply_lfo(); br_gf_apply(BR_BLOCK);
     down(BTN_GLO);
     assert(br_master.fx.filter==start && br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==1u);
     turn(encoder,direction);
     assert(br_master.fx.filter==expected && br_ui.octave==octave);
+    br_master_snapshot_ram(); br_master_apply_lfo(); br_gf_apply(BR_BLOCK);
+    assert(br_master_cached.filter==expected);
     up(BTN_GLO);
     assert(br_master.fx.filter==expected && br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==1u);  /* no tap on release */
 }
 
+/* OCT- + knob 1 uses the same landmarks and immediately updates the audio filter. */
+static void oct_filter_snap(uint32_t start, int32_t direction, uint32_t expected)
+{
+    int8_t octave=br_ui.octave;
+    br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=1u;
+    br_master.fx.filter=start;
+    br_gf.valid=0u; br_master_snapshot_ram(); br_master_apply_lfo(); br_gf_apply(BR_BLOCK);
+    uint32_t generation=br_master.fx.filter_snap_generation;
+    down(BTN_OCT_DOWN); turn(ENC_KNOB1,direction);
+    assert(br_master.fx.filter==expected && br_ui.octave==octave);
+    if (start != expected) assert(br_master.fx.filter_snap_generation==generation+1u);
+    br_master_snapshot_ram(); br_master_apply_lfo(); br_gf_apply(BR_BLOCK);
+    assert(br_master_cached.filter==expected);
+    up(BTN_OCT_DOWN);
+    assert(br_ui.octave==octave && br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==1u);
+}
+
 int main(void)
 {
-    br_app_init(); fm1_ms=2000;
+    br_app_init(); host_after_intro(); fm1_ms=2000;
     /* Each global mixer knob selects its own track, including at a level limit. */
     br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=0u;
     for (uint32_t k=0; k<BR_PARTS; ++k) {
@@ -36,31 +57,49 @@ int main(void)
         down(BTN_OCT_DOWN); up(BTN_OCT_DOWN); assert(br_part[k].sound.mute);
         down(BTN_OCT_DOWN); up(BTN_OCT_DOWN); assert(!br_part[k].sound.mute);
     }
-    br_app_init(); fm1_ms=2000;
-    /* Either chord order opens MIDI without octave/mute side effects. */
+    br_app_init(); host_after_intro(); fm1_ms=2000;
+    /* Either chord order always opens TEMPO without octave/mute side effects. */
     br_ui.page=BR_PAGE_HOME; br_ui.octave=0;
     down(BTN_OCT_DOWN); down(BTN_GLO);
-    assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==7u && br_ui.octave==0);
+    assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==2u && br_ui.octave==0);
     up(BTN_GLO); up(BTN_OCT_DOWN);
-    down(BTN_GLO); up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==8u);
     down(BTN_GLO); up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==7u);
-    down(BTN_GLO); down(BTN_OCT_DOWN);
-    assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==0u);
-    up(BTN_OCT_DOWN); up(BTN_GLO);
+    down(BTN_GLO); up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==8u);
+    down(BTN_GLO); up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==2u);
+    for (uint32_t screen=2u; screen<=8u; ++screen) {
+        if (screen != 2u && screen != 7u && screen != 8u) continue;
+        for (uint32_t order=0u; order<2u; ++order) {
+            br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=screen;
+            br_ui.message[0]=0; br_ui.message_until=0;
+            if (order) { down(BTN_GLO); down(BTN_OCT_DOWN); up(BTN_OCT_DOWN); up(BTN_GLO); }
+            else { down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN); }
+            assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==BR_GLO_FIRST);   /* MIXER on the FM-1, PAN on the SMK-37 */
+            assert(!br_ui.message[0] && !br_part[0].sound.mute && br_ui.octave==0);
+        }
+    }
+    br_ui.page=BR_PAGE_HOME;
+    down(BTN_GLO); down(BTN_OCT_DOWN); up(BTN_OCT_DOWN); up(BTN_GLO);
+    assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==2u);
     assert(!br_part[0].sound.mute && br_ui.octave==0);
     br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=0u;
     down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN);
-    assert(br_ui.screen[BR_PAGE_MIX]==7u && !br_part[0].sound.mute);
+    assert(br_ui.screen[BR_PAGE_MIX]==2u && !br_part[0].sound.mute);
+    down(BTN_GLO); up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==7u);
     for (uint32_t k=0;k<3u;++k) {
         br_midi_channels[k]=1u; br_control_turn(k,99); assert(br_midi_channels[k]==16u);
-        br_control_turn(k,-99); assert(br_midi_channels[k]==1u);
+        /* The range starts at OFF (0) below channel 1 (MIDI OFF routing, test_midi_channel_ui_hd.c). */
+        br_control_turn(k,-99); assert(br_midi_channels[k]==0u);
         char text[24]; br_control_t c=br_control(k); br_control_text(k,&c,text);
+        assert(!strcmp(text,"OFF"));
+        br_control_turn(k,1); assert(br_midi_channels[k]==1u);
+        c=br_control(k); br_control_text(k,&c,text);
         assert(!strcmp(text,"1"));
     }
-    br_midi_clock_enabled=0u;
-    { br_control_t c=br_control(3u); assert(!strcmp(c.label,"CLOCK SOURCE") && !strcmp(c.text,"OFF")); }
-    br_control_turn(3u,1);
-    { br_control_t c=br_control(3u); assert(br_midi_clock_enabled && !strcmp(c.text,"USB/MIDI")); }
+    assert(!br_control(3u).label[0]); /* MIDI 1 slot 4 is unused */
+    br_ui.screen[BR_PAGE_MIX]=2u; br_midi_clock_enabled=0u;
+    { br_control_t c=br_control(2u); assert(!strcmp(c.label,"CLOCK SOURCE") && !strcmp(c.text,"OFF")); }
+    br_control_turn(2u,1);
+    { br_control_t c=br_control(2u); assert(br_midi_clock_enabled && !strcmp(c.text,"USB/MIDI")); }
     br_ui.screen[BR_PAGE_MIX]=8u;
     /* Capture a clean MIDI 2 page and compare the incremental 1 -> 2
      * transition. Verify every lane label and knob badge has visible ink. */
@@ -84,14 +123,20 @@ int main(void)
         br_midi_channels[3u+k]=1u; br_control_turn(k,99); assert(br_midi_channels[3u+k]==16u);
     }
     br_ui.screen[BR_PAGE_MIX]=2u; br_bpm=120u; br_midi_clock_bpm=138u; br_midi_clock_active=1u;
-    { br_control_t c=br_control(1u); assert(c.value==138 && !strcmp(c.label,"MIDI BPM")); }
-    br_control_turn(1u,5); assert(br_bpm==120u);
-    br_midi_clock_active=0u; br_control_turn(1u,5); assert(br_bpm==125u);
-    br_app_init(); fm1_ms=2000;
+    { br_control_t c=br_control(0u); assert(c.value==138 && !strcmp(c.label,"MIDI BPM")); }
+    br_control_turn(0u,5); assert(br_bpm==120u);
+    br_midi_clock_active=0u; br_control_turn(0u,5); assert(br_bpm==125u);
+    br_app_init(); host_after_intro(); fm1_ms=2000;
     down(BTN_GLO); assert(br_ui.page==BR_PAGE_HOME);
+#if BR_PRODUCT_SMK37
+    up(BTN_GLO); assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==3u);   /* SMK-37: GLO opens GLOBAL / PAN */
+    down(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==3u);
+    up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==1u);   /* PAN -> GLOBAL / FILTER */
+#else
     up(BTN_GLO); assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==0u);
     down(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==0u);
-    up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==1u);
+    up(BTN_GLO); assert(br_ui.screen[BR_PAGE_MIX]==3u);   /* MIXER -> GLOBAL / PAN */
+#endif
 
     br_ui.page=BR_PAGE_HOME; br_master.fx.filter=50u;
     down(BTN_GLO); turn(ENC_SELECT,1);
@@ -118,6 +163,28 @@ int main(void)
     up(BTN_OCT_DOWN); assert(br_ui.octave==-1);
     turn(ENC_KNOB1,1); assert(br_master.fx.filter!=64u && br_master.fx.filter!=0u);
     assert(br_ui.octave==-1);
+
+    /* The legacy GLO + SELECT snap remains available without advertising it. */
+    br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=1u; br_ui.message[0]=0;
+    br_ui.message_until=0; br_master.fx.filter=20u; down(BTN_GLO);
+    for (uint32_t i=0; i<450u; ++i) tick();
+    assert(!br_ui.message[0] || (int32_t)(br_ui.message_until-fm1_ms)<=0);
+    turn(ENC_SELECT,1); assert(br_master.fx.filter==64u); up(BTN_GLO);
+
+    /* Global filter has the same OCT- + knob 1 gesture as the track filter. */
+    oct_filter_snap(0,1,64); oct_filter_snap(20,1,64); oct_filter_snap(64,1,127); oct_filter_snap(127,1,127);
+    oct_filter_snap(127,-1,64); oct_filter_snap(100,-1,64); oct_filter_snap(64,-1,0); oct_filter_snap(0,-1,0);
+    br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=1u; br_ui.octave=0;
+    br_master.fx.resonance=20u; down(BTN_OCT_DOWN); memset(br_encoder_speed,0,sizeof br_encoder_speed);
+    turn(ENC_KNOB2,1); assert(br_master.fx.resonance==21u); up(BTN_OCT_DOWN);
+    assert(br_ui.octave==-1); /* an unused snap hold remains an octave press */
+    br_ui.octave=0; br_master.fx.filter=20u; down(BTN_OCT_DOWN);
+    fm1_in.buttons &= ~(1u<<BTN_OCT_DOWN); host_released |= 1u<<BTN_OCT_DOWN;
+    host_encoder[ENC_KNOB1]=1; tick();
+    assert(br_master.fx.filter==64u && br_ui.octave==0);
+    br_ui.page=BR_PAGE_HOME; br_ui.screen[BR_PAGE_HOME]=0u; br_master.fx.filter=20u;
+    down(BTN_OCT_DOWN); br_ui.page=BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX]=1u;
+    turn(ENC_KNOB1,1); assert(br_master.fx.filter != 64u); up(BTN_OCT_DOWN);
 
     /* All sends on every track snap directionally without an octave side effect. */
     for (uint32_t p=0; p<BR_PARTS; ++p) {
@@ -155,25 +222,24 @@ int main(void)
 
     for (uint32_t p=0;p<BR_PARTS;++p) for (uint32_t page=BR_FX_DRIVE;page<=BR_FX_REVERB;++page) {
         br_ui.part=p; br_ui.page=BR_PAGE_FX; br_ui.screen[BR_PAGE_FX]=page; br_ui.octave=0;
-        br_control_turn(3,20-br_control(3).value);
+        br_control_turn(3,-br_control(3).value);
         down(BTN_OCT_DOWN);
-        turn(ENC_KNOB4,1); assert(br_control(3).value==64);
-        turn(ENC_KNOB4,1); assert(br_control(3).value==127);
-        turn(ENC_KNOB4,-1); assert(br_control(3).value==64);
+        memset(br_encoder_speed,0,sizeof br_encoder_speed);
+        turn(ENC_KNOB4,1); assert(br_control(3).value==1);
         turn(ENC_KNOB4,-1); assert(br_control(3).value==0);
         /* Tone controls keep normal adjustment while the snap modifier is held. */
         uint32_t normal=page==BR_FX_DRIVE?1u:2u;
         br_control_turn(normal,20-br_control(normal).value);
         memset(br_encoder_speed,0,sizeof br_encoder_speed);
         turn(ENC_KNOB1+normal,1); assert(br_control(normal).value==21);
-        up(BTN_OCT_DOWN); assert(br_ui.octave==0);
+        up(BTN_OCT_DOWN); assert(br_ui.octave==(p==BR_DRUM_PART?0:-1));
     }
 
     br_ui.page=BR_PAGE_SEQ; br_ui.screen[BR_PAGE_SEQ]=0; br_ui.part=BR_DRUM_PART;
     br_load_preset(BR_DRUM_PART,BR_KIT_PLAITS);br_ui.lane=0;
     down(BTN_GLO); turn(ENC_SELECT,1);
     assert(br_ui.page==BR_PAGE_SEQ && br_ui.lane==1u);
-    up(BTN_GLO); assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==0u);
+    up(BTN_GLO); assert(br_ui.page==BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX]==BR_GLO_FIRST);
 
     br_ui.page=BR_PAGE_HOME; es_open(); assert(es.mode);
     down(BTN_GLO); assert(es.mode);

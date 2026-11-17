@@ -21,6 +21,12 @@ static void fm1_lcd_send_cmd(uint8_t command)
 static void fm1_lcd_send_data(const void *data, uint32_t length)
 { record(EVENT_DATA, length, ((const uint8_t *)data)[0]); }
 static void fm1_lcd_baud(uint32_t baud) { record(EVENT_BAUD, baud, 0u); }
+/* SMK-37 Pro: lcd.c also drives the RGB pad LEDs on the same bus (BR_CAP_PADS). */
+#include "host_product.h"
+#if BR_CAP_PADS
+static void fm1_padled_send(const void *data, uint32_t length) { (void)data; (void)length; }
+static void fm1_padled_done(void) { }
+#endif
 
 #include "../firmware/src/lcd.c"
 

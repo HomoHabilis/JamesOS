@@ -70,7 +70,6 @@ typedef struct {
     uint8_t trem_depth;     /* 0..31 */
 } br_punch_cfg_t;
 #define BR_PUNCH_CFG_DEFAULTS {2u, 2u, 0u, 2u, 12u, 20u, 24u}
-#define BR_PUNCH_SAVE_MARK 0x50u
 
 static inline uint32_t br_punch_cfg_is_default(const br_punch_cfg_t *c)
 {
@@ -79,36 +78,6 @@ static inline uint32_t br_punch_cfg_is_default(const br_punch_cfg_t *c)
         c->filter_shape == d.filter_shape && c->trem_rate == d.trem_rate &&
         c->echo_fb == d.echo_fb && c->filter_amount == d.filter_amount &&
         c->trem_depth == d.trem_depth;
-}
-/* Four spare bytes of the kit track's saved lane levels: a marker, the four
- * two-bit choices, then the three 5-bit levels. All zero means defaults. */
-static inline void br_punch_cfg_pack(const br_punch_cfg_t *c, uint8_t out[4])
-{
-    uint32_t v;
-    out[0] = out[1] = out[2] = out[3] = 0u;
-    if (br_punch_cfg_is_default(c)) return;
-    v = (uint32_t)(c->echo_fb & 31u) | (uint32_t)(c->filter_amount & 31u) << 5 |
-        (uint32_t)(c->trem_depth & 31u) << 10;
-    out[0] = BR_PUNCH_SAVE_MARK;
-    out[1] = (uint8_t)((c->loop_len & 3u) | (c->echo_time & 3u) << 2 |
-                       (c->filter_shape & 3u) << 4 | (c->trem_rate & 3u) << 6);
-    out[2] = (uint8_t)(v & 255u); out[3] = (uint8_t)(v >> 8);
-}
-static inline uint32_t br_punch_cfg_packed_valid(const uint8_t in[4])
-{
-    if (!in[0] && !in[1] && !in[2] && !in[3]) return 1u;
-    return in[0] == BR_PUNCH_SAVE_MARK && in[3] < 0x80u;
-}
-static inline void br_punch_cfg_unpack(br_punch_cfg_t *c, const uint8_t in[4])
-{
-    static const br_punch_cfg_t d = BR_PUNCH_CFG_DEFAULTS;
-    uint32_t v;
-    *c = d;
-    if (in[0] != BR_PUNCH_SAVE_MARK || !br_punch_cfg_packed_valid(in)) return;
-    v = (uint32_t)in[2] | (uint32_t)in[3] << 8;
-    c->loop_len = in[1] & 3u; c->echo_time = (in[1] >> 2) & 3u;
-    c->filter_shape = (in[1] >> 4) & 3u; c->trem_rate = (in[1] >> 6) & 3u;
-    c->echo_fb = v & 31u; c->filter_amount = (v >> 5) & 31u; c->trem_depth = (v >> 10) & 31u;
 }
 
 /* ---- Master-bus effects without buffers: a tempo-synced gain chop and a

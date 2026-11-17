@@ -1,18 +1,18 @@
 /* Experimental adapter: included only after the platform and session code.
- * It is not wired into the application yet; see SAVE-SCREEN-DESIGN.md. */
+ * It is not wired into the application yet; see SAVE-SCREEN-DESIGN.md.
+ * SMK-37 Pro device: the project partition is hal/smk37/smk37_flash_map.h's (logical offsets,
+ * translated around two occupied sectors by the flash layer); its host build keeps FM-1's. */
+#include "../product.h"
 #include "project_store.h"
 #include "project_store.c"
-#ifdef BR_PATTERN_STORAGE_EXPERIMENT
-#ifdef FM1_DEVICE
-#error "Pattern storage experiment has not been qualified for device RAM or flash"
-#endif
-#include "pattern_unified_store.h"
-#include "pattern_legacy_migrate.h"
-static uint8_t br_project_guard_sector[PS_SECTOR] __attribute__((aligned(4)));
-#endif
 
+#if BR_PRODUCT_SMK37 && defined(FM1_DEVICE)
+#define BR_PROJECT_BASE SMK37_PROJECT_LO
+#define BR_PROJECT_END SMK37_PROJECT_HI
+#else
 #define BR_PROJECT_BASE 0x00097000u
 #define BR_PROJECT_END  0x000B1000u
+#endif
 _Static_assert(BR_PROJECT_END-BR_PROJECT_BASE==PS_TOTAL_SLOTS*2u*PS_SECTOR,
                "project partition must hold two sectors per slot and working state");
 _Static_assert(sizeof(br_session_t)<=PS_MAX_PAYLOAD, "session must fit a project copy");
@@ -51,31 +51,10 @@ static int br_project_program(void *ctx, uint32_t off, const void *src, uint32_t
 }
 static int br_project_valid(const void *payload, uint32_t n)
 {
-    return n==sizeof(br_session_t) && (br_session_v12_valid((const br_session_t *)payload) || br_session_v13_valid((const br_session_t *)payload) || br_session_v14_valid((const br_session_t *)payload) || br_session_v15_valid((const br_session_t *)payload) || br_session_v16_valid((const br_session_t *)payload));
+    return n==sizeof(br_session_t) && br_session_valid((const br_session_t *)payload);
 }
 static const ps_store br_project_store={0,br_project_read,br_project_erase,
     br_project_program,br_project_valid,BR_PROJECT_BASE,sizeof(br_session_t)};
-#ifdef BR_PATTERN_STORAGE_EXPERIMENT
-/* Offline bridge only: caller owns two aligned, non-overlapping sector
- * buffers. These routines never restore a session or erase legacy records. */
-static const pfs_store br_pattern_project_store={0,br_project_read,br_project_program,BR_PROJECT_BASE};
-static int br_project_migrate_legacy(uint32_t slot,void *work,void *scratch)
-{
-    int rc;
-    if(slot>=PS_TOTAL_SLOTS || br_playing || !br_engine_quiet() || !br_fx_quiet() || br_session_save_blocked()) return PFS_INVALID;
-    if(!br_quiescent_transaction_begin()) return PFS_IO;
-    rc=plm_migrate(&br_project_store,&br_pattern_project_store,slot,work,scratch);
-    br_quiescent_transaction_end(); return rc;
-}
-static int br_project_read_migrated(uint32_t slot,char name[PS_NAME_BYTES],br_session_t *session,void *work,void *scratch)
-{
-    int rc;
-    if(slot>=PS_TOTAL_SLOTS || !session || br_playing || !br_engine_quiet() || !br_fx_quiet() || br_session_save_blocked()) return PFS_INVALID;
-    if(!br_quiescent_transaction_begin()) return PFS_IO;
-    rc=plm_load(&br_project_store,&br_pattern_project_store,slot,name,session,work,scratch);
-    br_quiescent_transaction_end(); return rc;
-}
-#endif
 
 /* The extra record makes the last successfully selected project recoverable
  * at boot without touching the legacy session sector. W00 means unassigned. */
@@ -94,11 +73,7 @@ static int br_project_work_slot(const char *name)
 static int br_project_work_write(const br_session_t *session, int slot)
 {
     char name[4]; br_project_work_name(name,slot);
-#ifdef BR_PATTERN_STORAGE_EXPERIMENT
-    return pus_legacy_save(&br_project_store,PS_SLOTS,name,session,&br_loaded,br_project_guard_sector,0);
-#else
     return ps_save_reclaim(&br_project_store,PS_SLOTS,name,session,&br_loaded,0);
-#endif
 }
 
 /* Callers must be prepared for BUSY/IO/CORRUPT and must not advance a
@@ -110,13 +85,8 @@ static int br_project_save(uint32_t slot, const char *name, int reclaim, ps_info
     if (!br_quiescent_transaction_begin()) return PS_IO;
     if (!br_capture(&br_pending_save) || br_engine_pipeline_uncontained_fault_get()) rc=PS_INVALID;
     else {
-#ifdef BR_PATTERN_STORAGE_EXPERIMENT
-        (void)reclaim; /* Never reclaim unknown or foreign sectors. */
-        rc=pus_legacy_save(&br_project_store,slot,name,&br_pending_save,&br_loaded,br_project_guard_sector,info);
-#else
         rc=reclaim ? ps_save_reclaim(&br_project_store,slot,name,&br_pending_save,&br_loaded,info) :
             ps_save(&br_project_store,slot,name,&br_pending_save,&br_loaded,info);
-#endif
         if(rc==PS_OK) rc=br_project_work_write(&br_pending_save,(int)slot);
     }
     br_quiescent_transaction_end();

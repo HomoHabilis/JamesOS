@@ -64,6 +64,11 @@ void ModalVoice::Render(
     float* out,
     float* aux,
     size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  // Out of line, so the engine's constant does not reach here; drop the
+  // unreachable sustain (unpatched trigger) exciter (plaits_config.h).
+  sustain = false;
+#endif
 #if BR_AUDIO_FAILURE_JOB_MODEL_SUBSTAGE_PROFILE_DIAG
   if (profile) {
     (void)br_audio_model_substage_begin(

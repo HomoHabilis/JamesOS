@@ -3,12 +3,13 @@
 #define main host_unused_main
 #include "../firmware/src/dinghy.c"
 #undef main
+#include "host_intro.h"
 #include <assert.h>
 #include <math.h>
 
 static void setup(void)
 {
-    br_app_init(); fm1_ms = 1000u;
+    br_app_init(); host_after_intro(); fm1_ms = 1000u;
     br_ui.page = BR_PAGE_HOME; br_ui.part = 0u;
     br_load_preset(0u, BR_FIRST_PLAITS);
 }
@@ -94,6 +95,32 @@ int main(void)
     }
     br_key_up(25u);
 
+#if BR_PRODUCT_SMK37
+    /* SMK-37 Pro: REPEAT is the punch shift and the pads pick the effect. smk37_panel.c (device-only
+     * panel scanning) feeds REPEAT to br_punch_key(BR_PUNCH_SHIFT_KEY) + br_punch_changed() and sets
+     * br_punch_ks.active / br_punch_effect from the pad group (smk37_punch_pads.h, unit-tested by
+     * run_smk37_units.py). The keyboard punch keys above are the host's stand-in for the pads; here
+     * the pad path is applied as the panel does. */
+    setup(); br_ui.page = BR_PAGE_HOME;
+    assert(br_punch_key(&br_punch_ks, BR_PUNCH_SHIFT_KEY, 1u)); br_punch_changed();
+    assert(br_ui.page == BR_PAGE_PUNCH && br_punch_page());
+    assert(br_page_plays_keys());                 /* the keybed keeps playing on the SMK PUNCH page */
+    for(uint32_t group=BR_PUNCH_LOOP;group<=BR_PUNCH_TREM;++group) {
+        static uint16_t badge[240*20];
+        br_ui.screen[BR_PAGE_PUNCH]=1u;
+        br_punch_ks.active=(uint8_t)group; br_punch_effect=group; br_ui.redraw=1u; br_draw();
+        /* A pad does not run br_punch_changed: LOOP stays on page two, where it has no knob. */
+        assert(br_ui.screen[BR_PAGE_PUNCH]==1u);
+        assert(br_active_knob()==(group==BR_PUNCH_LOOP?4u:group-1u));
+        memcpy(badge,fb+46u*240u,sizeof badge);
+        br_punch_ks.active=BR_PUNCH_NONE; br_punch_effect=BR_PUNCH_NONE; br_ui.redraw=1u; br_draw();
+        assert(br_active_knob()==4u);
+        assert(memcmp(badge,fb+46u*240u,sizeof badge));   /* the running effect shows on the page */
+    }
+    assert(br_punch_key(&br_punch_ks, BR_PUNCH_SHIFT_KEY, 0u)); br_punch_changed();
+    assert(br_ui.page == BR_PAGE_HOME && br_punch_effect == BR_PUNCH_NONE);
+#endif
+
     /* Settings page edits the saved settings, and OCT+ opens its second screen. */
     setup(); br_key_down(25u, 1);
     br_control_turn(0u, 1); br_control_turn(1u, 1); br_control_turn(2u, 3); br_control_turn(3u, 1);
@@ -132,15 +159,14 @@ int main(void)
     /* Session round trip, and a session from before punch-in loads with defaults. */
     {
         br_session_t saved; br_punch_cfg_t keep = br_punch_cfg;
-        assert(br_capture(&saved) && br_session_v16_valid(&saved));
-        assert(saved.v3.part[BR_DRUM_PART].lane_level[BR_DRUM_LANES] == BR_PUNCH_SAVE_MARK);
+        assert(br_capture(&saved) && br_session_valid(&saved));
+        assert(saved.b[br_v17_wire_at(BR_V17_ROW(K, punch_trem_depth), 0u, 0u)] == keep.trem_depth);
         { static const br_punch_cfg_t d = BR_PUNCH_CFG_DEFAULTS; br_punch_cfg = d; }
         assert(br_restore(&saved) && !memcmp(&keep, &br_punch_cfg, sizeof keep));
-        saved.v3.part[BR_DRUM_PART].lane_level[BR_DRUM_LANES] = 0x77u;
-        assert(!br_session_v16_valid(&saved));
+        saved.b[br_v17_wire_at(BR_V17_ROW(K, punch_echo_feedback), 0u, 0u)] = 0x77u;   /* clamped to 31 */
+        assert(br_session_valid(&saved) && br_restore(&saved) && br_punch_cfg.echo_fb == 31u);
         { static const br_punch_cfg_t d = BR_PUNCH_CFG_DEFAULTS; br_punch_cfg = d; }
-        assert(br_capture(&saved));
-        for (uint32_t i = BR_DRUM_LANES; i < 8u; ++i) assert(!saved.v3.part[BR_DRUM_PART].lane_level[i]);
+        assert(br_capture(&saved) && saved.b[br_v17_wire_at(BR_V17_ROW(K, punch_loop_len), 0u, 0u)] == 2u);
     }
 
     /* Trem chops the output while held and stops when released. */
@@ -187,6 +213,7 @@ int main(void)
          * the step after the one in flight at the punch, plus the steps looped. */
         assert(resumed == (start_pos + 1u + count) % 16u);
     }
-    printf("punch-in key, page, settings, session, trem and loop checks passed\n");
+    printf("punch-in key, page, settings, session, trem and loop checks passed%s\n",
+           BR_PRODUCT_SMK37 ? " (SMK-37: plus REPEAT shift and pad effects)" : "");
     return 0;
 }

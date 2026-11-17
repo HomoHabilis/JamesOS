@@ -63,7 +63,7 @@ static int reader_cb(void *ctx,uint32_t off,void *dst,uint32_t n){int rc;if(fail
 static int budget=-1,read_budget=-1;
 static int rd(void *c,uint32_t p,void *v,uint32_t n){(void)c;if(read_budget==0)return -1;if(read_budget>0)read_budget--;if(p>sizeof flash||n>sizeof flash-p)return -1;memcpy(v,flash+p,n);return 0;}
 static int pg(void *c,uint32_t p,const void *v,uint32_t n){const uint8_t *b=v;uint32_t i;(void)c;if(p>sizeof flash||n>sizeof flash-p)return -1;for(i=0;i<n;i++){if(budget==0)return -1;if((flash[p+i]&b[i])!=b[i])return -1;flash[p+i]&=b[i];if(budget>0)budget--;}return 0;}
-static int valid(const uint8_t *v,size_t n,void *ctx){br_session_t tmp;(void)ctx;if(n!=sizeof tmp)return 0;memcpy(&tmp,v,n);return br_session_v16_valid(&tmp);}
+static int valid(const uint8_t *v,size_t n,void *ctx){br_session_t tmp;(void)ctx;if(n!=sizeof tmp)return 0;memcpy(&tmp,v,n);return br_session_valid(&tmp);}
 
 static int fixed_safe(void *v){(void)v;return fixed_stage_safe;}
 static int fixed_faulted(void *v){(void)v;return fixed_stage_fault;}

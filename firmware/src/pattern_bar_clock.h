@@ -26,7 +26,7 @@ static inline int fm1_pattern_bar_internal(uint32_t beat, uint32_t elapsed,
 
 /* Start anchors the first complete bar to the actual sequencer start phase,
  * which can differ from zero when external clock lock is acquired late. */
-static inline int fm1_pattern_bar_external_start(fm1_pattern_bar_clock *clock,
+BR_COLD_SIZE static inline int fm1_pattern_bar_external_start(fm1_pattern_bar_clock *clock,
                                                   uint64_t origin_q16)
 {
     if (UINT64_MAX - origin_q16 < FM1_PATTERN_BAR_PULSES_Q16) return 0;
@@ -36,7 +36,7 @@ static inline int fm1_pattern_bar_external_start(fm1_pattern_bar_clock *clock,
 
 /* On suspect-clock relock use precisely the shift applied to the sequencer
  * targets. Stop/Continue otherwise retain this clock; Start resets it. */
-static inline int fm1_pattern_bar_external_shift(fm1_pattern_bar_clock *clock,
+BR_COLD_SIZE static inline int fm1_pattern_bar_external_shift(fm1_pattern_bar_clock *clock,
                                                   uint64_t shift_q16)
 {
     if (UINT64_MAX - clock->next_q16 < shift_q16) return 0;

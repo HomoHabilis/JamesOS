@@ -1,5 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
+#include "../product.h"
+#if BR_PRODUCT_SMK37
+/* SMK-37 Pro LCD pins and RGB-pad transport on SPI1 group B: smk37/smk37_lcd_hw.h
+ * (from jamesos-k-pre-unify:firmware/hal/fm1_lcd_hw.h, based on genkigenki's Felucca port). */
+#include "smk37/smk37_lcd_hw.h"
+#else
 /* FM-1 LCD wiring: SPI1 on PC9 CLK, PC10 DO, PC7 CS,
  * PC8 D/C; backlight PA2, active low. The panel protocol is src/lcd.c.
  *
@@ -80,3 +86,4 @@ FM1_INLINE void fm1_lcd_send_data(const void *p, uint32_t n)
     FM1_LCD_SPI_ADR = (uint32_t)(uintptr_t)p;
     FM1_LCD_SPI_CNT = n;
 }
+#endif /* BR_PRODUCT_SMK37 */

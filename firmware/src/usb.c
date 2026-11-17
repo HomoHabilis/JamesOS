@@ -16,7 +16,9 @@
  * update loader leaves both off: MIDI only.
  * Standard-rate builds offer 44.1 kHz and, when enabled, 48 kHz USB capture.
  * The native48 profile advertises only 48 kHz and taps its render directly,
- * without running the 44.1->48 kHz FIR. */
+ * without running the 44.1->48 kHz FIR.
+ * SMK-37 Pro (JAMESOS_K_USB): named USB MIDI jacks and product strings distinguish it from an FM-1. */
+#include "../product.h"
 #include "../hal/fm1_usb.h"   /* registers; relative, so the loader and the host tests find it too */
 #include "../hal/fm1_audio_rate.h"
 #ifndef FELUCCA_CDC
@@ -231,7 +233,7 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 /* ------------------------------------------------------- descriptors --- */
 /* interfaces: 0 audio control, 1 MIDI streaming, 2 audio streaming (FELUCCA_UAC), then CDC's two.
  * bcdDevice: 3.00 MIDI, +0.01 CDC, +0.10 the audio input, +0.20 more with 48 kHz (2.5) (hosts cache descriptors
- * per version) */
+ * per version). SMK's additional revision advertises its named MIDI jacks. */
 #define CDC_IF (2 + FELUCCA_UAC)
 #define UAC_AS_IF 2u
 #define CFG_LEN (101 + 74 * FELUCCA_CDC + 74 * FELUCCA_UAC + 3 * FELUCCA_UAC_48K)
@@ -247,7 +249,7 @@ static const uint8_t CFG_DESC[] = {
 #define FELUCCA_USB_PID 0x0001   /* the update loader is 0x0002 */
 #endif
 static const uint8_t DEV_DESC[18] = {18, 1, 0x10, 0x01, 0, 0, 0, 64, 0x09, 0x12, FELUCCA_USB_PID & 0xFF,
-                                     FELUCCA_USB_PID >> 8, 0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K), 0x03,
+                                     FELUCCA_USB_PID >> 8, 0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K) + (BR_PRODUCT_SMK37 ? 1 : 0), 0x03,
                                      1, 2, 0, 1};
 static const uint8_t CFG_DESC[] = {
     9, 2, CFG_LEN & 0xFF, CFG_LEN >> 8, USB_NIF, 1, 0, 0x80, 50,
@@ -262,9 +264,9 @@ static const uint8_t CFG_DESC[] = {
 #endif
     9, 4, 1, 0, 2, 1, 3, 0, 0,
     7, 0x24, 1, 0x00, 0x01, 0x41, 0x00,
-    6, 0x24, 2, 1, 1, 0,
+    6, 0x24, 2, 1, 1, BR_PRODUCT_SMK37 ? 3 : 0,
     6, 0x24, 2, 2, 2, 0,
-    9, 0x24, 3, 1, 3, 1, 2, 1, 0,
+    9, 0x24, 3, 1, 3, 1, 2, 1, BR_PRODUCT_SMK37 ? 3 : 0,
     9, 0x24, 3, 2, 4, 1, 1, 1, 0,
     9, 5, 0x01, 2, 64, 0, 0, 0, 0,
     5, 0x25, 1, 1, 1,
@@ -327,7 +329,17 @@ static int usb_cdc_now(void) { return 0; }
 static const uint8_t STR0[4] = {4, 3, 0x09, 0x04};
 static const uint8_t STR1[] = {42, 3, 'H', 0, 0xFC, 0, 'g', 0, 'e', 0, 'l', 0, 't', 0, 'o', 0, 'n', 0, ' ', 0, 'I', 0,
                                'n', 0, 's', 0, 't', 0, 'r', 0, 'u', 0, 'm', 0, 'e', 0, 'n', 0, 't', 0, 's', 0};
+#if BR_PRODUCT_SMK37 && defined(JAMESOS_K_USB) && defined(FELUCCA_LOADER)
+static const uint8_t STR2[] = {22, 3, 'S', 0, 'M', 0, 'K', 0, '-', 0, '3', 0, '7', 0,
+                              ' ', 0, 'O', 0, 'T', 0, 'A', 0};
+#elif BR_PRODUCT_SMK37 && defined(JAMESOS_K_USB)
+static const uint8_t STR2[] = {14, 3, 'S', 0, 'M', 0, 'K', 0, '-', 0, '3', 0, '7', 0};
+#else
 static const uint8_t STR2[] = {10, 3, 'F', 0, 'M', 0, '-', 0, '1', 0};
+#endif
+#if BR_PRODUCT_SMK37
+static const uint8_t STR3[] = {14, 3, 'S', 0, 'M', 0, 'K', 0, '-', 0, '3', 0, '7', 0};
+#endif
 
 static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
 {
@@ -364,6 +376,12 @@ static int get_desc(uint32_t wvalue, const uint8_t **d, uint16_t *l)
             *d = STR2;
             *l = sizeof STR2;
             return 1;
+#if BR_PRODUCT_SMK37
+        case 3:
+            *d = STR3;
+            *l = sizeof STR3;
+            return 1;
+#endif
         default:
             return 0;
         }

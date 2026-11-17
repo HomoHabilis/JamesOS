@@ -35,6 +35,7 @@
 #include "stmlib/dsp/units.h"
 #include "stmlib/utils/random.h"
 
+#include "plaits/dsp/dsp.h"  // plaits_config.h
 #include "plaits/resources.h"
 
 namespace plaits {
@@ -102,12 +103,21 @@ void NaiveSpeechSynth::Render(
     float* excitation,
     float* output,
     size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  // SpeechEngine passes click = (trigger == TRIGGER_RISING_EDGE), which is
+  // never true here: Voice::Render sets TRIGGER_HIGH with every rising edge
+  // (plaits_config.h). Init zeroes click_duration_ and only a click raises it.
+  (void)click;
+  const size_t click_duration = 0;
+#else
   if (click) {
     click_duration_ = kSampleRate * 0.05f;
   }
   click_duration_ -= min(click_duration_, size);
+  const size_t click_duration = click_duration_;
+#endif
   
-  if (click_duration_) {
+  if (click_duration) {
     frequency *= 0.5f;
   }
   
@@ -149,7 +159,7 @@ void NaiveSpeechSynth::Render(
       f = 160.0f;
     }
     f = a0 * stmlib::SemitonesToRatio(f - 33.0f);
-    if (click_duration_ && i == 0) {
+    if (click_duration && i == 0) {
       f *= 0.5f;
     }
     filter_[i].set_f_q<FREQUENCY_DIRTY>(f, 20.0f);

@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Origin: Dinghy (zvenson), built on Felucca (Leo Kuroshita, Hügelton Instruments); modified for JamesOS.
+ * GPL-3.0-only. See docs/legal/THIRD-PARTY-NOTICES.md. */
 /* A fake FM-1 on a computer: the app (firmware/src/dinghy.c) runs unchanged on it. platform.c includes
  * this file instead of the hardware when DINGHY_HOST is set. A script presses keys over time; out come
  * the screen (PPM, at the times SHOT asks) and the sound (WAV, as the FM-1 sends it over USB).
@@ -75,6 +77,21 @@ static void fm1_led_key(uint32_t id, int on)
 
 /* the screen: 240 x 240 RGB565, as the ST7789 gets it (gfx.c sends the bytes swapped) */
 static uint16_t fb[240 * 240];
+#ifdef UI_HOME_DOT_WATCH
+static uint16_t host_dot_expected[8u * 240u];
+static uint32_t host_dot_watch, host_dot_changes, host_dot_presence_watch, host_dot_missing;
+static void host_dot_observe(void)
+{
+    if (host_dot_presence_watch) {
+        uint32_t seen[2] = {0u, 0u};
+        for (uint32_t y=200u; y<208u; ++y) for (uint32_t x=112u; x<128u; ++x)
+            if (fb[y*240u+x] != 0u) seen[(x-112u)/8u]++;
+        if (!seen[0] || !seen[1]) ++host_dot_missing;
+    }
+    if (host_dot_watch && memcmp(host_dot_expected, fb + 200u * 240u, sizeof host_dot_expected))
+        ++host_dot_changes;
+}
+#endif
 #ifdef UI_REFRESH_TEST_COUNTERS
 static uint64_t ui_test_lcd_pixel_bytes;
 static uint32_t ui_test_lcd_blits;
@@ -86,14 +103,19 @@ static void lcd_sync(void) {}
 static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
 {
     uint32_t i, j;
+    BR_UIT_LCD_BYTES((x < 240u && y < 240u) ? (x + w > 240u ? 240u - x : w) * (y + h > 240u ? 240u - y : h) * 2u : 0u);
     for (j = y; j < y + h && j < 240u; j++)
         for (i = x; i < x + w && i < 240u; i++)
             fb[j * 240u + i] = c;
+#ifdef UI_HOME_DOT_WATCH
+    host_dot_observe();
+#endif
 }
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
 {
     uint32_t i, j;
     if (x + w > 240u || y + h > 240u) { fprintf(stderr, "out of bounds blit %u %u %u %u\n", x,y,w,h); abort(); }
+    BR_UIT_LCD_BYTES(w * h * 2u);
 #ifdef UI_CUE_FLICKER_TEST
     if (y < 216u && y + h > 216u) ++host_blits_cross_cue;
     if (y == 216u && h == 24u) ++host_cue_blits;
@@ -108,6 +130,9 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
                 uint16_t c = px[j * w + i];
                 fb[(y + j) * 240u + x + i] = (uint16_t)(c >> 8 | c << 8);
             }
+#ifdef UI_HOME_DOT_WATCH
+    host_dot_observe();
+#endif
 }
 #define CV_MAX (240u * 40u)
 #include "gfx.c"
@@ -133,13 +158,27 @@ static int settings_save(const void *p, uint32_t n)
 
 static uint8_t mq[64][3];
 static uint32_t mq_w, mq_r;
+/* Played-note timing: a fake 24 MHz timer (host_ticks: platform_poll keeps it at fm1_ms, a test may set
+ * it finer), each MIDI message's arrival and each note key's last change, as the device records them. */
+/* A message or key change a test puts in place directly, without a stamp, counts as arriving now. */
+static uint32_t host_ticks, mq_time[64], midi_last_timestamp, host_note_tick[27], host_note_stamped;
+static uint8_t mq_stamped[64];
 static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
 {
     if (mq_r == mq_w) return 0;
     *st = mq[mq_r % 64u][0]; *d1 = mq[mq_r % 64u][1]; *d2 = mq[mq_r % 64u][2];
+    midi_last_timestamp = mq_stamped[mq_r % 64u] ? mq_time[mq_r % 64u] : host_ticks;
+    mq_stamped[mq_r % 64u] = 0u;
     mq_r++;
     return 1;
 }
+static uint32_t host_note_key_tick(uint32_t k)
+{
+    return k < 27u && !(((fm1_in.notes ^ host_note_stamped) >> k) & 1u) ? host_note_tick[k] : host_ticks;
+}
+#define BR_NOTE_NOW() host_ticks
+#define BR_NOTE_MIDI_TICK() midi_last_timestamp
+#define BR_NOTE_KEY_TICK(k) host_note_key_tick(k)
 #ifdef MIDI_OUT_TEST_CAPTURE
 static uint32_t host_midi_out_count, host_midi_out_last_status, host_midi_out_last_note;
 #endif
@@ -245,6 +284,7 @@ static void platform_poll(void)                 /* one call = one millisecond */
     static uint32_t step, shot, owed, frame;
     static int32_t blk[2u * HALF_FRAMES];
     fm1_ms++;
+    host_ticks = fm1_ms * 24000u;
     if (host_tap_release) {
         fm1_in.buttons &= ~host_tap_release;
         host_released |= host_tap_release;
@@ -255,10 +295,14 @@ static void platform_poll(void)                 /* one call = one millisecond */
         const host_ev_t *e = &script[step];
         if (e->kind == EV_MIDI) {
             mq[mq_w % 64u][0] = (uint8_t)e->a; mq[mq_w % 64u][1] = (uint8_t)e->b; mq[mq_w % 64u][2] = (uint8_t)e->c;
+            mq_time[mq_w % 64u] = host_ticks; mq_stamped[mq_w % 64u] = 1u;
             mq_w++;
         } else if (e->kind == EV_KEYS) {
+            uint32_t k;
+            for (k = 0; k < 27u; ++k)
+                if ((((uint32_t)e->a ^ fm1_in.notes) >> k) & 1u) host_note_tick[k] = host_ticks;
             host_note_pressed |= (uint32_t)e->a & ~(fm1_in.notes);
-            fm1_in.notes = (uint32_t)e->a;
+            fm1_in.notes = host_note_stamped = (uint32_t)e->a;
         } else if (e->kind == EV_BTN && e->a >= 0 && e->a < 32) {
             uint32_t bit = 1u << (uint32_t)e->a;
             fm1_in.buttons |= bit;

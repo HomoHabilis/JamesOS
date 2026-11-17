@@ -4,6 +4,11 @@
 No automatic restart, no flash erase/program, and no project restore. This
 requires prior consent to restart and discard unsaved RAM, a separately
 verified unit, and a physical power cycle afterwards. The loader runs in RAM.
+
+--target smk37 (alias --smk37-pro): an SMK-37 Pro. Any identified 1 MiB NOR part is accepted,
+the factory calibration marker ("trimdat" at 0xC1224) must be present, only the full flash is
+saved (no FM-1 project bank), the flash ID is saved to flash-id.txt, and the files are handed to
+the user (as in the JamesOS-K tool). FM-1 (the default) is unchanged.
 """
 import argparse,hashlib,importlib.util,os
 from pathlib import Path
@@ -41,16 +46,39 @@ def write_once(path,data):
  with open(path,'rb') as f:
   if f.read()!=data:raise ValueError('backup readback differs')
 
+def smk37_backup(a,upstream,f,gate):
+ """SMK-37 Pro (from the JamesOS-K tool): full flash only, calibration marker, flash-id.txt"""
+ f.start_loader();key,kind,jedec=f.info()
+ print('Flash ID: 0x%06X, device type: 0x%02X, chip key matches: %s' % (jedec,kind,key==0x980f),flush=True)
+ gate.confirm_chip(key,kind,jedec)
+ data=collect(f)
+ if data[0xc1224:0xc122c] != b'trimdat\0':
+  raise ValueError('factory calibration marker missing')
+ a.output_dir.mkdir(mode=0o700,parents=False,exist_ok=False)
+ write_once(a.output_dir/'full-flash.bin',data)
+ dfd=os.open(a.output_dir,os.O_RDONLY)
+ try:os.fsync(dfd)
+ finally:os.close(dfd)
+ upstream.give_to_user(a.output_dir/'full-flash.bin')
+ upstream.give_to_user(a.output_dir)
+ print('Two matching full-flash reads verified:',a.output_dir)
+ print('Full-flash SHA-256:',hashlib.sha256(data).hexdigest())
+ write_once(a.output_dir/'flash-id.txt',('%06X\n'%jedec).encode())
+ upstream.give_to_user(a.output_dir/'flash-id.txt')
+
 def main():
  ap=argparse.ArgumentParser(description=__doc__)
  ap.add_argument('--reference',type=Path,required=True,help='reviewed fm1_recover.py')
  ap.add_argument('--libusb',type=Path,required=True)
  ap.add_argument('--output-dir',type=Path,required=True,help='new private directory')
  ap.add_argument('--already-in-rom',action='store_true',required=True)
+ ap.add_argument('--target',choices=('fm1','smk37'),default='fm1',help='product (default fm1)')
+ ap.add_argument('--smk37-pro',action='store_true',help='alias for --target smk37: verify the SMK-37 Pro NOR part and calibration marker')
  a=ap.parse_args()
+ smk=a.smk37_pro or a.target=='smk37'
  upstream=load_reference(a.reference,a.libusb)
  loader=(a.reference.parent/'loader'/upstream.LOADER[1]).read_bytes()
- gate=ReadOnlyGate(loader)
+ gate=ReadOnlyGate(loader,smk37_pro=smk)
  usb=upstream.usb_module();backend=upstream.backend()
  devices=list(usb.core.find(find_all=True,idVendor=upstream.VID,idProduct=upstream.PID,backend=backend))
  if len(devices)!=1:raise ValueError('expected exactly one ROM device')
@@ -60,6 +88,9 @@ def main():
   cls.__init__(f,wait=0)
   if (f.dev.bus,f.dev.address)!=expected:raise ValueError('ROM device changed during connect')
   if f.inquiry()!=('WL82','UBOOT1.00'):raise ValueError('unexpected ROM inquiry')
+  if smk:
+   smk37_backup(a,upstream,f,gate)
+   return
   f.start_loader();key,kind,jedec=f.info();gate.confirm_chip(key,kind,jedec)
   data=collect(f)
   bank=data[0x97000:0xb1000];archive=pack_backup(bank,'ROM-WL82-flash-%06X'%jedec)

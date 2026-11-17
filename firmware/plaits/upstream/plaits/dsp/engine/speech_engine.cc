@@ -62,6 +62,11 @@ void SpeechEngine::Render(
     float* aux,
     size_t size,
     bool* already_enveloped) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_unpatched = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool trigger_unpatched = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
   const float f0 = NoteToFrequency(parameters.note);
   
   const float group = parameters.harmonics * 6.0f;
@@ -83,7 +88,7 @@ void SpeechEngine::Render(
           size);
     } else {
       lpc_speech_synth_controller_.Render(
-          parameters.trigger & TRIGGER_UNPATCHED,
+          trigger_unpatched,
           parameters.trigger & TRIGGER_RISING_EDGE,
           -1,
           f0,
@@ -119,12 +124,12 @@ void SpeechEngine::Render(
         (group - 2.0f) * 0.275f) - 1;
     
     const bool replay_prosody = word_bank >= 0 && \
-        !(parameters.trigger & TRIGGER_UNPATCHED);
+        !trigger_unpatched;
     
     *already_enveloped = replay_prosody;
     
     lpc_speech_synth_controller_.Render(
-        parameters.trigger & TRIGGER_UNPATCHED,
+        trigger_unpatched,
         parameters.trigger & TRIGGER_RISING_EDGE,
         word_bank,
         f0,

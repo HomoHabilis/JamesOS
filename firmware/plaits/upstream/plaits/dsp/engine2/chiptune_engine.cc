@@ -62,9 +62,14 @@ void ChiptuneEngine::Render(
     float* aux,
     size_t size,
     bool* already_enveloped) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_unpatched = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool trigger_unpatched = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
   const float f0 = NoteToFrequency(parameters.note);
   const float shape = parameters.morph * 0.995f;
-  const bool clocked = !(parameters.trigger & TRIGGER_UNPATCHED);
+  const bool clocked = !trigger_unpatched;
   float root_transposition = 1.0f;
   
   *already_enveloped = clocked;

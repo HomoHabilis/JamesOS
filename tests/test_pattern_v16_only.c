@@ -10,26 +10,26 @@
 #include <stdio.h>
 static int test_exclusive(void *ctx){return *(int *)ctx;}
 int main(void){static const uint32_t legacy_lengths[]={240,240,900,908,916,920,952,960,964};br_session_t current,old,before,after;uint8_t saved[sizeof host_store];uint32_t saved_len,version;
- br_app_init();br_bpm=121;br_midi_channels[0]=0u;br_midi_channels[6]=0u;assert(br_capture(&current)&&current.v3.version==16&&br_session_v16_valid(&current));
+ br_app_init();br_bpm=121;br_midi_channels[0]=0u;br_midi_channels[6]=0u;assert(br_capture(&current)&&current.b[4]==BR_V17_VERSION&&br_session_valid(&current)); /* the current format only (v17) */
  assert(!settings_save(&current,sizeof current));br_bpm=77;br_midi_channels[0]=br_midi_channels[6]=1u;br_load_session();assert(!br_session_save_blocked()&&br_bpm==121&&br_midi_channels[0]==0u&&br_midi_channels[6]==0u);
  assert(br_capture(&before));
  for(version=1;version<=9;version++){
-  old=current;old.v3.version=version;assert(!settings_save(&old,legacy_lengths[version-1]));
+  old=current;old.b[4]=(uint8_t)version;assert(!settings_save(&old,legacy_lengths[version-1]));
   memcpy(saved,host_store,sizeof saved);saved_len=host_store_len;br_load_session();
   assert(br_session_save_blocked());assert(br_capture(&after)&&!memcmp(&before,&after,sizeof before));
   br_save_pending=1;br_save_poll();assert(!br_save_pending&&host_store_len==saved_len&&!memcmp(saved,host_store,sizeof saved));
  }
  for(version=10;version<=15;version++){
-  old=current;old.v3.version=version;
-  assert(!br_restore(&old));assert(!settings_save(&old,version==10?sizeof(br_session_v10_t):sizeof old));
+  old=current;old.b[4]=(uint8_t)version;
+  assert(!br_restore(&old));assert(!settings_save(&old,version==10?968u:sizeof old));
   memcpy(saved,host_store,sizeof saved);saved_len=host_store_len;br_load_session();
   assert(br_session_save_blocked());assert(br_capture(&after)&&!memcmp(&before,&after,sizeof before));
   br_save_pending=1;br_save_poll();assert(!br_save_pending&&host_store_len==saved_len&&!memcmp(saved,host_store,sizeof saved));
  }
  /* Unknown/truncated settings stay protected and never reset the live take. */
- old=current;old.v3.version=99;assert(!settings_save(&old,sizeof old));memcpy(saved,host_store,sizeof saved);br_load_session();
+ old=current;old.b[4]=99;assert(!settings_save(&old,sizeof old));memcpy(saved,host_store,sizeof saved);br_load_session();
  assert(br_session_save_blocked()&&br_capture(&after)&&!memcmp(&before,&after,sizeof before)&&!memcmp(saved,host_store,sizeof saved));
- old=current;old.kit_retrig[3][2]|=0x80u;assert(!br_session_v16_valid(&old));assert(!settings_save(&old,sizeof old));memcpy(saved,host_store,sizeof saved);br_load_session();
+ old=current;old.b[br_v17_wire_at(BR_V17_ROW(T, preset),0u,0u)]=BR_KIT_BRAIDS;assert(!br_session_valid(&old));assert(!settings_save(&old,sizeof old));memcpy(saved,host_store,sizeof saved);br_load_session();
  assert(br_session_save_blocked()&&br_capture(&after)&&!memcmp(&before,&after,sizeof before)&&!memcmp(saved,host_store,sizeof saved));
  /* A blank-looking header does not make programmed payload safe to erase. */
  memset(host_store,0,sizeof host_store);host_store_len=0;host_store[100]=0x7e;memcpy(saved,host_store,sizeof saved);br_load_session();

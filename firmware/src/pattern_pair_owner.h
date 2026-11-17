@@ -22,6 +22,9 @@ typedef struct {
  pps_owner_lease *lease; void *scratch; uint32_t token,slot,first,erased,armed;
  uint16_t programmed; unsigned active,retired,has_erased,erase_armed; uint8_t role[16];
  pps_validate validate; void *validate_ctx;
+#if (defined(FM1_PAIR_STREAM_HOST_TEST) && FM1_PAIR_STREAM_HOST_TEST && !defined(FM1_DEVICE)) || (defined(FM1_PATTERN_DELETE_EXPERIMENT) && FM1_PATTERN_DELETE_EXPERIMENT && defined(FM1_DEVICE))
+ int (*delete_guard)(void *); void *delete_guard_ctx;
+#endif
 } pps_owner;
 /* Zero initialize once. scratch is a dedicated 256-byte provider buffer,
  * disjoint from writer/validator scratch, source, owner, lease and park. The
@@ -45,4 +48,16 @@ int pps_owner_reclaim_incompatible(pps_owner *);
  * supported. All operations and handle lifetimes must remain serialized. */
 int pps_owner_handoff_working(pps_owner *old,pps_owner *next,pps_owner_lease *fresh_lease,uint32_t next_token,void *scratch);
 void pps_owner_end(pps_owner *);
+#if (defined(FM1_PAIR_STREAM_HOST_TEST) && FM1_PAIR_STREAM_HOST_TEST && !defined(FM1_DEVICE)) || (defined(FM1_PATTERN_DELETE_EXPERIMENT) && FM1_PATTERN_DELETE_EXPERIMENT && defined(FM1_DEVICE))
+/* Explicitly gated experiment: caller supplies a live external fence check and an
+ * immutable identity obtained from a prior validated export. No device command
+ * may expose this until interruption and target ownership are qualified. */
+int pps_owner_delete_experiment(pps_owner *,const char name[PS_NAME_BYTES],const uint8_t digest[32],int (*guard)(void *),void *guard_ctx);
+/* Experimental recovery after a new, explicit authorization to discard an
+ * incompatible sibling. Never infer this consent from an earlier delete. */
+int pps_owner_delete_retry_experiment(pps_owner *,const char name[PS_NAME_BYTES],const uint8_t digest[32],int (*guard)(void *),void *guard_ctx);
+/* Separately authorized discard of an unavailable entire slot, pinned by
+ * SHA-256 of both complete raw sectors obtained during a fresh review. */
+int pps_owner_clear_unreadable_experiment(pps_owner *,const uint8_t pair_digest[32],int (*guard)(void *),void *guard_ctx);
+#endif
 #endif

@@ -5,19 +5,32 @@
  * It is a USB-MIDI device "FM-1" (1209:0002) that answers the
  * M-UPGRADE update protocol as "ota-FM-1_904" (hosts look for "ota-"), and
  * writes the app area only (ldr_core.c). The UBOOT soft key works here too.
- * Single compilation unit. */
+ * SMK-37 Pro: it answers with an SMK-37 Pro identity ("ota-SMK-37 Pro_9260001", USB string
+ * "JamesOS-K OTA") and writes the SMK app area. Single compilation unit. */
 #include <stdint.h>
+#include "../product.h"
 #define FELUCCA_LOADER 1
+#if BR_PRODUCT_SMK37
+#define JAMESOS_K_USB 1
+#endif
 #define FELUCCA_CDC 0
 #define FELUCCA_OTA 1
 #define FELUCCA_OTA_DRYRUN 0
 #define FELUCCA_USB_PID 0x0002
+#if BR_PRODUCT_SMK37
+#define FELUCCA_ID "ota-SMK-37 Pro_9260001"
+#else
 #define FELUCCA_ID "ota-FM-1_904"
+#endif
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #include "fm1_time.h"
 #include "fm1_sys.h"
 /* the loader may write the app area and erase update records; never the head */
+#if BR_PRODUCT_SMK37
+#define FL_RANGE_OK(off, n) SMK37_LOADER_WRITE_OK(off, n)      /* app area and staging window */
+#else
 #define FL_RANGE_OK(off, n) (FL_IN(off, n, 0x4000u, 0x93000u) || FL_IN(off, n, 0x93000u, 0xFC000u))
+#endif
 #include "fm1_flash.h"
 #include "../src/libc.c"
 #include "../src/usb.c"
@@ -57,15 +70,22 @@ static int ota_commit(const uint8_t *parm) { (void)parm; return -1; }
 
 /* ---- ldr_core.c hooks: interrupts are off for the whole loader ---- */
 static int ldr_fread(uint32_t off, void *p, uint32_t n) { return fl_read_ram(off, p, n); }
+/* fm1_flash.h: FL_LATE (done after the normal bound) is success; FL_EHARD and
+ * the other negative codes fail as before. The watchdog is fed before each
+ * erase: one erase waits at most 2 s + 20 ms. */
 static int ldr_erase(uint32_t off)
 {
     uint32_t took;
-    return fl_erase4k_ram(off, &took);
+    int rc;
+    fm1_wdt_feed();
+    rc = fl_erase4k_ram(off, &took);
+    return rc == FL_LATE ? 0 : rc;
 }
 static int ldr_prog(uint32_t off, const void *p, uint32_t n)
 {
     uint32_t took;
-    return fl_prog_ram(off, p, n, &took);
+    int rc = fl_prog_ram(off, p, n, &took);
+    return rc == FL_LATE ? 0 : rc;
 }
 static void ldr_record_clear(void)
 {
@@ -95,6 +115,14 @@ void ldr_main(void)
             int rc;
             usb.ota_req = 0;
             rc = ldr_session();
+#if BR_PRODUCT_SMK37
+            if (rc == 0) {                          /* SMK-37 Pro: another flash chip keeps the loader */
+                fm1_delay_ms(200);
+                usb_detach();
+                fm1_delay_ms(30);
+                fm1_reboot();
+            }
+#else
             if (rc == 0 || rc == LDR_EFLASH) {      /* done, or another flash chip: the old firmware again */
                 fm1_delay_ms(200);                  /* the "success" reply leaves */
                 usb_detach();
@@ -104,6 +132,7 @@ void ldr_main(void)
                 }
                 fm1_core_reset();                   /* unknown flash: retain original path */
             }
+#endif
         }
     }
 }

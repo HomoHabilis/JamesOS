@@ -1,7 +1,23 @@
 /* Compare incremental track changes with a clean full redraw. */
 #define DINGHY_HOST 1
+#define UI_REFRESH_TEST_COUNTERS 1
 #define main host_unused_main
 #include "../firmware/src/dinghy.c"
+/* The background fade's colour for row y at a threshold (the firmware works it out inside br_canvas_shade;
+ * tests/test_anim_marks.c checks br_canvas_shade against this same arithmetic). */
+static uint32_t br_gradient_component(uint32_t component, uint32_t y, uint32_t threshold, uint32_t end)
+{
+    uint32_t remaining = end - y, denominator = 2u * end * end;
+    uint32_t n = component * remaining * (remaining + end);
+    return n / denominator + (n % denominator * 32u > (threshold * 2u + 1u) * denominator);
+}
+static uint16_t br_gradient_color(uint16_t color, uint32_t y, uint32_t threshold)
+{
+    uint32_t end = color == br_track_background(0u) ? 92u : 96u;
+    if (y >= end) return C_BLACK;
+    return (uint16_t)((br_gradient_component((color >> 11) & 31u, y, threshold, end) << 11) |
+        (br_gradient_component((color >> 5) & 63u, y, threshold, end) << 5) | br_gradient_component(color & 31u, y, threshold, end));
+}
 #undef main
 #include <assert.h>
 
@@ -9,6 +25,7 @@ static uint16_t expected[240 * 240];
 
 static void check(uint32_t page, uint32_t screen)
 {
+    uint64_t bytes = 0;
     br_ui.page = page;
     br_ui.screen[page] = screen;
     for (uint32_t from = 0; from < 3u; ++from) {
@@ -19,13 +36,16 @@ static void check(uint32_t page, uint32_t screen)
             br_draw(); memcpy(expected, fb, sizeof expected);
             br_ui.part = from; br_ui.redraw = 1; br_draw_layout_old = 0xffffffffu;
             br_draw();
+            ui_test_lcd_pixel_bytes = 0;
             br_ui.part = to; br_ui.redraw = 1; br_draw();
+            bytes += ui_test_lcd_pixel_bytes;
             if (memcmp(expected, fb, sizeof expected)) {
                 fprintf(stderr, "track redraw differs: page %u screen %u %u->%u\n", page, screen, from, to);
                 abort();
             }
         }
     }
+    printf("page %u screen %u average track change: %llu pixel bytes\n", page, screen, (unsigned long long)(bytes / 6u));
 }
 
 static void transitions(void)

@@ -51,7 +51,7 @@ int br_ps_host_init(uint8_t *arena, size_t capacity, br_pattern_snapshot *live,
     editable=live; staging=work; clipboard=clip; scratch=encoded; scratch_size=encoded_capacity;
     quiescent=is_quiescent; quiescent_context=context; clipboard_valid=0;
     if(br_pattern_snapshot_capture(editable)) return 0;
-    fm1_pattern_song_init(&br_ps_state); initialized=1; return 1;
+    fm1_pattern_song_new(&br_ps_state, br_pattern_snapshot_bars(editable)); initialized=1; return 1;
 }
 int br_ps_host_workspace_acquire(br_pattern_snapshot **previous_live,
     br_pattern_snapshot **stage, uint8_t **out_scratch, size_t *capacity)
@@ -77,7 +77,7 @@ int br_ps_host_reset(void)
     if(!br_ps_host_can_reset() || br_pattern_snapshot_capture(editable)) return 0;
     arena=bank.arena; capacity=bank.capacity;
     if(br_pattern_bank_init(&bank,arena,capacity)!=BR_BANK_OK) return 0;
-    fm1_pattern_song_init(&br_ps_state); clipboard_valid=0;
+    fm1_pattern_song_new(&br_ps_state, br_pattern_snapshot_bars(editable)); clipboard_valid=0;
 #if defined(BR_SPLIT_AUDIO) && defined(FM1_PATTERN_AUDIO_IRQ_PROTOTYPE) && FM1_PATTERN_AUDIO_IRQ_PROTOTYPE
     runtime_fault=0;
 #endif
@@ -183,7 +183,7 @@ int br_ps_host_export(br_pattern_bank *view, br_pattern_snapshot *active, fm1_pa
        overlaps(song,sizeof *song,scratch,scratch_size)) return 0;
     if(br_pattern_snapshot_capture(active)) return 0;
     *view=bank; *song=br_ps_state; song->queued=FM1_PATTERN_NONE;
-    song->song_enabled=0; song->song_position=0; song->bars_elapsed=0; return 1;
+    song->song_enabled=0; song->song_position=0; song->bars_elapsed=0; song->pass=0; song->pre=0; return 1;
 }
 int br_ps_select(uint32_t target)
 {
@@ -305,7 +305,7 @@ int br_ps_runtime_service(void)
         if(!runtime_pub->outstanding && !br_pattern_irq_edits_blocked()) {
             br_ps_state.active=(uint8_t)runtime_target; br_ps_state.used=bank.used;
             br_ps_state.queued=FM1_PATTERN_NONE;
-            br_ps_state.song_enabled=0;
+            /* A song keeps driving: its own queued block switches land here. */
             runtime_state=0; return runtime_fault ? -1 : 1;
         }
     }

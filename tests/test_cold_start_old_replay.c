@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "../../vendor360-fix/firmware/hal/fm1_vendor360_policy.h"
+#include "fixtures/fm1_vendor360_policy_1482.h"   /* frozen copy of the 1482 policy */
 int main(void) {
     const fm1_vp_sample_t sample={{0x77,0x60,0x18,0x44,0x0b,0,0,0x1b,0x05,0,0x20}};
     assert(fm1_vp_reset_profile_eligible(1u,1u));

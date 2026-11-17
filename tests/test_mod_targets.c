@@ -18,6 +18,9 @@ static void test_destinations(uint32_t preset)
     base.timbre = base.color = base.filter = base.level = base.decay = 64u;
     base.attack = base.sustain = base.release = base.filter_resonance = 64u;
     base.delay = base.reverb = base.plaits_harmonics = base.plaits_aux = 64u;
+    base.pan = base.drive = 64u;
+    base.gate = 64u;
+    base.filter = 20u;
     for (uint32_t target = 0u; target < BR_TARGET_COUNT; ++target) {
         br_module_defaults(&config, &fx);
         fx.mod_mix = 64u;
@@ -29,13 +32,13 @@ static void test_destinations(uint32_t preset)
         expected = base; expected_fx = fx;
         switch (target) {
         case BR_TARGET_PITCH:
-            if (br_is_kit(preset)) expected.tune = 6;
+            if (br_is_kit(preset)) expected.tune = 2;   /* depth 32: 24*(32/127)^2 = 1.52 st */
             break;
         case BR_TARGET_TIMBRE: expected.timbre = 96u; break;
         case BR_TARGET_COLOR:
             if (preset != BR_KIT_808 && preset != BR_KIT_909) expected.color = 96u;
             break;
-        case BR_TARGET_FILTER: expected.filter = 96u; break;
+        case BR_TARGET_FILTER: expected.filter = 52u; break;
         case BR_TARGET_LEVEL: expected.level = 96u; break;
         case BR_TARGET_DECAY: expected.decay = 96u; break;
         case BR_TARGET_ATTACK: expected.attack = 96u; break;
@@ -51,14 +54,50 @@ static void test_destinations(uint32_t preset)
         case BR_TARGET_OUTPUT:
             if (br_is_plaits(preset)) expected.plaits_aux = 96u;
             break;
+        case BR_TARGET_KIT_GATE:
+            if (br_is_kit(preset)) expected.gate = 96u;
+            break;
+        case BR_TARGET_PAN:
+            if (br_is_plaits(preset)) expected.pan = 96u;
+            break;
+        case BR_TARGET_DIST_SEND: expected.drive = 96u; break;
+#if BR_MODEL_MOD_EXPERIMENT
+        case BR_TARGET_MODEL:
+            if (br_is_plaits(preset)) expected.preset = BR_FIRST_PLAITS + 6u;
+            break;
+#endif
         default: break; /* OFF and retired IDs must remain inert. */
         }
         if (target == BR_TARGET_PITCH && preset == BR_KIT_PLAITS) {
-            fprintf(stderr, "Plaits kit pitch: tune=%d, expected=6\n", actual.tune);
+            fprintf(stderr, "Plaits kit pitch: tune=%d, expected=2\n", actual.tune);
         }
         assert(!memcmp(&actual, &expected, sizeof actual));
         assert(!memcmp(&result_fx, &expected_fx, sizeof result_fx));
-        assert(pitch == (target == BR_TARGET_PITCH ? 32 * 24 * 128 / 127 : 0));
+        assert(pitch == (target == BR_TARGET_PITCH ? 195 : 0));   /* 1.52 st in Q7 */
+    }
+    if (br_is_kit(preset)) {
+        br_module_defaults(&config, &fx); br_mod_init(&state, 1u);
+        base.gate = BR_GATE_OPEN;
+        config.lfo[0].wave = BR_WAVE_SQUARE;
+        config.lfo[0].target = BR_TARGET_KIT_GATE;
+        config.lfo[0].depth = 32u;
+        br_mod_effective(&state, &config, &base, &fx, 0, &actual, &result_fx, &pitch);
+        assert(actual.gate == BR_GATE_OPEN);
+        state.phase[0] = 0x80000000u;
+        br_mod_effective(&state, &config, &base, &fx, 0, &actual, &result_fx, &pitch);
+        assert(actual.gate == 96u);
+    }
+    if (br_is_plaits(preset)) {
+        br_module_defaults(&config, &fx); br_mod_init(&state, 1u);
+        config.lfo[0].wave = BR_WAVE_SQUARE;
+        config.lfo[0].target = BR_TARGET_HARMONICS;
+        config.lfo[0].depth = 32u;
+        base.harmonics_mod = 65u; /* centre */
+        br_mod_effective(&state, &config, &base, &fx, 0, &actual, &result_fx, &pitch);
+        assert(actual.plaits_harmonics == 96u);
+        base.harmonics_mod = 1u; /* -100% */
+        br_mod_effective(&state, &config, &base, &fx, 0, &actual, &result_fx, &pitch);
+        assert(actual.plaits_harmonics == 64u);
     }
     /* Matrix and envelope pitch must reach the same kit tuning consumer. */
     br_module_defaults(&config, &fx);
@@ -66,8 +105,8 @@ static void test_destinations(uint32_t preset)
     config.route[0] = (br_route_config_t){BR_SOURCE_VELOCITY, BR_TARGET_PITCH, -64, 1u};
     state.velocity = 127u;
     br_mod_effective(&state, &config, &base, &fx, 0, &actual, &result_fx, &pitch);
-    assert(pitch == -64 * 24 * 128 / 127);
-    assert(actual.tune == (br_is_kit(preset) ? -12 : 0));
+    assert(pitch == -780);                     /* quadratic patch depth: -24*(64/127)^2 = -6.1 st */
+    assert(actual.tune == (br_is_kit(preset) ? -6 : 0));
     config.route[0].enabled = 0u;
     config.target = BR_TARGET_PITCH; config.amount = 64; state.env = 32767u;
     br_mod_effective(&state, &config, &base, &fx, 0, &actual, &result_fx, &pitch);
@@ -78,32 +117,78 @@ static void test_filter_envelope_patch(void)
 {
     br_sound_t base,out; br_fx_config_t fx,fxout; br_mod_config_t cfg;
     br_mod_state_t state;int32_t pitch;
-    br_preset_sound(BR_FIRST_PLAITS,&base);base.filter=64;base.timbre=64;
+    br_preset_sound(BR_FIRST_PLAITS,&base);base.filter=20;   /* low-pass side */base.timbre=64;
     br_module_defaults(&cfg,&fx);br_mod_init(&state,1u);state.env=32767u;
     assert(cfg.target==BR_TARGET_FILTER && cfg.amount==0);
     cfg.amount=32;
 #define EFFECTIVE() br_mod_effective(&state,&cfg,&base,&fx,0,&out,&fxout,&pitch)
-    EFFECTIVE();assert(out.filter==96 && out.timbre==64);
+    EFFECTIVE();assert(out.filter==52 && out.timbre==64);
     cfg.route[0]=(br_route_config_t){BR_SOURCE_ENV,BR_TARGET_TIMBRE,16,1u};
-    EFFECTIVE();assert(out.filter==64 && out.timbre==80);
-    cfg.route[0].amount=0;EFFECTIVE();assert(out.filter==64 && out.timbre==64);
+    EFFECTIVE();assert(out.filter==20 && out.timbre==80);
+    cfg.route[0].amount=0;EFFECTIVE();assert(out.filter==20 && out.timbre==64);
+    cfg.route[0].target=BR_TARGET_ARP_RATE;
+    EFFECTIVE();assert(out.filter==52); /* ARP routing leaves the direct envelope in place */
+    br_part[0].sound.preset=BR_FIRST_PLAITS;
+    br_part[0].mod.route[0]=cfg.route[0];
+    assert(!br_env_direct_overridden(0));
+    br_part[0].mod.route[0].target=BR_TARGET_FILTER;
+    assert(br_env_direct_overridden(0)); /* zero amount still overrides */
+    br_part[0].mod.route[0].enabled=0;
     cfg.route[0].target=BR_TARGET_FILTER;cfg.route[0].amount=16;
-    EFFECTIVE();assert(out.filter==80); /* no doubled direct filter */
-    cfg.route[0].target=BR_TARGET_OFF;EFFECTIVE();assert(out.filter==96);
+    EFFECTIVE();assert(out.filter==36); /* no doubled direct filter */
+    cfg.route[0].target=BR_TARGET_OFF;EFFECTIVE();assert(out.filter==52);
     cfg.route[0]=(br_route_config_t){BR_SOURCE_ENV,BR_TARGET_TIMBRE,16,0u};
-    EFFECTIVE();assert(out.filter==96 && out.timbre==64);
+    EFFECTIVE();assert(out.filter==52 && out.timbre==64);
     cfg.route[0]=(br_route_config_t){BR_SOURCE_VELOCITY,BR_TARGET_TIMBRE,16,1u};state.velocity=127u;
-    EFFECTIVE();assert(out.filter==96 && out.timbre==80);
+    EFFECTIVE();assert(out.filter==52 && out.timbre==80);
     cfg.route[0].enabled=0;cfg.target=BR_TARGET_PITCH;
-    EFFECTIVE();assert(out.filter==64 && pitch==32*24*128/127); /* legacy direct target */
+    EFFECTIVE();assert(out.filter==20 && pitch==32*24*128/127); /* legacy direct target */
     cfg.route[0]=(br_route_config_t){BR_SOURCE_ENV,BR_TARGET_TIMBRE,16,1u};
     cfg.route[1]=(br_route_config_t){BR_SOURCE_ENV,BR_TARGET_LEVEL,-8,1u};base.level=64;
     EFFECTIVE();assert(pitch==0 && out.timbre==80 && out.level==56);
     /* An unavailable saved destination must not disconnect the filter. */
-    base.preset=BR_KIT_808;cfg.target=BR_TARGET_FILTER;
+    base.preset=BR_KIT_BRAIDS;cfg.target=BR_TARGET_FILTER;
     cfg.route[0]=(br_route_config_t){BR_SOURCE_ENV,BR_TARGET_OUTPUT,16,1u};
-    cfg.route[1].enabled=0;EFFECTIVE();assert(out.filter==96);
+    cfg.route[1].enabled=0;EFFECTIVE();assert(out.filter==52);
 #undef EFFECTIVE
+}
+
+static void test_filter_crossing_and_note_random(void)
+{
+    static const uint32_t presets[] = { BR_FIRST_PLAITS, BR_KIT_BRAIDS, BR_KIT_PLAITS };
+    static const uint32_t bases[] = { 0u, 20u, 63u, 64u, 100u, 127u };
+    br_sound_t base, out; br_fx_config_t fx, result; br_mod_config_t cfg;
+    br_mod_state_t state; int32_t pitch, lfo[BR_LFOS] = {0};
+    for (uint32_t p=0; p<3; ++p) for (uint32_t b=0; b<6; ++b) {
+        br_preset_sound(presets[p], &base); base.filter=bases[b]; base.filter_env_depth=0;
+        for (int32_t sign=-1; sign<=1; sign+=2) {
+            int32_t x=(int32_t)bases[b]+sign*80;
+            uint32_t expected=(uint32_t)(x<0?0:x>127?127:x);
+            br_module_defaults(&cfg,&fx); br_mod_init(&state,1); state.env=32767;
+            cfg.lfo[0].wave=BR_WAVE_SQUARE; cfg.lfo[0].target=BR_TARGET_FILTER; cfg.lfo[0].depth=80;
+            state.phase[0]=sign<0?0x80000000u:0;
+            br_mod_effective(&state,&cfg,&base,&fx,0,&out,&result,&pitch); assert(out.filter==expected);
+            cfg.lfo[0].target=BR_TARGET_OFF;
+            cfg.route[0]=(br_route_config_t){BR_SOURCE_ENV,BR_TARGET_FILTER,sign*80,1};
+            br_mod_effective(&state,&cfg,&base,&fx,0,&out,&result,&pitch); assert(out.filter==expected);
+            cfg.route[0].enabled=0; cfg.target=BR_TARGET_FILTER; cfg.amount=sign*80;
+            br_mod_effective(&state,&cfg,&base,&fx,0,&out,&result,&pitch); assert(out.filter==expected);
+            assert(base.filter==bases[b]);
+        }
+    }
+    br_module_defaults(&cfg,&fx); br_mod_init(&state,42);
+    assert(br_mod_source(&state,BR_SOURCE_NOTE_RANDOM,0,lfo)==0);
+    br_mod_note_on(&state,&cfg,60,100);
+    int32_t first=br_mod_source(&state,BR_SOURCE_NOTE_RANDOM,0,lfo);
+    for (int i=0;i<10;++i) { br_mod_advance(&state,&cfg,32); assert(br_mod_source(&state,BR_SOURCE_NOTE_RANDOM,0,lfo)==first); }
+    br_mod_note_on(&state,&cfg,64,100);
+    assert(br_mod_source(&state,BR_SOURCE_NOTE_RANDOM,0,lfo)!=first);
+    first=br_mod_source(&state,BR_SOURCE_NOTE_RANDOM,0,lfo); br_mod_note_off(&state);
+    assert(br_mod_source(&state,BR_SOURCE_NOTE_RANDOM,0,lfo)==first);
+    cfg.route[0]=(br_route_config_t){BR_SOURCE_NOTE_RANDOM,BR_TARGET_LEVEL,127,1};
+    br_preset_sound(BR_FIRST_PLAITS,&base); base.level=64;
+    br_mod_effective(&state,&cfg,&base,&fx,0,&out,&result,&pitch);
+    assert(out.level!=base.level);
 }
 
 static void test_added_target_routes(void)
@@ -112,7 +197,7 @@ static void test_added_target_routes(void)
         BR_TARGET_RELEASE, BR_TARGET_RESONANCE};
     br_sound_t base, out; br_fx_config_t fx, fxout; br_mod_config_t cfg;
     br_mod_state_t state; int32_t pitch;
-    static const uint32_t presets[] = {BR_FIRST_PLAITS, BR_KIT_808, BR_KIT_909};
+    static const uint32_t presets[] = {BR_FIRST_PLAITS, BR_KIT_BRAIDS, BR_KIT_PLAITS};
     for (uint32_t preset = 0u; preset < 3u; ++preset) {
         br_preset_sound(presets[preset], &base);
         base.attack = base.sustain = base.release = base.filter_resonance = 64u;
@@ -129,9 +214,9 @@ static void test_added_target_routes(void)
             assert(actual==96u);
             if (i<3u) {
                 br_env_t env; memset(&env,0,sizeof env);br_env_refresh(&env,&out,1u);
-                assert(env.attack==br_time_samples(out.attack,3u));
+                assert(env.attack==br_time_samples(out.attack,0u));
                 assert(env.sustain==br_q15(out.sustain));
-                assert(env.release==br_time_samples(out.release,8u));
+                assert(env.release==br_time_samples(out.release,1u));
             }
         }
     }
@@ -141,12 +226,12 @@ static void test_added_target_routes(void)
 static void test_kit_filter_depth_text(void)
 {
     char text[24];
-    br_load_preset(BR_DRUM_PART, BR_KIT_808);
+    br_load_preset(BR_DRUM_PART, BR_KIT_PLAITS);
     br_ui.part = BR_DRUM_PART;
     br_ui.page = BR_PAGE_HOME;
     br_ui.screen[BR_PAGE_HOME] = 1u;
-    br_part[BR_DRUM_PART].mod.target = BR_TARGET_FILTER;
-    br_part[BR_DRUM_PART].mod.amount = 64;
+    br_part[BR_DRUM_PART].mod.target = BR_TARGET_PITCH;      /* HOME ENV DEPTH is the filter's own depth */
+    br_part[BR_DRUM_PART].sound.filter_env_depth = 64;
     br_control_t c = br_control(2u);
     assert(!strcmp(c.label, "ENV DEPTH"));
     br_control_text(2u, &c, text);
@@ -178,8 +263,9 @@ static void test_unused_route_cache(void)
 static void test_menu(uint32_t preset, uint32_t expected_count)
 {
     uint32_t part = br_is_kit(preset) ? BR_DRUM_PART : 0u;
-    br_load_preset(part, preset); br_ui.part = part;
-    assert(br_target_ui_count() == expected_count);
+    br_load_preset(part, preset); br_ui.part = part; br_ui.page = BR_PAGE_LFO; br_ui.screen[BR_PAGE_LFO] = 0u;
+    assert(br_target_ui_count() == expected_count + (part == BR_DRUM_PART ? 0u : 4u)
+           + (BR_MODEL_MOD_EXPERIMENT && br_is_plaits(preset) ? 1u : 0u));
     uint32_t seen = 0u;
     for (uint32_t ordinal = 0u; ordinal < expected_count; ++ordinal) {
         uint32_t target = br_target_ui_value(ordinal);
@@ -188,7 +274,7 @@ static void test_menu(uint32_t preset, uint32_t expected_count)
         assert(br_target_ui_ordinal(target) == ordinal);
         assert(target != BR_TARGET_DRIVE && target != BR_TARGET_GATE);
         assert(strcmp(br_target_ui_name(target), "N/A"));
-        for (uint32_t page = 0u; page < 3u; ++page) {
+        for (uint32_t page = 0u; page < 2u; ++page) {
             if (page == 2u && part == BR_DRUM_PART) continue; /* kit-level page */
             br_ui.page = page == 0u ? BR_PAGE_LFO : page == 1u ? BR_PAGE_ENV : BR_PAGE_ROUTE;
             br_ui.screen[br_ui.page] = page == 1u ? 2u : 0u;
@@ -201,15 +287,25 @@ static void test_menu(uint32_t preset, uint32_t expected_count)
                 page == 1u ? br_part[part].mod.target : br_part[part].mod.route[0].target;
             assert(stored == target);
             br_control_t c = br_control(knob);
-            assert(c.high == (int32_t)expected_count - 1 && c.value == (int32_t)ordinal);
+            assert(c.high == (int32_t)expected_count - 1 + (!page && part != BR_DRUM_PART ? 4 : 0)
+                   + (BR_MODEL_MOD_EXPERIMENT && br_is_plaits(preset) ? 1 : 0) && c.value == (int32_t)ordinal);
             assert(!strcmp(c.text, br_target_ui_name(target)));
             if (page != 1u) {
+                /* HD parameter graphics (batch A, then br_target_widget):
+                 * OFF and unavailable IDs (DRIVE, GATE) use the prohibition
+                 * symbol on every page; DELAY/REVERB/MOD are sends; LFO
+                 * rates are orbits. */
                 static const uint8_t expected[BR_TARGET_COUNT] = {
-                    BR_WIDGET_TOGGLE, BR_WIDGET_POT, BR_WIDGET_TIMBRE, BR_WIDGET_COLOR,
-                    BR_WIDGET_FILTER_TARGET, BR_WIDGET_FADER, BR_WIDGET_ADSR, BR_WIDGET_TOGGLE,
-                    BR_WIDGET_DELAY, BR_WIDGET_REVERB, BR_WIDGET_FX_ENGINE, BR_WIDGET_HARMONICS,
-                    BR_WIDGET_MIX, BR_WIDGET_TOGGLE, BR_WIDGET_ADSR, BR_WIDGET_ADSR,
-                    BR_WIDGET_ADSR, BR_WIDGET_RESONANCE_TARGET, BR_WIDGET_POT, BR_WIDGET_POT
+                    BR_WIDGET_PATCH_OFF, BR_WIDGET_TUNE, BR_WIDGET_TIMBRE, BR_WIDGET_COLOR,
+                    BR_WIDGET_FILTER_TARGET, BR_WIDGET_FADER, BR_WIDGET_ADSR, BR_WIDGET_PATCH_OFF,
+                    BR_WIDGET_SEND, BR_WIDGET_SEND, BR_WIDGET_SEND, BR_WIDGET_HARMONICS,
+                    BR_WIDGET_MIX, BR_WIDGET_PATCH_OFF, BR_WIDGET_ADSR, BR_WIDGET_ADSR,
+                    BR_WIDGET_ADSR, BR_WIDGET_RESONANCE_TARGET, BR_WIDGET_ORBIT, BR_WIDGET_ORBIT,
+                    BR_WIDGET_GATE, BR_WIDGET_TRACK_PAN, BR_WIDGET_SEND,
+                    BR_WIDGET_ARP_MODE, BR_WIDGET_ARP_RATE, BR_WIDGET_OCTAVES, BR_WIDGET_ARP_GATE
+#if BR_MODEL_MOD_EXPERIMENT
+                    , BR_WIDGET_POT
+#endif
                 };
                 assert(br_control_widget(knob, &c) == (page == 2u && target == BR_TARGET_OFF ? BR_WIDGET_PATCH_OFF : expected[target]));
                 if (target == BR_TARGET_ATTACK || target == BR_TARGET_DECAY ||
@@ -227,13 +323,14 @@ static void test_menu(uint32_t preset, uint32_t expected_count)
         }
     }
     assert(!!(seen & (1u << BR_TARGET_OUTPUT)) == !!br_is_plaits(preset));
+    assert(!!(seen & (1u << BR_TARGET_KIT_GATE)) == !!br_is_kit(preset));
     assert(!!(seen & (1u << BR_TARGET_HARMONICS)) ==
         !!(br_is_plaits(preset) || preset == BR_KIT_PLAITS));
     assert(!!(seen & (1u << BR_TARGET_COLOR)) ==
         (preset != BR_KIT_808 && preset != BR_KIT_909));
     if (br_is_plaits(preset) || preset == BR_KIT_PLAITS)
         assert(!strcmp(br_target_ui_name(BR_TARGET_COLOR), "MORPH"));
-    assert(!strcmp(br_target_ui_name(BR_TARGET_DELAY), "DELAY MIX"));
+    assert(!strcmp(br_target_ui_name(BR_TARGET_DELAY), "DELAY SEND"));
     assert(!strcmp(br_target_ui_name(BR_TARGET_REVERB), "REVERB SEND"));
     assert(!strcmp(br_target_ui_name(BR_TARGET_DECAY), "AMP DECAY"));
     if (preset == BR_KIT_808 || preset == BR_KIT_909) {
@@ -249,7 +346,8 @@ static void test_menu(uint32_t preset, uint32_t expected_count)
         br_part[part].mod.lfo[0].target = BR_TARGET_OUTPUT;
         assert(!strcmp(br_control(2u).text, "N/A"));
         br_control_t unavailable = br_control(2u);
-        assert(br_control_widget(2u, &unavailable) == BR_WIDGET_TOGGLE);
+        /* HD shows an unavailable target as off. */
+        assert(br_control_widget(2u, &unavailable) == BR_WIDGET_PATCH_OFF);
         assert(br_target_widget_value(BR_TARGET_OUTPUT) == 0u);
         assert(br_part[part].mod.lfo[0].target == BR_TARGET_OUTPUT);
         br_control_turn(2u, -1);
@@ -257,13 +355,62 @@ static void test_menu(uint32_t preset, uint32_t expected_count)
     }
 }
 
+static void test_global_patch_targets(void)
+{
+    for (uint32_t part = 0u; part < BR_PARTS; ++part) {
+        uint32_t ids[BR_TARGET_UI_COUNT], count;
+        br_ui.part = part; br_ui.page = BR_PAGE_LFO; br_ui.screen[BR_PAGE_LFO] = 0u;
+        count = br_target_ui_count();
+        for (uint32_t i = 0; i < count; ++i) ids[i] = br_target_ui_value(i);
+        br_ui.page = BR_PAGE_ROUTE; br_ui.screen[BR_PAGE_ROUTE] = 0u;
+        assert(br_target_ui_count() == count);
+        for (uint32_t i = 0; i < count; ++i) {
+            assert(br_target_ui_value(i) == ids[i]);
+            br_part[part].mod.route[BR_ROUTES].target = BR_TARGET_OFF;
+            br_control_turn(1u, (int32_t)i);
+            assert(br_part[part].mod.route[BR_ROUTES].target == ids[i]);
+            assert(br_control(1u).value == (int32_t)i);
+        }
+    }
+    br_load_preset(0, BR_FIRST_PLAITS); br_ui.part=0;
+    br_ui.page=BR_PAGE_LFO; br_ui.screen[BR_PAGE_LFO]=0;
+#if BR_MODEL_MOD_EXPERIMENT
+    assert(br_target_ui_ordinal(BR_TARGET_MODEL)==br_target_ui_ordinal(BR_TARGET_OUTPUT)+1u);
+#endif
+    assert(br_target_ui_ordinal(BR_TARGET_DIST_SEND)+1u==br_target_ui_ordinal(BR_TARGET_DELAY));
+    assert(br_target_ui_ordinal(BR_TARGET_DELAY)+1u==br_target_ui_ordinal(BR_TARGET_MOD));
+    assert(br_target_ui_ordinal(BR_TARGET_MOD)+1u==br_target_ui_ordinal(BR_TARGET_REVERB));
+    assert(!strcmp(br_target_ui_name(BR_TARGET_FILTER), "FILTER FREQUENCY"));
+    assert(!strcmp(br_target_ui_name(BR_TARGET_RESONANCE), "FILTER RESONANCE"));
+    assert(br_target_widget(BR_TARGET_ARP_MODE)==BR_WIDGET_ARP_MODE);
+    assert(br_target_widget(BR_TARGET_ARP_RATE)==BR_WIDGET_ARP_RATE);
+    assert(br_target_widget(BR_TARGET_ARP_OCTAVES)==BR_WIDGET_OCTAVES);
+    assert(br_target_widget(BR_TARGET_ARP_GATE)==BR_WIDGET_ARP_GATE);
+}
+
 static void test_patch_source_icons(void)
 {
+    static const uint8_t order[] = {BR_SOURCE_OFF, BR_SOURCE_ENV, BR_SOURCE_AMP,
+        BR_SOURCE_LFO1, BR_SOURCE_LFO2, BR_SOURCE_GLOBAL_LFO, BR_SOURCE_VELOCITY,
+        BR_SOURCE_KEY, BR_SOURCE_GATE, BR_SOURCE_RANDOM, BR_SOURCE_NOTE_RANDOM,
+        BR_SOURCE_LFO1_TRI, BR_SOURCE_LFO1_SQU, BR_SOURCE_LFO2_TRI,
+        BR_SOURCE_LFO2_SQU, BR_SOURCE_OSC, BR_SOURCE_MIX};
+    assert(sizeof order == BR_SOURCE_UI_COUNT);
+    for (uint32_t i=0;i<sizeof order;++i) {
+        assert(br_source_ui_value(i)==order[i]);
+        assert(br_source_ui_ordinal(order[i])==i);
+    }
+    br_load_preset(0,BR_FIRST_PLAITS); br_ui.part=0; br_ui.page=BR_PAGE_ROUTE;
+    assert(br_target_ui_ordinal(BR_TARGET_PAN)==br_target_ui_ordinal(BR_TARGET_LEVEL)+1u);
+    assert(br_target_ui_ordinal(BR_TARGET_DELAY)==br_target_ui_ordinal(BR_TARGET_DIST_SEND)+1u);
+    assert(br_target_ui_ordinal(BR_TARGET_MOD)==br_target_ui_ordinal(BR_TARGET_DELAY)+1u);
+    assert(br_target_ui_ordinal(BR_TARGET_REVERB)==br_target_ui_ordinal(BR_TARGET_MOD)+1u);
+    /* HD parameter graphics (batch A, then br_source_widget). */
     static const uint8_t expected[BR_SOURCE_COUNT] = {
-        BR_WIDGET_PATCH_OFF, BR_WIDGET_WAVE, BR_WIDGET_MIX, BR_WIDGET_ADSR,
+        BR_WIDGET_PATCH_OFF, BR_WIDGET_FOLLOWER, BR_WIDGET_FOLLOWER, BR_WIDGET_ADSR,
         BR_WIDGET_ADSR, BR_WIDGET_WAVE, BR_WIDGET_WAVE, BR_WIDGET_TOGGLE,
-        BR_WIDGET_FADER, BR_WIDGET_POT, BR_WIDGET_WAVE,
-        BR_WIDGET_GATE, BR_WIDGET_WAVE, BR_WIDGET_WAVE, BR_WIDGET_WAVE, BR_WIDGET_WAVE
+        BR_WIDGET_VELOCITY, BR_WIDGET_KEYTRACK, BR_WIDGET_WAVE,
+        BR_WIDGET_GATE_SOURCE, BR_WIDGET_WAVE, BR_WIDGET_WAVE, BR_WIDGET_WAVE, BR_WIDGET_WAVE, BR_WIDGET_WAVE, BR_WIDGET_WAVE
     };
     br_load_preset(0,BR_FIRST_PLAITS);br_ui.part=0;br_ui.page=BR_PAGE_ROUTE;
     br_part[0].mod.lfo[0].wave=BR_WAVE_TRIANGLE;
@@ -272,7 +419,7 @@ static void test_patch_source_icons(void)
         br_ui.screen[BR_PAGE_ROUTE]=page;
         for(uint32_t i=0;i<BR_SOURCE_UI_COUNT;i++) {
             uint32_t source=br_source_ui_id[i];
-            br_part[0].mod.route[page].source=source;
+            br_part[0].mod.route[BR_ROUTES + page].source=source;
             br_control_t c=br_control(0);
             assert(br_source_control_id(0)==source);
             if(source==BR_SOURCE_ENV)assert(!strcmp(c.text,"FILTER ENV"));
@@ -281,6 +428,8 @@ static void test_patch_source_icons(void)
                 assert(br_control_widget_variant(0,&c,BR_WIDGET_ADSR)==4u);
             if(source==BR_SOURCE_LFO1 || source==BR_SOURCE_LFO2)
                 assert(br_control_widget_variant(0,&c,BR_WIDGET_WAVE)==br_part[0].mod.lfo[source-BR_SOURCE_LFO1].wave);
+            if(source==BR_SOURCE_GLOBAL_LFO)
+                assert(br_control_widget_variant(0,&c,BR_WIDGET_WAVE)==br_master.global_lfo.wave);
             if(source==BR_SOURCE_RANDOM)
                 assert(br_control_widget_variant(0,&c,BR_WIDGET_WAVE)==BR_WAVE_RANDOM);
             if(source==BR_SOURCE_LFO1_TRI || source==BR_SOURCE_LFO2_TRI)
@@ -290,10 +439,11 @@ static void test_patch_source_icons(void)
             br_ui.redraw=1;br_draw();
         }
     }
-    br_part[0].mod.route[0].source=BR_SOURCE_LFO3;
+    br_part[0].mod.route[BR_ROUTES].source=BR_SOURCE_LFO3;
     br_ui.screen[BR_PAGE_ROUTE]=0;
     assert(br_source_control_id(0)==BR_SOURCE_OFF);
-    br_ui.screen[BR_PAGE_ROUTE]=2;
+    br_part[0].mod.route[BR_ROUTES].source=BR_SOURCE_OFF;
+    br_ui.page=BR_PAGE_HOME; br_ui.screen[BR_PAGE_HOME]=2;
     assert(br_source_control_id(0)==BR_SOURCE_COUNT);
 }
 
@@ -302,6 +452,14 @@ static void test_saved_ids(void)
     static br_session_t before, after;
     /* Literal wire IDs protect previously saved routes from menu reordering. */
     assert(BR_TARGET_COLOR == 3 && BR_TARGET_OUTPUT == 12 && BR_TARGET_GATE == 13);
+    assert(BR_SOURCE_RANDOM == 10 && BR_SOURCE_GLOBAL_LFO == 16 && BR_SOURCE_NOTE_RANDOM == 17);
+    for (uint32_t id=0;id<BR_SOURCE_COUNT;++id) {
+        if (id==BR_SOURCE_OFF || id==BR_SOURCE_LFO3) continue; /* disabled and retired routes sanitize to OFF */
+        br_part[0].mod.route[0]=(br_route_config_t){id,BR_TARGET_LEVEL,32,1};
+        assert(br_capture(&before)); assert(br_restore(&before)); assert(br_capture(&after));
+        assert(!memcmp(&before,&after,sizeof before));
+        assert(br_part[0].mod.route[0].source==id);
+    }
     for (uint32_t id = 0u; id < BR_TARGET_COUNT; ++id) {
         br_part[0].mod.target = id;
         br_part[0].mod.lfo[0].target = id;
@@ -321,10 +479,10 @@ static void test_page_headings_and_attenuverters(void)
         {BR_PAGE_FX,0,"FX / SENDS"},{BR_PAGE_FX,1,"FX / DRIVE"},{BR_PAGE_FX,2,"FX / DELAY"},{BR_PAGE_FX,3,"FX / MOD"},{BR_PAGE_FX,4,"FX / REVERB"},
         {BR_PAGE_PATTERN,0,"ARP"},
         {BR_PAGE_SEQ,0,"SEQUENCER"},{BR_PAGE_MIX,0,"MIXER"},{BR_PAGE_MIX,1,"GLOBAL / FILTER"},
-        {BR_PAGE_MIX,2,"SETTINGS"},{BR_PAGE_MIX,3,"GLOBAL / PAN"},{BR_PAGE_MIX,4,"COMPRESSOR"},
-        {BR_PAGE_MIX,5,"COMP KNOBS"},{BR_PAGE_ROUTE,0,"PATCH 1"},{BR_PAGE_ROUTE,1,"PATCH 2"},
-        {BR_PAGE_ROUTE,2,"LFO DEPTHS"},{BR_PAGE_LFO,0,"LFO 1"},{BR_PAGE_LFO,1,"LFO 2"},
-        {BR_PAGE_ENV,0,"ENV / AMP"},{BR_PAGE_ENV,1,"ENV / FILTER"},{BR_PAGE_ENV,2,"ENV / SETUP"},{BR_PAGE_SCALE,0,"SOUNDS"}
+        {BR_PAGE_MIX,2,"TEMPO"},{BR_PAGE_MIX,3,"GLOBAL / PAN"},{BR_PAGE_MIX,4,"COMPRESSOR"},
+        {BR_PAGE_MIX,5,"COMP TIME"},{BR_PAGE_ROUTE,0,"PATCH 1"},{BR_PAGE_ROUTE,1,"PATCH 2"},
+        {BR_PAGE_HOME,2,"MOD DEPTHS"},{BR_PAGE_LFO,0,"LFO 1"},{BR_PAGE_LFO,1,"LFO 2"},
+        {BR_PAGE_ENV,0,"ENV / AMP"},{BR_PAGE_ENV,1,"ENV / MOD"},{BR_PAGE_ENV,2,"ENV / MOD SET"},{BR_PAGE_SCALE,0,"SOUNDS"}
     };
     br_ui.part=0; br_load_preset(0,BR_FIRST_PLAITS);
     for(uint32_t i=0;i<sizeof cases/sizeof cases[0];++i){
@@ -335,21 +493,24 @@ static void test_page_headings_and_attenuverters(void)
     br_ui.page=BR_PAGE_HOME;br_ui.screen[BR_PAGE_HOME]=1u;
     br_control_t resonance=br_control(1u);
     assert(!strcmp(resonance.label,"RESONANCE"));
-    assert(br_control_widget(1u,&resonance)==BR_WIDGET_RESONANCE);
-    br_ui.page=BR_PAGE_LFO;assert(br_screen_count()==2u);
-    br_ui.page=BR_PAGE_ROUTE;assert(br_screen_count()==3u);
-    br_ui.screen[BR_PAGE_ROUTE]=2u;
+    /* HD: the perform graph draws RESONANCE, so the slot falls through to the plain POT. */
+    assert(br_control_widget(1u,&resonance)==BR_WIDGET_POT);
+    br_ui.page=BR_PAGE_LFO;assert(br_screen_count()==3u);
+    br_ui.page=BR_PAGE_HOME;assert(br_screen_count()==4u);
+    br_ui.page=BR_PAGE_HOME;br_ui.screen[BR_PAGE_HOME]=2u;
     br_part[0].sound.timbre_mod=64u;br_part[0].sound.fm_mod=64u;br_part[0].sound.morph_mod=64u;
     br_route_config_t before=br_part[0].mod.route[0];
     assert(!strcmp(br_control(0).label,"TIMBRE"));
-    assert(!strcmp(br_control(1).label,"PITCH"));
+    assert(!strcmp(br_control(1).label,"HARMONICS"));
     assert(!strcmp(br_control(2).label,"MORPH"));
-    br_control_turn(0,1);br_control_turn(1,2);br_control_turn(2,3);
-    assert(br_part[0].sound.timbre_mod==65u && br_part[0].sound.fm_mod==66u && br_part[0].sound.morph_mod==67u);
+    br_part[0].sound.harmonics_mod=65u;
+    assert(!strcmp(br_control(3).label,"PITCH"));
+    br_control_turn(0,1);br_control_turn(1,2);br_control_turn(2,3);br_control_turn(3,4);
+    assert(br_part[0].sound.timbre_mod==65u && br_part[0].sound.harmonics_mod==67u && br_part[0].sound.morph_mod==67u && br_part[0].sound.fm_mod==68u);
     assert(!memcmp((const void *)&br_part[0].mod.route[0],&before,sizeof before));
-    br_ui.part=BR_DRUM_PART;br_load_preset(BR_DRUM_PART,BR_KIT_808);
+    br_ui.part=BR_DRUM_PART;br_load_preset(BR_DRUM_PART,BR_KIT_PLAITS);
     br_ui.page=BR_PAGE_ROUTE;br_ui.screen[BR_PAGE_ROUTE]=3;
-    assert(br_screen_count()==1u && !strcmp(br_header_title(),"KIT LEVEL"));
+    assert(br_screen_count()==4u && !strcmp(br_header_title(),"KIT LEVEL"));
 }
 #endif
 
@@ -373,6 +534,11 @@ static void test_panel_jacks(void)
     cfg.route[0].source = BR_SOURCE_LFO2_SQU; st.phase[1] = 0x10000000u; st.phase[0] = 0xC0000000u;
     EFFECTIVE(); assert(out.timbre == 96u);                                      /* LFO 2 has its own */
     cfg.route[0].source = BR_SOURCE_LFO2_TRI; st.phase[1] = 0x40000000u; EFFECTIVE(); assert(out.timbre == 96u);
+    /* The global waveform drives a patch with signed amount, independent of its own depth. */
+    cfg.route[0] = (br_route_config_t){BR_SOURCE_GLOBAL_LFO, BR_TARGET_TIMBRE, 32, 1u};
+    st.global_lfo = 32767; EFFECTIVE(); assert(out.timbre == 96u);
+    st.global_lfo = -32767; EFFECTIVE(); assert(out.timbre == 32u);
+    cfg.route[0].amount = -32; EFFECTIVE(); assert(out.timbre == 96u);
     /* GATE is up while the note is held and down in release. */
     cfg.route[0] = (br_route_config_t){BR_SOURCE_GATE, BR_TARGET_LEVEL, 32, 1u};
     st.stage = BR_MOD_ENV_ATTACK;  EFFECTIVE(); assert(out.level == 96u);
@@ -393,7 +559,7 @@ static void test_panel_jacks(void)
         base_step = a.phase[0];
         cfg.route[0] = (br_route_config_t){BR_SOURCE_VELOCITY, BR_TARGET_LFO1_RATE, 40, 1u};
         b.velocity = 127u; br_mod_effective(&b, &cfg, &base, &fx, 0, &out, &fxout, &pitch);
-        assert(b.lfo_rate_mod[0] == 40 && b.lfo_rate_mod[1] == 0);
+        assert(b.lfo_rate_mod[0] == 40 * 256 && b.lfo_rate_mod[1] == 0);   /* Q8 knob units */
 #if BR_MOD_LFO_PHASE_DELTA_CACHE
         br_mod_advance(&b, &cfg, 256u, 1u);
 #else
@@ -416,7 +582,7 @@ static void test_panel_jacks(void)
     /* A route into the LFO RATE input reaches the right LFO from the UI and through a saved session. */
     br_app_init();
     br_ui.part = 0u; br_ui.page = BR_PAGE_LFO; br_ui.screen[BR_PAGE_LFO] = 1u;
-    br_part[0].mod.route[0] = (br_route_config_t){BR_SOURCE_GATE, BR_TARGET_LFO2_RATE, 10, 1u};
+    br_part[0].mod.route[BR_ROUTES] = (br_route_config_t){BR_SOURCE_GATE, BR_TARGET_LFO2_RATE, 10, 1u};
     assert(br_control_route_badges(1u) != 0u);                                   /* LFO 2's RATE knob shows the route */
     br_ui.screen[BR_PAGE_LFO] = 0u;
     assert(br_control_route_badges(1u) == 0u);                                   /* LFO 1's does not */
@@ -434,17 +600,18 @@ int main(void)
 {
     assert(!strcmp(br_source_name[BR_SOURCE_RANDOM], "RANDOM"));
     br_app_init(); fm1_ms = 2000u; br_ui.message_until = 0u;
-    const uint32_t presets[] = {BR_FIRST_PLAITS, BR_KIT_BRAIDS, BR_KIT_808, BR_KIT_909, BR_KIT_PLAITS};
-    for (uint32_t i = 0; i < 5u; ++i) test_destinations(presets[i]);
+    const uint32_t presets[] = {BR_FIRST_PLAITS, BR_KIT_BRAIDS, BR_KIT_PLAITS};
+    for (uint32_t i = 0; i < 3u; ++i) test_destinations(presets[i]);
 #ifndef MOD_TARGET_BASELINE_DSP
     test_filter_envelope_patch();
+    test_filter_crossing_and_note_random();
     test_added_target_routes();
     test_unused_route_cache();
     test_kit_filter_depth_text();
     for (uint32_t preset = BR_FIRST_PLAITS; preset < BR_FIRST_PLAITS + BR_PLAITS_MODEL_COUNT; ++preset)
-        test_menu(preset, 18u);
-    test_menu(BR_KIT_BRAIDS, 16u); test_menu(BR_KIT_808, 14u);
-    test_menu(BR_KIT_909, 14u); test_menu(BR_KIT_PLAITS, 17u);
+        test_menu(preset, 20u);
+    test_menu(BR_KIT_BRAIDS, 18u); test_menu(BR_KIT_PLAITS, 19u);
+    test_global_patch_targets();
     test_patch_source_icons();
     test_saved_ids();
     test_panel_jacks();

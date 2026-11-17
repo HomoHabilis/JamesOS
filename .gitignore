@@ -1,9 +1,25 @@
 # Private working records and generated output
 /archive/
 /build/
-__pycache__/
-*.py[cod]
-.DS_Store
+build/
+*.log
 .env
 .env.*
-*.log
+
+# Firmware packages made by builds; the published ones in releases/ stay tracked
+*.fwsc
+!/releases/*.fwsc
+
+# Flash dumps, device captures and recordings (private: calibration, keys, user data)
+*.bin
+*.wav
+*.aif
+*.aiff
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+._*

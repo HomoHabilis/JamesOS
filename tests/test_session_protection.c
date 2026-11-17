@@ -90,10 +90,8 @@ int main(void)
     }
     assert(br_capture(&session));
     check_status(0u);
-    br_legacy_migration_pending = 1u;
-    br_legacy_raw_length = 968u; br_legacy_raw_version = 10u;
+    br_legacy_migration_pending = 1u;   /* never set by firmware since v17; the status bit still works */
     check_status(1u);
-    assert(br_legacy_migration_pending && br_legacy_raw_length == 968u);
     upload(&session);
     check_status(0u); /* Existing converted-session migration path. */
     /* Exercise the real loader's truncated-record detection. */

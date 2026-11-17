@@ -12,7 +12,7 @@
 #include "pattern_compressed_project.h"
 #include <assert.h>
 #include <stdio.h>
-static uint8_t session[3484], small_arena[7680], large_arena[60000], encoded[4335], wire[3580], temp_session[3484];
+static uint8_t session[FM1_PROJECT_SESSION], small_arena[7680], large_arena[60000], encoded[4335], wire[3580], temp_session[FM1_PROJECT_SESSION];
 static br_session_t session_scratch;
 static br_pattern_snapshot initial, small_live, large_live, small_work, large_work, project_pattern, compare;
 static br_pattern_bank small,large;
@@ -21,7 +21,7 @@ static fm1_project_source source;
 static fm1_pattern_song song;
 static uint8_t arena_backup[7680];
 static br_pattern_snapshot live_backup, expected_target, changed_outgoing;
-static uint8_t load_arena[3584], loaded_session[3484];
+static uint8_t load_arena[3584], loaded_session[FM1_PROJECT_SESSION];
 static br_pattern_bank loaded_bank;
 static br_pattern_snapshot loaded_live;
 static fm1_pattern_song loaded_song;

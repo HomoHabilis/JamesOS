@@ -2,9 +2,11 @@
 #ifndef BRAIDS_INSTRUMENT_H
 #define BRAIDS_INSTRUMENT_H
 #include <stdint.h>
+#include "br_shared_inline.h"
 #include "instrument_failure_job_profile.h"
 #include "instrument_modules.h"
 #include "../hal/fm1_audio_block.h"
+#include "../product.h"
 
 /* Private fixed-eight foreground planner prototype. Off unless explicitly enabled. */
 #ifndef BR_AUDIO_FOREGROUND_FIXED8_PLAN
@@ -52,6 +54,12 @@ void br_audio_fixed8_foreground_invalidate(void);
 #define BR_BANK_STEPS 16u
 #define BR_BANKS (BR_STEPS / BR_BANK_STEPS)
 #define BR_BLOCK BR_AUDIO_BLOCK_FRAMES
+/* A played note (MIDI in, keys, pads) sounds this long after it arrived, whatever the foreground was
+ * doing meanwhile (instrument_audio.c br_engine_note_arrival). Notes reach the foreground later than
+ * this only behind a longer stall; those start at the next block, as every note did before. */
+#ifndef BR_NOTE_DELAY_MS
+#define BR_NOTE_DELAY_MS 6u
+#endif
 #define BR_FIRST_PLAITS 52u
 #define BR_PLAITS_MODEL_COUNT 24u
 #ifndef BR_ENABLE_PLAITS
@@ -66,17 +74,23 @@ void br_audio_fixed8_foreground_invalidate(void);
 #define BR_FIRST_KIT 48u
 /* Id 51 is reserved: never selectable on any track, kept so that saved preset ids stay stable. */
 enum { BR_KIT_BRAIDS = 48, BR_KIT_808, BR_KIT_909, BR_PRESET_RESERVED };
-static inline int br_is_kit(uint32_t preset)
-{ return (preset >= BR_KIT_BRAIDS && preset <= BR_KIT_909) ||
+BR_SHARED_INLINE int br_is_kit(uint32_t preset)
+{ return preset == BR_KIT_BRAIDS ||
     (BR_ENABLE_PLAITS && preset == BR_KIT_PLAITS); }
-static inline int br_is_plaits(uint32_t preset)
+BR_SHARED_INLINE int br_is_plaits(uint32_t preset)
 { return preset >= BR_FIRST_PLAITS && preset < BR_FIRST_PLAITS + BR_PLAITS_MODEL_COUNT; }
 /* A saved destination can be valid but unused by the selected engine. Share
  * this contract between target menus, modulation and the inactive fast path.
  * Never renumber or rewrite saved destinations when switching sounds. */
-static inline uint32_t br_mod_target_supported(uint32_t preset, uint32_t target)
+BR_SHARED_INLINE uint32_t br_mod_target_supported(uint32_t preset, uint32_t target)
 {
     if (!br_mod_target_active(target)) return 0u;
+    if (target == BR_TARGET_KIT_GATE) return br_is_kit(preset);
+    if (br_target_is_arp(target)) return br_is_plaits(preset);
+    if (target == BR_TARGET_PAN) return br_is_plaits(preset);
+#if BR_MODEL_MOD_EXPERIMENT
+    if (target == BR_TARGET_MODEL) return br_is_plaits(preset);
+#endif
     if (target == BR_TARGET_HARMONICS)
         return br_is_plaits(preset) || preset == BR_KIT_PLAITS;
     if (target == BR_TARGET_OUTPUT) return br_is_plaits(preset);
@@ -85,7 +99,7 @@ static inline uint32_t br_mod_target_supported(uint32_t preset, uint32_t target)
     return 1u;
 }
 /* Track roles are invariant across UI, MIDI, session restore, and audio. */
-static inline int br_preset_allowed_on_part(uint32_t part, uint32_t preset)
+BR_SHARED_INLINE int br_preset_allowed_on_part(uint32_t part, uint32_t preset)
 { return part < BR_PARTS && preset < BR_PRESET_COUNT &&
     (part == BR_DRUM_PART ? br_is_kit(preset) : (BR_ENABLE_PLAITS && br_is_plaits(preset))); }
 static inline uint32_t br_default_part_preset(uint32_t part)
@@ -121,10 +135,11 @@ typedef struct {
     uint32_t preset, timbre, color;
     int32_t tune;
     uint32_t level, attack, decay, sustain, release;
-    uint32_t drive, delay, reverb, space, mute;
+    uint32_t drive, delay, reverb, mute;
     uint32_t filter;
     uint32_t filter_resonance;
-    uint32_t filter_keytrack;
+    uint32_t filter_keytrack; /* 0..127: 0 off, 127 = 1 octave per octave */
+    int32_t filter_env_depth; /* -127..127: mod envelope -> cutoff, besides its own TARGET */
     uint32_t timbre_mod, fm_mod, morph_mod;
     uint32_t drum_snap;
     uint32_t plaits_harmonics, plaits_aux;
@@ -132,6 +147,9 @@ typedef struct {
     uint32_t gate; /* post-ADSR maximum voice duration; BR_GATE_OPEN bypasses it */
     uint32_t drum_voice_mask; /* low eight bits: two-bit voice choice per lane */
     uint32_t drum_key_lane; /* audio-block snapshot, 0..3, derived from compressor source */
+    uint32_t voice_mode; /* 0: inherit older project's global setting, 1: mono, 2: poly */
+    uint32_t harmonics_mod; /* 0: legacy unity; 1..128: attenuverter value + 1 */
+    uint32_t portamento, glide_mode, amp_mode, lpg_gate; /* per synth track; kit ignores these */
 } br_sound_t;
 
 /* Finite legacy gate values retain the existing note-length response.
@@ -159,9 +177,8 @@ typedef struct {
     volatile br_mod_config_t mod;
     volatile br_fx_config_t fx;
     volatile uint32_t lane_level[BR_DRUM_LANES];
-    volatile uint32_t lane_gate[BR_DRUM_LANES]; /* maximum per-hit duration, quarter-note beats 1..128 */
     volatile uint32_t step[BR_STEPS];
-    volatile uint32_t length, division, swing, gate;
+    volatile uint32_t length, division;
     /* Arpeggiator (synth tracks): mode, rate index, octaves 1..4, gate 1..127,
      * latch and follow-swing flags, repeats 1..4. */
     volatile uint32_t arp_mode, arp_rate, arp_octaves, arp_gate;
@@ -269,7 +286,7 @@ void br_audio_kit_meter_enable(uint32_t enabled);
 uint32_t br_audio_kit_meter_read(uint32_t lane);
 uint32_t br_audio_kit_meter_epoch(void);
 extern br_part_t br_part[BR_PARTS];
-extern volatile uint32_t br_bpm, br_playing, br_transport_phase;
+extern volatile uint32_t br_bpm, br_swing, br_playing, br_transport_phase;
 extern volatile uint8_t br_midi_channels[7], br_midi_clock_enabled, br_midi_clock_active;
 extern volatile uint32_t br_midi_clock_bpm;
 extern volatile uint32_t br_midi_clock_generation;
@@ -291,7 +308,7 @@ extern volatile uint32_t br_ready;
 #else
 #define BR_AUDIO_API static
 static br_part_t br_part[BR_PARTS];
-static volatile uint32_t br_bpm = 120, br_playing;
+static volatile uint32_t br_bpm = 120, br_swing, br_playing;
 static volatile uint8_t br_midi_channels[7] = {1,2,3,4,5,6,7};
 static volatile uint8_t br_midi_clock_enabled, br_midi_clock_active;
 static volatile uint32_t br_midi_clock_bpm;
@@ -636,6 +653,16 @@ void br_fx_fusion_shared_reverb(uint32_t n);
 uint32_t br_fx_shared_reverb_cost(void);
 #if defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO)
 extern volatile uint32_t br_audio_source_worker_fault;
+extern volatile uint32_t br_audio_fault_site[3];
+/* Fault sites (0xB2 words 18 and 19): the CPU0/CPU1 source join, a CPU0-only
+ * source queue, the CPU1 master-FX stream, the CPU1 track-FX batch. */
+enum { BR_AUDIO_FAULT_SOURCE_JOIN = 1u, BR_AUDIO_FAULT_CPU0_QUEUE = 2u,
+       BR_AUDIO_FAULT_STREAM = 3u, BR_AUDIO_FAULT_FX_BATCH = 4u };
+#define BR_AUDIO_FAULT_SITE(n) do { \
+    if (!br_audio_fault_site[0]) br_audio_fault_site[0] = (n); \
+    br_audio_fault_site[1] = (n); } while (0)
+#else
+#define BR_AUDIO_FAULT_SITE(n) ((void)0)
 #endif
 #endif
 
@@ -666,25 +693,55 @@ enum { BR_HEAT_BIT, BR_HEAT_SAT, BR_HEAT_WOW, BR_HEAT_COUNT };
 /* Legacy fields remain for migration, never as independent active processors.
  * New controls select exactly one HEAT engine and one amount. */
 typedef struct {
-    uint32_t filter, distortion, saturation, wow, resonance;
+    uint32_t filter, resonance;
     uint32_t heat_type, heat_amount;
-    /* Global filter: bipolar depth of the note-triggered envelope (-127..127) and the
-     * smoothness of cutoff moves (0..100). Stored in the spare legacy gate bytes. */
+    /* Keep the retired smooth field for saved project compatibility. */
     int32_t env_depth;
     uint32_t smooth;
+    uint32_t filter_snap_generation; /* transient; never serialized */
 } br_master_fx_t;
 typedef struct {
     volatile uint32_t revision;
     volatile br_master_fx_t fx;
-    volatile uint32_t select_target;
     volatile br_compressor_config_t comp;
+    /* The one shared reverb: engine id (BR_REVERB_ROOM/HALL/SPACE), SIZE and
+     * DECAY. Plain words, read once per block by br_gr_prepare. */
+    volatile uint32_t reverb_engine, reverb_size, reverb_decay;
+    /* Its five optional controls (BR_REVERB_X_*: pre-delay, tone, mod depth, low
+     * cut, width), each 0..127, used only while its bit in reverb_manual is set;
+     * otherwise the reverb derives it from TYPE/SIZE/DECAY (rv2 RV2_DERIVE). */
+    volatile uint8_t reverb_extra[5];
+    volatile uint8_t reverb_manual;
+    volatile br_lfo_config_t global_lfo;
+    volatile br_route_config_t global_route[BR_GLOBAL_ROUTES];
 } br_master_t;
+enum { BR_REVERB_X_PREDELAY, BR_REVERB_X_TONE, BR_REVERB_X_MOD, BR_REVERB_X_LOW_CUT, BR_REVERB_X_WIDTH };
+#define BR_REVERB_EXTRA_DEFAULTS {32u, 64u, 64u, 0u, 127u}
+#define BR_MASTER_DEFAULTS {0, {64, 0, BR_HEAT_BIT, 0, 0, 0, 0}, BR_COMP_DEFAULTS, BR_REVERB_ROOM, 0, 64, \
+    BR_REVERB_EXTRA_DEFAULTS, 0u, {BR_WAVE_SINE, 102u, 0u, BR_TARGET_OFF}, {{0}}}
+/* Saved settings without a screen control yet. The delay engine reads delay
+ * width (ping-pong), tone and wow rate from here; the engine does not act yet
+ * on LFO sync, division, key reset and fade-in, MOD feedback, or (master) the
+ * leveler switch. */
+typedef struct {
+    uint8_t lfo_sync[BR_LFOS], lfo_division[BR_LFOS], lfo_key_reset[BR_LFOS], lfo_fade_in[BR_LFOS];
+    uint8_t delay_width, delay_tone, delay_wow_rate, mod_feedback, delay_short, drive_bias;
+} br_part_pending_t;
+#ifndef BR_FX_DELAY_WIDTH_DEFAULT
+#define BR_FX_DELAY_WIDTH_DEFAULT 0u   /* a trial build sets -DBR_FX_DELAY_WIDTH_DEFAULT=127 */
+#endif
+/* delay: width (ping-pong) 0, tone 127 = open, wow rate 64 = 0.6 Hz */
+#define BR_PART_PENDING_DEFAULTS {{0u, 0u}, {0u, 0u}, {0u, 0u}, {0u, 0u}, BR_FX_DELAY_WIDTH_DEFAULT, 127u, 64u, 0u, 0u, 0u}
  #ifdef BR_SPLIT_AUDIO
 extern br_master_t br_master;
+extern br_part_pending_t br_part_pending[BR_PARTS];
+extern uint8_t br_leveler_on;
 extern br_compressor_config_t br_source_compressor;
 extern uint32_t br_source_compressor_revision;
 #else
-static br_master_t br_master = {0, {64, 0, 0, 0, 0, BR_HEAT_BIT, 0}, BR_SELECT_MASTER_FILTER, BR_COMP_DEFAULTS};
+static br_master_t br_master = BR_MASTER_DEFAULTS;
+static br_part_pending_t br_part_pending[BR_PARTS] = {BR_PART_PENDING_DEFAULTS, BR_PART_PENDING_DEFAULTS, BR_PART_PENDING_DEFAULTS, BR_PART_PENDING_DEFAULTS};
+static uint8_t br_leveler_on;
 static br_compressor_config_t br_source_compressor = BR_COMP_DEFAULTS;
 static uint32_t br_source_compressor_revision = 0xffffffffu;
 #endif
@@ -697,6 +754,7 @@ typedef struct {
     br_master_fx_t master_fx;
     br_compressor_config_t compressor;
     uint32_t revision;
+    uint8_t reverb_size, reverb_decay, reverb_lfo_active;
 } br_pipeline_controls_t;
 typedef struct {
     int32_t bus[BR_PARTS][BR_BLOCK];
@@ -738,9 +796,37 @@ uint32_t br_engine_pipeline_mode_get(void);
 uint32_t br_engine_pipeline_uncontained_fault_get(void);
 uint32_t br_engine_pipeline_mode_set(uint32_t mode);
 uint32_t br_engine_pipeline_generation_get(void);
+#if BR_CAP_WHEELS && defined(FM1_DEVICE)
+extern volatile int32_t br_smk_bend_q7[BR_SYNTH_PARTS];
+extern volatile uint8_t br_smk_mod_wheel[BR_SYNTH_PARTS];
+#endif
 void br_engine_note_on(uint32_t part, uint32_t note, uint32_t velocity);
 void br_engine_note_off(uint32_t part, uint32_t note);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+void br_engine_note_on_tagged(uint32_t part, uint32_t note, uint32_t velocity, uint32_t tag);
+void br_engine_note_off_tagged(uint32_t part, uint32_t note, uint32_t tag);
+uint32_t br_poly_transition_needed(uint32_t part, uint32_t suspend);
+/* Legacy global POLY setting: inherited by tracks restored from older sessions. */
+#ifdef BR_SPLIT_AUDIO
+extern volatile uint8_t br_poly_user_off;
+#else
+static volatile uint8_t br_poly_user_off;
+#endif
+int br_poly_transition_commit(uint32_t action, uint32_t part);
+uint32_t br_poly_mode_active(void);
+#if defined(BR_ADAPTIVE_POLY) && BR_ADAPTIVE_POLY
+void br_poly_capacity_snapshot(uint32_t words[4]);
+#endif
+int br_fx_poly_can_loan(uint32_t part, uint32_t required);
+int br_fx_poly_loan_acquire(uint32_t part, uint32_t required, void **buffer, uint32_t *bytes);
+int br_fx_poly_loan_release(void);
+uint32_t br_fx_poly_loan_active(void);
+int br_fx_poly_mode_set(uint32_t part, uint32_t enabled);
+#endif
 void br_engine_midi_transport(uint8_t status);
+void br_engine_note_arrival(uint32_t tick);
+void br_engine_note_arrival_end(void);
+void br_engine_note_clock(uint32_t tick);
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
 void br_engine_clock_diag_snapshot(uint32_t out[23]);
 void br_engine_clock_dma_edge(uint32_t tick, uint32_t half, uint32_t lead_frames);
@@ -764,11 +850,25 @@ int br_fx_quiet(void);
 uint32_t br_fx_delay_samples(uint32_t value);
 uint32_t br_fx_delay_note_index(uint32_t stored);
 uint32_t br_fx_delay_note_store(uint32_t index);
+uint32_t br_fx_delay_choice(uint32_t stored, uint32_t short_note);
+uint32_t br_fx_delay_choice_samples(uint32_t choice);
+void br_fx_delay_choice_set(uint32_t choice, uint32_t *stored, uint8_t *short_note);
+uint32_t br_mod_rate_inc(uint32_t rate);   /* MOD RATE 0..127 -> LFO phase step per 44.1 kHz sample */
+uint32_t br_mod_depth_span(uint32_t engine, uint32_t depth, uint32_t rate);  /* delay sweep, 44.1 kHz samples */
+uint32_t br_mod_depth_cents(uint32_t engine, uint32_t depth, uint32_t rate); /* CHORUS / VIBRATO deviation */
 int32_t br_clip(int32_t x, int32_t low, int32_t high);
-uint32_t br_time_samples(uint32_t value, uint32_t scale);
-uint32_t br_lfo_rate_millihz(uint32_t rate);
+uint32_t br_time_samples(uint32_t value, uint32_t decay_curve); /* 0: attack, else decay/release */
+uint32_t br_lpg_release_samples(void);
+uint32_t br_lpg_gate_samples(uint32_t value);
+uint32_t br_lfo_rate_hz_q20(uint32_t rate_q8);   /* LFO rate, v in Q8 -> Hz in Q20 */
 uint32_t br_audio_lfo_phase(uint32_t part, uint32_t lfo);
+uint32_t br_audio_global_lfo_phase(void);
+uint32_t br_audio_global_lfo_target_value(uint32_t target, uint32_t base, uint32_t maximum);
+#if BR_MODEL_MOD_EXPERIMENT
+uint32_t br_audio_model_target(uint32_t part, uint32_t fallback);
+#endif
 void br_engine_record_position(uint32_t part, uint32_t *step, uint32_t *elapsed, uint32_t *duration, uint32_t *unit);
+void br_engine_record_skip(uint32_t part, uint32_t step, uint32_t lane);
 int32_t br_audio_patch_value(uint32_t part, uint32_t slot);
 int32_t br_comp_threshold_db(uint32_t value);
 uint32_t br_comp_attack_samples(uint32_t value);
@@ -800,7 +900,14 @@ static inline void br_audio_late_drop_snapshot(uint32_t out[9])
 static inline void br_audio_late_drop_reset(void) { }
 static void br_engine_note_on(uint32_t part, uint32_t note, uint32_t velocity);
 static void br_engine_note_off(uint32_t part, uint32_t note);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+static void br_engine_note_on_tagged(uint32_t part, uint32_t note, uint32_t velocity, uint32_t tag);
+static void br_engine_note_off_tagged(uint32_t part, uint32_t note, uint32_t tag);
+#endif
 static void br_engine_midi_transport(uint8_t status);
+static void br_engine_note_arrival(uint32_t tick);
+static void br_engine_note_arrival_end(void);
+static void br_engine_note_clock(uint32_t tick);
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
 static void br_engine_clock_diag_snapshot(uint32_t out[23]);
 static void br_engine_clock_dma_edge(uint32_t tick, uint32_t half, uint32_t lead_frames);

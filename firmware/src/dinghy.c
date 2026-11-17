@@ -1,9 +1,25 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* BRAIDS instrument on Dinghy's platform. The device plumbing stays in platform.c. */
+#include "../product.h"
+#if BR_PRODUCT_SMK37
+#define APP_NAME "JAMESOS-K"
+#else
 #define APP_NAME "JAMESOS"
+#endif
 #include "platform.c"
 #include "instrument.h"
 #include "instrument_drums.h"
+#if BR_SHARED_INLINE_EXTERN
+/* The one external copy of the shared helpers (br_shared_inline.h). */
+extern inline uint32_t br_mod_target_active(uint32_t target);
+extern inline uint32_t br_mod_source_active(uint32_t source);
+extern inline int br_is_kit(uint32_t preset);
+extern inline int br_is_plaits(uint32_t preset);
+extern inline uint32_t br_mod_target_supported(uint32_t preset, uint32_t target);
+extern inline int br_preset_allowed_on_part(uint32_t part, uint32_t preset);
+extern inline uint32_t br_drum_lane(uint32_t note);
+extern inline uint32_t br_drum_lane_note(uint32_t lane);
+#endif
 #ifdef BR_PATTERN_SONG_EXPERIMENT
 #include "pattern_song.h"
 extern fm1_pattern_song br_ps_state;
@@ -11,6 +27,11 @@ extern int br_ps_select(uint32_t), br_ps_copy_pattern(uint32_t), br_ps_paste_pat
 #if defined(BR_PATTERN_OWNER_HOST) && BR_PATTERN_OWNER_HOST
 extern int br_ps_host_can_reset(void), br_ps_host_reset(void);
 static uint32_t br_ps_external_restore_completed;
+#endif
+#if defined(BR_PATTERN_OWNER_HOST) && BR_PATTERN_OWNER_HOST && defined(FM1_PATTERN_TICK_CLAIM_PROTOTYPE) && \
+    FM1_PATTERN_TICK_CLAIM_PROTOTYPE && defined(FM1_PATTERN_AUDIO_IRQ_PROTOTYPE) && FM1_PATTERN_AUDIO_IRQ_PROTOTYPE
+#define BR_ARRANGER 1   /* song arrangement transport: pattern_arranger.c */
+static void br_arranger_edge(int masked);
 #endif
 #endif
 #if defined(BR_SOURCE_QUEUE_TEST)
@@ -30,12 +51,15 @@ static volatile uint32_t br_diagnostic_restore_in_progress;
  * does not enable or implement multi-pattern flash persistence. */
 #include "pattern_owner.h"
 static br_pattern_snapshot br_ps_target_live, br_ps_target_stage;
-uint8_t br_ps_target_arena[7756] __attribute__((aligned(4)));
+/* A loaded project can have 4096 bytes of inactive patterns. The audio
+ * handoff must also reserve a worst-case 4335-byte outgoing pattern, even
+ * if the pattern is edited after the next one was queued. */
+uint8_t br_ps_target_arena[8432] __attribute__((aligned(4)));
 static uint8_t br_ps_target_encoded[4335] __attribute__((aligned(4)));
 /* Reserved separately so a future load can validate an entire compressed
  * replacement without modifying the current bank. Until the target project
  * adapter exists, no code reads from or writes projects through this buffer. */
-static uint8_t br_ps_target_load_arena[3584] __attribute__((section(".pool"), aligned(4)));
+static uint8_t br_ps_target_load_arena[4096] __attribute__((section(".pool"), aligned(4)));
 static br_pattern_irq_publication br_ps_target_pub __attribute__((section(".pool")));
 static int br_ps_target_quiet(void *context)
 { (void)context; return !br_playing && br_diagnostic_restore_in_progress; }
@@ -118,6 +142,9 @@ static uint32_t br_foreground_mutation_begin(uint32_t *irq_state)
 
 static void br_foreground_mutation_end(uint32_t irq_state)
 {
+#ifdef BR_ARRANGER
+    br_arranger_edge(1);
+#endif
     RING_PUBLISH();
     br_foreground_irq_restore(irq_state);
 }
@@ -146,30 +173,63 @@ static br_punch_cfg_t br_punch_cfg = BR_PUNCH_CFG_DEFAULTS;
 static br_punch_dsp_t br_punch_dsp;
 static uint8_t br_punch_echo_part;
 static uint32_t br_punch_return_page, br_punch_return_screen;
+#if BR_PRODUCT_SMK37
+#define BR_PLAY_KEYS 64u /* physical keys plus separate sequencer audition slots */
+#else
+#define BR_PLAY_KEYS 27u
+#endif
 static struct {
     uint32_t page, part, cursor, lane, pattern, redraw, last_draw, message_until, message_start;
+#if BR_PRODUCT_SMK37
+    uint8_t screen[BR_PAGE_COUNT]; /* screen indices fit in a byte */
+#else
     uint32_t screen[BR_PAGE_COUNT];
-    uint32_t step_bank, gate_bank, seq_pressed, seq_turned, seq_was_active;
+#endif
+    uint32_t step_bank, gate_bank;
+#if BR_PRODUCT_SMK37
+    uint8_t seq_pressed, seq_turned, seq_was_active;
+#else
+    uint32_t seq_pressed, seq_turned, seq_was_active;
+#endif
     uint32_t step_press_key, step_press_at, step_press_part, step_press_step;
     uint32_t step_press_lane, step_press_kit, step_press_active, step_edit_active;
-    uint32_t retrig_key, retrig_step, retrig_lane, retrig_part; /* key+1, zero when released */
+#if BR_PRODUCT_SMK37
+    uint8_t retrig_key, retrig_step, retrig_lane, retrig_part; /* key+1, zero when released */
+#else
+    uint32_t retrig_key, retrig_step, retrig_lane, retrig_part;
+#endif
     uint32_t note[BR_PARTS];
     struct { uint16_t length; uint8_t note, velocity, condition; } seq_default[BR_PARTS][BR_DRUM_LANES];
-    uint32_t previous_keys, held_note[27], held_part[27], edit_time, edit_key;
+    uint32_t previous_keys, edit_time, edit_key;
+#if BR_PRODUCT_SMK37
+    uint8_t held_note[BR_PLAY_KEYS], held_part[BR_PLAY_KEYS]; /* MIDI note + 1, track */
+#else
+    uint32_t held_note[BR_PLAY_KEYS], held_part[BR_PLAY_KEYS];
+#endif
     uint32_t glo_pending, glo_used, glo_snap, glo_start;   /* glo_snap: this GLO press began on the global filter page */
     /* Keys routed to the arpeggiator, and notes sustained by HOLD. */
-    uint8_t held_arp[27];
+    uint8_t held_arp[BR_PLAY_KEYS];
     uint8_t fx_snap_pending, fx_snap_used, fx_snap_screen, fx_snap_part;
     uint8_t midi_oct_pending; /* OCT- awaits release, note or navigation to allow OCT- + GLO */
-    uint32_t sustain_note[27], sustain_part[27];
-    uint16_t sustain_gen[27];
+    uint8_t seq_oct_up_pending; /* SEQ: defer OCT+ so OCT+ + REC can shift notes */
+    uint8_t seq_shift_rec_active; /* allow repeated octave presses while REC remains held */
+#if BR_PRODUCT_SMK37
+    uint8_t sustain_note[BR_PLAY_KEYS], sustain_part[BR_PLAY_KEYS];
+#else
+    uint32_t sustain_note[BR_PLAY_KEYS], sustain_part[BR_PLAY_KEYS];
+#endif
+    uint16_t sustain_gen[BR_PLAY_KEYS];
     /* HOME and ARP act on release; held 0.8 s they toggle HOLD and ARP. */
+    #if BR_PRODUCT_SMK37
+    uint32_t mode_pending, mode_fired, mode_start[3];
+#else
     uint32_t mode_pending, mode_fired, mode_start[2];
+#endif
 #ifdef BR_PATTERN_SONG_EXPERIMENT
     uint32_t ps_held_key, ps_held_used;
 #endif
     int8_t octave;
-    char message[25];
+    char message[40];
 } br_ui;
 #if defined(FM1_DEVICE)
 /* Called only by the elected fatal owner after both core snapshots are ready.
@@ -252,6 +312,7 @@ static int br_ps_ui_select(uint32_t target)
 {
     if (!br_playing) return br_ps_enqueue(BR_PS_SELECT,target,0u,0u);
     if (target==br_ps_state.active && br_ps_state.queued==FM1_PATTERN_NONE) return 1;
+    if (br_ps_state.song_enabled) { br_message("SONG PLAYING"); return 1; }
     if (!br_ps_runtime_queue(target)) return 0;
     br_message("PATTERN QUEUED"); return 1;
 }
@@ -304,6 +365,27 @@ static void br_ui_clock_service(void);
 #define BR_UI_CLOCK_SERVICE() ((void)0)
 #endif
 #include "instrument_ui.c"
+#include "sequence_shift.h"
+/* A played note's dispatch, stamped with when it was played: its sound is scheduled from that time,
+ * not from when this loop got to it (instrument_ui.c br_note_played). */
+#ifdef BR_NOTE_NOW
+static __attribute__((noinline)) void br_key_played(uint32_t k, uint32_t down, int held)
+{
+    br_note_played(BR_NOTE_KEY_TICK(k), BR_NOTE_NOW());
+    if (down) br_key_down(k, held);
+    else br_key_up(k);
+    br_note_played_end();
+}
+static __attribute__((noinline)) void br_midi_played(uint8_t status, uint8_t d1, uint8_t d2)
+{
+    br_note_played(BR_NOTE_MIDI_TICK(), BR_NOTE_NOW());
+    br_midi(status, d1, d2);
+    br_note_played_end();
+}
+#else
+#define br_key_played(k, down, held) ((down) ? br_key_down((k), (held)) : br_key_up(k))
+#define br_midi_played br_midi
+#endif
 #if defined(BR_UI_CLOCK_SUPPORT)
 #include "pattern_ui_clock_service.h"
 #endif
@@ -323,6 +405,12 @@ static uint32_t br_pattern_diag_key;
 #elif defined(FM1_DEVICE)
 #include "instrument_project_device.c"
 #include "instrument_project_device_ui.c"
+#endif
+#if BR_PRODUCT_SMK37 && defined(FM1_DEVICE)
+#include "smk37/smk37_panel.c"
+#endif
+#if BR_CAP_READER
+#include "instrument_reader.h"                  /* screen reader adapter: after the UI and SAVE menu */
 #endif
 
 #if defined(FM1_DEVICE) && defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT
@@ -367,12 +455,10 @@ static int br_ps_target_parked(void *ctx)
 {
     (void)ctx;
     fm1_memory_publish_sync();
+    /* Fenced and C1 drained+parked, or C1 contained in a confirmed held reset
+     * (a contained audio fault): either way no C1 code runs during the I/O. */
     return !br_playing && br_diagnostic_restore_in_progress && br_ps_target_project_token.active &&
-        fm1_cpu1_worker_project_fence_held() && !fm1_cpu1_worker_fault &&
-        !fm1_cpu1_worker_uncontained_fault_get() && fm1_cpu1_worker_mailbox.cpu_id==1u &&
-        fm1_cpu1_worker_mailbox.state==FM1_CPU1_WORKER_PARKED &&
-        fm1_cpu1_worker_mailbox.park_request && fm1_cpu1_worker_mailbox.park_ack &&
-        fm1_cpu1_worker_mailbox.request_seq==fm1_cpu1_worker_mailbox.done_seq;
+        fm1_cpu1_worker_project_parked();
 }
 /* Flash RAM routines cannot dereference XIP while flash is in command mode.
  * Accept only linked data/BSS, pool, or the two explicit CPU0 stack ranges. */
@@ -398,7 +484,16 @@ static int br_ps_target_read_raw(void *ctx,uint32_t off,void *dst,uint32_t n)
     if(!flash_ok || !FL_IN(off,n,BR_PROJECT_BASE,BR_PROJECT_END) || !n || n>256u || !BR_PATTERN_RAM_RANGE(dst,n)) return -1;
     irq=irq_save();
     if(!br_ps_target_parked(0) || !br_ps_project_watch_ok_locked()) { irq_restore(irq); return -1; }
+#if BR_PRODUCT_SMK37
+    uint32_t first = PS_SECTOR - (off & (PS_SECTOR - 1u));
+    if (first > n) first = n;
+    rc=FL_FAR(fl_read_ram)(smk37_project_physical(off),(uint8_t *)dst,first);
+    if (!rc && first < n)
+        rc=FL_FAR(fl_read_ram)(smk37_project_physical(off + first),(uint8_t *)dst + first,n - first);
+    irq_restore(irq); return rc;
+#else
     rc=FL_FAR(fl_read_ram)(off,(uint8_t *)dst,n); irq_restore(irq); return rc;
+#endif
 }
 /* First write to each sector reserves it only after an independent full
  * erased-sector scan. Subsequent writes must stay in that reserved sector.
@@ -441,6 +536,9 @@ static int br_ps_target_program_raw(void *ctx,uint32_t off,const void *src,uint3
        ) { irq_restore(irq); return -1; }
     rc=fl_write(off,(const uint8_t *)src,n); irq_restore(irq); return rc;
 }
+#if defined(FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY) && FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY
+static int br_ps_target_fixed_may_erase(uint32_t off);
+#endif
 static int br_ps_target_erase_raw(void *ctx,uint32_t off)
 {
     uint32_t irq,took; int rc; (void)ctx;
@@ -450,7 +548,11 @@ static int br_ps_target_erase_raw(void *ctx,uint32_t off)
 #endif
     if(!flash_ok || !FL_IN(off,PS_SECTOR,BR_PROJECT_BASE,BR_PROJECT_END)) return -1;
     irq=irq_save();
-    if(!br_ps_target_parked(0) || !br_ps_project_watch_ok_locked()) { irq_restore(irq); return -1; }
+    if(!br_ps_target_parked(0) || !br_ps_project_watch_ok_locked()
+#if defined(FM1_PATTERN_DELETE_EXPERIMENT) && FM1_PATTERN_DELETE_EXPERIMENT && defined(FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY) && FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY
+       || br_ps_target_fixed_may_erase(off)!=1
+#endif
+       ) { irq_restore(irq); return -1; }
     rc=fl_erase4k(off,&took); irq_restore(irq); return rc;
 }
 #if defined(FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY) && FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY
@@ -549,8 +651,12 @@ static int br_ps_provision_input_idle(void)
        br_playing || br_recording || br_hold_on || br_save_pending || br_session_save_blocked() ||
        br_midi_clock_enabled || br_midi_clock_active || !usb.up || !usb.config || usb.detached || usb.suspended || usb.rx_pend || mi_r!=mi_w || fm1_in.notes || fm1_in.buttons ||
        fm1_in.pressed || fm1_in.released || fm1_in.notes_pressed)return 0;
+#if BR_PRODUCT_SMK37
+    for(i=0;i<FM1_NENC;i++)if(fm1_in.enc_steps[i] || fm1_in.enc_cnt[i])return 0;
+#else
     for(i=0;i<FM1_NENC;i++)if(fm1_in.enc_steps[i] || fm1_in.enc_sub[i])return 0;
-    for(i=0;i<27u;i++)if(br_ui.held_note[i])return 0;
+#endif
+    for(i=0;i<BR_PLAY_KEYS;i++)if(br_ui.held_note[i])return 0;
     for(i=0;i<BR_MIDI_ROUTE_NOTES;i++)if(br_midi_routes.note[i].channel)return 0;
     return 1;
 }
@@ -882,10 +988,18 @@ int br_pp_target_ready(void)
 { return br_ps_target_fixed_runtime.port && !br_ps_target_fixed_runtime.bridge.fault; }
 int br_pp_target_scan(unsigned slot,char name[13])
 { return fm1_fixed_runtime_scan(&br_ps_target_fixed_runtime,slot,name); }
+int br_pp_target_list(unsigned first,fm1_project_list_entry out[FM1_PROJECT_LIST_PAGE])
+{ return fm1_fixed_runtime_list(&br_ps_target_fixed_runtime,first,out); }
 int br_pp_target_save(unsigned slot,const char *name)
 { return fm1_fixed_bridge_save(&br_ps_target_fixed_runtime.bridge,slot,name); }
 int br_pp_target_load(unsigned slot)
-{ return fm1_fixed_bridge_load(&br_ps_target_fixed_runtime.bridge,slot); }
+{
+    int rc = fm1_fixed_bridge_load(&br_ps_target_fixed_runtime.bridge,slot);
+#if BR_ARR_UI
+    if (rc == PFS_OK) { br_chain.count = br_chain.held = br_chain.single_pending = 0u; ++br_chain.revision; }
+#endif
+    return rc;
+}
 int br_pp_target_recover(int *slot)
 {
     int rc;
@@ -895,7 +1009,13 @@ int br_pp_target_recover(int *slot)
     return rc;
 }
 int br_pp_target_init_project(void)
-{ return fm1_fixed_runtime_new(&br_ps_target_fixed_runtime,(const uint8_t *)&es.factory,sizeof es.factory); }
+{
+    int rc = fm1_fixed_runtime_new(&br_ps_target_fixed_runtime,(const uint8_t *)&es.factory,sizeof es.factory);
+#if BR_ARR_UI
+    if (rc == PFS_OK) { br_chain.count = br_chain.held = br_chain.single_pending = 0u; ++br_chain.revision; }
+#endif
+    return rc;
+}
 #endif
 #endif
 
@@ -909,8 +1029,15 @@ static uint32_t br_control_turn_restores_session(uint32_t knob)
     return 0u;   /* the ARP page no longer hosts UNDO */
 }
 
+#if BR_UI_TIMING_DIAG
+#include "ui_timing_diag.c"
+#endif
 #if defined(FM1_DEVICE) || defined(BR_DIAGNOSTIC_TEST)
 static volatile uint32_t br_diagnostic_muted;
+#if defined(FM1_DEVICE)
+/* Set by the audio interrupt once CPU1 is lost (contained) and CPU0 renders alone. */
+static volatile uint8_t br_cpu1_lost;
+#endif
 #include "instrument_diagnostic.c"
 #else
 #define br_half_timing_mark_failed(unconfirmed) ((void)(unconfirmed))
@@ -980,16 +1107,29 @@ static uint32_t app_audio(int32_t *out, uint32_t n)
     br_diagnostic_audio_guard();
 #if defined(FM1_DEVICE)
     if (fm1_cpu1_worker_fault) {
-        br_diagnostic_muted = 1u;
-        br_diagnostic_disarm();
-        br_diagnostic_abort = 3u;
+        /* A contained fault (C1 confirmed and still held in reset) leaves CPU0
+         * to render everything alone: no worker is submitted (available() is
+         * false), master FX runs inline, polyphony is switched off. Until C1 is
+         * seen held (a foreground abort may be half-way) this half is silent. */
+        if (!fm1_cpu1_worker_contained()) {
+            memset(out, 0, n * 2u * sizeof *out);
+            return FM1_AUDIO_RENDER_OK;
+        }
+        if (!br_cpu1_lost) {
+            br_cpu1_lost = 1u;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+            br_poly_user_off = 1u;   /* six voices need both cores: leave, never re-enter */
+#endif
+            br_diagnostic_disarm();
+            br_diagnostic_abort = 3u;
+        }
     }
+#if defined(BR_CPU1_AUDIO)
+    /* Per half: a contained fault costs the half it happened in, not the session. */
+    br_audio_source_worker_fault = 0u;
 #endif
-    if (br_diagnostic_muted
-#if defined(FM1_DEVICE)
-        || fm1_cpu1_worker_fault
 #endif
-       ) {
+    if (br_diagnostic_muted) {
         if (br_engine_pipeline_uncontained_fault_get())
             return FM1_AUDIO_RENDER_UNCONTAINED;
         memset(out, 0, n * 2u * sizeof *out);
@@ -1064,7 +1204,7 @@ static uint32_t app_audio(int32_t *out, uint32_t n)
 #endif
             br_half_timing_mark_failed(uncontained);
 #if defined(FM1_DEVICE) || defined(BR_DIAGNOSTIC_TEST)
-            br_diagnostic_muted = 1u;
+            if (uncontained) br_diagnostic_muted = 1u;   /* contained: this half only */
             br_diagnostic_disarm();
             br_diagnostic_abort = 3u;
 #endif
@@ -1105,7 +1245,8 @@ static uint32_t app_audio(int32_t *out, uint32_t n)
 #if defined(FM1_DEVICE) && FM1_DEVELOPMENT_DIAGNOSTICS
             fm1_audio_cpu1_join_clear();
 #endif
-            br_diagnostic_muted = 1u;
+            /* Contained: drop this half only (no mute); C1 stays held and the
+             * next half renders on CPU0 (see the start of this function). */
             br_diagnostic_disarm();
             br_diagnostic_abort = 3u;
             render_result = FM1_AUDIO_RENDER_CONTAINED_FAULT;
@@ -1170,7 +1311,8 @@ static uint32_t app_audio(int32_t *out, uint32_t n)
 #if defined(FM1_DEVICE) && FM1_DEVELOPMENT_DIAGNOSTICS
             fm1_audio_cpu1_join_clear();
 #endif
-            br_diagnostic_muted = 1u;
+            /* Contained: drop this half only (no mute); C1 stays held and the
+             * next half renders on CPU0 (see the start of this function). */
             br_diagnostic_disarm();
             br_diagnostic_abort = 3u;
             render_result = FM1_AUDIO_RENDER_CONTAINED_FAULT;
@@ -1258,9 +1400,13 @@ static void br_app_init(void)
     { static const br_punch_cfg_t d = BR_PUNCH_CFG_DEFAULTS; br_punch_cfg = d; }
     memset(br_arp_keys, 0, sizeof br_arp_keys);
     br_master.revision = 0;
-    br_master.fx = (br_master_fx_t){64, 0, 0, 0, 0, BR_HEAT_BIT, 0};
-    br_master.select_target = BR_SELECT_MASTER_FILTER;
+    br_master.fx = (br_master_fx_t){64, 0, BR_HEAT_BIT, 0, 0, 0, 0};
     br_master.comp = (br_compressor_config_t)BR_COMP_DEFAULTS;
+    br_master.reverb_engine = BR_REVERB_ROOM; br_master.reverb_size = 0u; br_master.reverb_decay = 64u;
+    { static const uint8_t x[5] = BR_REVERB_EXTRA_DEFAULTS; memcpy((void *)br_master.reverb_extra, x, sizeof x); }
+    br_master.reverb_manual = 0u; br_leveler_on = 0u;
+    { static const br_part_pending_t d = BR_PART_PENDING_DEFAULTS; for (p = 0; p < BR_PARTS; p++) br_part_pending[p] = d; }
+    br_swing = 0u;
     br_save_pending = br_undo_valid = 0;
     for (p = 0; p < BR_PARTS; p++) {
         br_ui.note[p] = 60u;
@@ -1271,9 +1417,20 @@ static void br_app_init(void)
         br_fx_config_t fx;
         br_module_defaults(&mod, &fx);
         br_part[p].mod = mod; br_part[p].fx = fx;
+#if BR_ENABLE_PLAITS
+        /* The factory snapshot for INIT is taken below, before loading the
+         * working project. Use complete bank patches, including modulation. */
+        if (p < BR_SYNTH_PARTS) {
+            static const uint8_t default_sound[BR_SYNTH_PARTS] = {0u, 23u, 12u};
+            br_bank_state_t state;
+            br_bank_state(&br_bank[default_sound[p]], &state);
+            br_bank_put(&state, &br_part[p].sound, &br_part[p].mod);
+        } else {
+            br_kit_bank_apply(&br_kit_bank[9u], &br_part[p].sound); /* 90S KIT */
+        }
+#endif
         br_part[p].revision = 0;
         br_part[p].length = BR_BANK_STEPS; br_part[p].division = 1;
-        br_part[p].swing = 0; br_part[p].gate = 80;
         br_arp_part_defaults(&br_part[p]);
         for (i = 0; i < BR_STEPS; i++) br_part[p].step[i] = 0;
         for (i = 0; i < BR_DRUM_LANES; i++) {
@@ -1281,8 +1438,7 @@ static void br_app_init(void)
             br_ui.seq_default[p][i].length = p == BR_DRUM_PART ? 0u : BR_STEP_LENGTH_DEFAULT;
             br_ui.seq_default[p][i].velocity = 100u;
             br_ui.seq_default[p][i].condition = BR_STEP_COND_ALWAYS;
-            br_part[p].lane_level[i] = 100;
-            br_part[p].lane_gate[i] = 128;
+            br_part[p].lane_level[i] = 113;     /* (113/127)^2 = -2.0 dB, the old linear 100 */
         }
         br_step_pos[p] = 0;
     }
@@ -1290,6 +1446,7 @@ static void br_app_init(void)
     memset(&es,0,sizeof es);es.current=-1;
     memset(es_directory,0,sizeof es_directory);
     br_step_metadata_clear();
+    memset(br_band_crc, 0, sizeof br_band_crc);
     (void)br_capture(&es.factory);
 #endif
     br_load_session();
@@ -1329,7 +1486,7 @@ static void br_app_init(void)
     br_half_timing_reset();
 #endif
     lcd_fill(0, 0, 240, 240, C_BLACK);
-#if defined(FM1_DEVICE)
+#if defined(FM1_DEVICE) || BR_PRODUCT_SMK37
     br_intro_until = fm1_ms + BR_INTRO_MS;        /* two seconds of the name before the instrument appears */
 #endif
     br_ui.redraw = 1;
@@ -1337,6 +1494,9 @@ static void br_app_init(void)
     br_quiescent_transaction_end();
 }
 
+#ifdef BR_ARRANGER
+#include "pattern_arranger.c"
+#endif
 #if defined(FM1_PATTERN_TICK_CLAIM_PROTOTYPE) && FM1_PATTERN_TICK_CLAIM_PROTOTYPE
 /* The runtime bridge supplies these; a failed claim does not consume input.
  * Hardware bitsets can still coalesce repeated edges while processing waits. */
@@ -1364,6 +1524,9 @@ static void br_ps_tick_release(void)
 /* Called with the tick claim held, after panel and MIDI transport input. */
 static void br_ps_tick_transport(void)
 {
+#ifdef BR_ARRANGER
+    br_arranger_tick();
+#endif
     if (!br_playing && br_ps_last_playing && br_ps_state.queued<FM1_PATTERN_COUNT) br_ps_reset_pending=1u;
     br_ps_last_playing=br_playing;
 }
@@ -1392,11 +1555,90 @@ static int br_ps_tick_service(void)
 #define br_ps_tick_service() ((void)0)
 #define br_ps_tick_transport() ((void)0)
 #endif
+#if defined(FM1_DEVICE) && defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT && \
+    defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+/* The normal callback is muted and CPU1 fenced before either layout can own
+ * the DSP pool. A failed park/resume remains muted and contains the worker. */
+static int br_poly_foreground_transition(uint32_t part, uint32_t suspend)
+{
+    uint32_t action = br_poly_transition_needed(part, suspend);
+    int fence, changed;
+    if (!action) return 1;
+    if (!br_quiescent_transaction_begin()) return 0;
+    fence = fm1_cpu1_worker_project_fence_acquire();
+    if (fence > 0) { br_quiescent_transaction_end(); return 0; }   /* busy: retry later */
+    if (fence < 0) {
+        (void)fm1_cpu1_worker_abort_hold_reset();
+        goto worker_failed;
+    }
+    /* A contained (held) C1 passes both: it runs nothing and owns nothing. */
+    if (fm1_cpu1_worker_park(FM1_CPU1_WORKER_TIMEOUT_TICKS) != FM1_CPU1_WORKER_OK ||
+        !fm1_cpu1_worker_project_parked()) {
+        (void)fm1_cpu1_worker_abort_hold_reset();
+        goto worker_failed;
+    }
+    if (action == 1u && !br_punch_effect) {
+        br_punch_dsp.line = 0;
+        br_punch_dsp.line_len = 0;
+        br_punch_dsp.last = BR_PUNCH_NONE;
+    }
+    changed = br_poly_transition_commit(action, part);
+    if (changed < 0) {
+        (void)fm1_cpu1_worker_abort_hold_reset();
+        return 0;
+    }
+    if (fm1_cpu1_worker_project_authorize_resume() ||
+        fm1_cpu1_worker_project_resume(FM1_CPU1_WORKER_TIMEOUT_TICKS) != FM1_CPU1_WORKER_OK ||
+        fm1_cpu1_worker_project_fence_release()) {
+        (void)fm1_cpu1_worker_abort_hold_reset();
+        changed = 0;
+        goto worker_failed;
+    }
+    br_quiescent_transaction_end();
+    return changed;
+worker_failed:
+    /* The worker failed and was aborted. With C1 contained (held in
+     * reset) audio may resume on CPU0: drop the fence and end the transaction.
+     * Before, these paths left the transaction open, so a single worker fault
+     * followed by any poly switch froze the UI and gated every diagnostic.
+     * An uncontained C1 keeps the fence; the uncontained gate stops audio. */
+    if (fm1_cpu1_worker_contained()) {
+        (void)fm1_cpu1_worker_project_authorize_resume();
+        (void)fm1_cpu1_worker_project_fence_release();
+    }
+    if (!fm1_cpu1_worker_project_fence_held()) br_quiescent_transaction_end();
+    return 0;
+}
+static int br_poly_before_update(void)
+{
+    /* A contained (held) worker no longer blocks the transition, so updates,
+     * recovery and SAVE take the ordinary path with audio on CPU0. */
+    return br_poly_foreground_transition(br_ui.part, 1u);
+}
+#elif BR_POLY_UI
+/* Host model of the transition above, for split host builds only: the host has no CPU1 to park and
+ * renders audio between ticks, so the same commit runs directly. */
+static int br_poly_foreground_transition(uint32_t part, uint32_t suspend)
+{
+    uint32_t action = br_poly_transition_needed(part, suspend);
+    int changed;
+    if (!action) return 1;
+    if (action == 1u && !br_punch_effect) {
+        br_punch_dsp.line = 0;
+        br_punch_dsp.line_len = 0;
+        br_punch_dsp.last = BR_PUNCH_NONE;
+    }
+    changed = br_poly_transition_commit(action, part);
+    if (changed < 0) return 0;
+    return changed;
+}
+#endif
+
 static void br_app_tick_inner(void)
 {
     if (br_engine_pipeline_uncontained_fault_get() ||
         br_diagnostic_restore_in_progress) return;
-#if defined(FM1_DEVICE)
+#if defined(FM1_DEVICE) && BR_CAP_DIN_MIDI
     if (midi_in_overflow) {
         uint32_t irq_state;
         if (!br_foreground_mutation_begin(&irq_state)) return;
@@ -1407,11 +1649,35 @@ static void br_app_tick_inner(void)
 #endif
     uint32_t released, keys, handled_down = 0u;
     uint32_t buttons = fm1_input_edges(&released);
+#if BR_POLY_UI
+    static uint32_t br_poly_deferred_buttons;
+    buttons |= br_poly_deferred_buttons;
+    br_poly_deferred_buttons = 0u;
+    uint32_t suspend_poly =
+#if defined(DINGHY_EMULATOR_SAVE) || defined(FM1_DEVICE) || defined(DINGHY_DEVICE_SAVE_TEST)
+        es.mode ||                             /* host builds without a SAVE screen have no es */
+#endif
+        br_save_pending || br_recording ||
+#if defined(FM1_DEVICE)
+        (!es_project_boot_state && !br_ps_external_restore_completed && br_pp_target_ready()) ||
+#endif
+        !BR_POLY_KEYS_PAGE() ||
+        (buttons & ((1u << BTN_SAVE) | (1u << BTN_PLAY)));
+    if (!br_poly_foreground_transition(br_ui.part, suspend_poly) &&
+        br_poly_transition_needed(br_ui.part, 1u) == 2u) {
+        br_poly_deferred_buttons = buttons & ((1u << BTN_SAVE) | (1u << BTN_PLAY));
+        buttons &= ~br_poly_deferred_buttons;
+    }
+#endif
 #if defined(FM1_DEVICE) && (!defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS)
     buttons|=br_project_diag_down;released|=br_project_diag_up;
     br_project_diag_down=br_project_diag_up=0;
 #endif
+    BR_UIT_INPUT(&buttons, &released);   /* diagnostic builds only: input timing, SAVE-page guard */
     uint32_t edges = fm1_input_note_snapshot(&keys);
+#if BR_PRODUCT_SMK37 && defined(FM1_DEVICE)
+    BR_FOREGROUND_MUTATE(br_smk_controls(buttons, released, &keys, &edges));
+#endif
 #if defined(FM1_PATTERN_PANEL_TEST) && FM1_PATTERN_PANEL_TEST
     /* Test input joins the ordinary key scan; physical input cancels it. */
     if (br_pattern_diag_key && (keys || fm1_in.buttons || br_ui.page != BR_PAGE_PS || es.mode
@@ -1440,7 +1706,7 @@ static void br_app_tick_inner(void)
     for (k = 0u; k < 27u; ++k) {
         uint32_t bit = 1u << k;
         if ((edges & br_ui.previous_keys & bit) && br_ui.held_note[k]) {
-            BR_FOREGROUND_MUTATE(br_key_up(k));
+            BR_FOREGROUND_MUTATE(br_key_played(k, 0u, 0));
             up &= ~bit;
         }
     }
@@ -1456,8 +1722,13 @@ static void br_app_tick_inner(void)
          ((buttons & (1u << BTN_OCT_DOWN)) && (fm1_in.buttons & (1u << BTN_SEQ))))) {
         buttons &= ~((1u << BTN_SEQ) | (1u << BTN_OCT_DOWN));
         br_ui.midi_oct_pending = br_ui.fx_snap_pending = br_ui.fx_snap_used = 0u;
-        br_ui.seq_pressed = 0u; br_ui.page = BR_PAGE_PS;
-        br_ui.ps_held_key = br_ui.ps_held_used = 0u; br_message("HOLD KEY: REC/PLAY"); br_ui.redraw = 1u;
+        uint32_t returning = br_ui.page == BR_PAGE_PS ||
+            (br_ui.seq_pressed && br_ui.seq_was_active == 2u);
+        br_ui.seq_pressed = 0u;
+        br_ui.page = returning ? BR_PAGE_SEQ : BR_PAGE_PS;
+        if (returning) br_ui.screen[BR_PAGE_SEQ] = 0u;
+        br_ui.ps_held_key = br_ui.ps_held_used = 0u;
+        br_ui.message[0] = 0; br_ui.message_until = 0u; br_ui.redraw = 1u;
     }
     if (!save_active && br_ui.page == BR_PAGE_PS && br_ui.ps_held_key &&
         (keys & (1u << (br_ui.ps_held_key - 1u))) && (buttons & ((1u << BTN_REC) | (1u << BTN_PLAY)))) {
@@ -1467,7 +1738,68 @@ static void br_app_tick_inner(void)
         br_message(ok ? ((buttons & (1u << BTN_REC)) ? "PATTERN COPIED" : "PATTERN PASTED") : "PATTERN FAILED");
         buttons &= ~((1u << BTN_REC) | (1u << BTN_PLAY));
     }
-
+#if BR_ARR_UI
+    if (!save_active && (buttons & (1u << BTN_REC)) && br_arr_rec()) buttons &= ~(1u << BTN_REC);   /* OCT- + REC */
+#endif
+#endif
+    /* On the sequencer grid, either press order rotates the selected track.
+     * A pending REC belongs to the SAVE latch and must be marked used. */
+    if (released & (1u << BTN_REC)) br_ui.seq_shift_rec_active = 0u;
+    uint32_t seq_shift_press = buttons & (1u << BTN_REC);
+    if (br_ui.seq_shift_rec_active && (fm1_in.buttons & (1u << BTN_REC)) &&
+        (buttons & ((1u << BTN_OCT_DOWN) | (1u << BTN_OCT_UP)))) seq_shift_press = 1u;
+#if defined(DINGHY_EMULATOR_SAVE) || defined(FM1_DEVICE) || defined(DINGHY_DEVICE_SAVE_TEST)
+    if (es.rec_pending && !es.rec_used && (fm1_in.buttons & (1u << BTN_REC)) &&
+        (buttons & ((1u << BTN_OCT_DOWN) | (1u << BTN_OCT_UP)))) seq_shift_press = 1u;
+#endif
+    if (!save_active && !locked_at_start && br_seq_grid_page() && seq_shift_press) {
+        uint32_t oct = fm1_in.buttons & ((1u << BTN_OCT_DOWN) | (1u << BTN_OCT_UP));
+        if (oct == (1u << BTN_OCT_DOWN) || oct == (1u << BTN_OCT_UP)) {
+            int direction = oct == (1u << BTN_OCT_UP) ? 1 : -1;
+            BR_FOREGROUND_MUTATE(br_sequence_shift_track(br_ui.part, direction));
+            buttons &= ~((1u << BTN_REC) | (1u << BTN_OCT_DOWN) | (1u << BTN_OCT_UP));
+            br_ui.midi_oct_pending = br_ui.seq_oct_up_pending = 0u;
+            br_ui.seq_shift_rec_active = 1u;
+#if defined(DINGHY_EMULATOR_SAVE) || defined(FM1_DEVICE) || defined(DINGHY_DEVICE_SAVE_TEST)
+            if (es.rec_pending) es.rec_used = 1;
+#endif
+            br_message(direction > 0 ? "NOTES SHIFTED RIGHT" : "NOTES SHIFTED LEFT");
+            br_ui.redraw = 1u;
+        }
+    }
+    if (!save_active && !locked_at_start && br_seq_grid_page() && (buttons & (1u << BTN_OCT_UP))) {
+        br_ui.seq_oct_up_pending = 1u; buttons &= ~(1u << BTN_OCT_UP);
+    }
+    if (br_ui.seq_oct_up_pending && !save_active && !locked_at_start &&
+        ((released & (1u << BTN_OCT_UP)) || down ||
+         (buttons & (navigation_buttons & ~(1u << BTN_OCT_UP))))) {
+        br_ui.seq_oct_up_pending = 0u;
+        BR_FOREGROUND_MUTATE(br_buttons(1u << BTN_OCT_UP));
+    }
+    if (save_active || locked_at_start || !br_seq_grid_page()) br_ui.seq_oct_up_pending = 0u;
+    /* HOME + OCT- opens or leaves the HOME deep menu, in either press order. */
+    if (!save_active && !locked_at_start &&
+        (((buttons & (1u << BTN_HOME)) && ((fm1_in.buttons & (1u << BTN_OCT_DOWN)) || br_ui.midi_oct_pending || br_ui.fx_snap_pending)) ||
+         ((buttons & (1u << BTN_OCT_DOWN)) && ((fm1_in.buttons & (1u << BTN_HOME)) || (br_ui.mode_pending & (1u << BTN_HOME)))))) {
+        buttons &= ~((1u << BTN_HOME) | (1u << BTN_OCT_DOWN));
+        br_ui.midi_oct_pending = br_ui.fx_snap_pending = br_ui.fx_snap_used = 0u;
+        br_ui.mode_pending &= ~(1u << BTN_HOME); br_ui.mode_fired &= ~(1u << BTN_HOME);
+        BR_FOREGROUND_MUTATE(br_open_home_settings());
+    }
+    /* HOME: hold OCT- and press PLAY to change this track's live voice mode. */
+#if BR_POLY_UI
+    if (!save_active && !locked_at_start && br_ui.page == BR_PAGE_HOME && !br_ui.screen[BR_PAGE_HOME] && br_ui.part < BR_SYNTH_PARTS &&
+        (buttons & (1u << BTN_PLAY)) && ((fm1_in.buttons & (1u << BTN_OCT_DOWN)) || br_ui.midi_oct_pending)) {
+        uint32_t part = br_ui.part;
+        uint32_t poly = br_part[part].sound.voice_mode == 2u ||
+            (br_part[part].sound.voice_mode == 0u && !br_poly_user_off);
+        BR_FOREGROUND_MUTATE(br_part[part].revision++; br_part[part].sound.voice_mode = poly ? 1u : 2u;
+                             RING_PUBLISH(); br_part[part].revision++);
+        br_message(poly ? "POLYPHONY OFF" : "POLYPHONY ON");
+        buttons &= ~((1u << BTN_PLAY) | (1u << BTN_OCT_DOWN));
+        br_ui.midi_oct_pending = br_ui.fx_snap_pending = br_ui.fx_snap_used = 0u;
+        br_ui.redraw = 1u;
+    }
 #endif
     /* Resolve the chord before either deferred GLO or OCT- can act. OCT-
      * is otherwise committed on release, or before a note/navigation. */
@@ -1479,8 +1811,11 @@ static void br_app_tick_inner(void)
         buttons &= ~((1u << BTN_GLO) | (1u << BTN_OCT_DOWN));
         br_ui.midi_oct_pending = 0u; br_ui.fx_snap_pending = br_ui.fx_snap_used = 0u;
         br_ui.glo_pending = br_ui.glo_used = br_ui.glo_snap = 0u;
-        BR_FOREGROUND_MUTATE(br_open_midi_settings());
-    } else if (!save_active && !locked_at_start && br_ui.page != BR_PAGE_FX &&
+        uint32_t returning = br_ui.page == BR_PAGE_MIX &&
+            (br_ui.screen[BR_PAGE_MIX] == 2u || br_ui.screen[BR_PAGE_MIX] == 7u || br_ui.screen[BR_PAGE_MIX] == 8u);
+        BR_FOREGROUND_MUTATE(br_ui.page = BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX] = returning ? BR_GLO_FIRST : 2u;
+                             br_ui.edit_key = 0xffffffffu; br_ui.redraw = 1u);
+    } else if (!save_active && !locked_at_start && !br_fx_snap_page() &&
                (buttons & (1u << BTN_OCT_DOWN))) {
         br_ui.midi_oct_pending = 1u; buttons &= ~(1u << BTN_OCT_DOWN);
     }
@@ -1492,9 +1827,9 @@ static void br_app_tick_inner(void)
     }
     if (save_active || locked_at_start) br_ui.midi_oct_pending = 0u;
     if (save_active || !br_fx_snap_context()) br_ui.fx_snap_pending = br_ui.fx_snap_used = 0u;
-    if (!save_active && !locked_at_start && br_ui.page == BR_PAGE_FX && (buttons & (1u << BTN_OCT_DOWN))) {
+    if (!save_active && !locked_at_start && br_fx_snap_page() && (buttons & (1u << BTN_OCT_DOWN))) {
         br_ui.fx_snap_pending = 1u; br_ui.fx_snap_used = 0u;
-        br_ui.fx_snap_screen = br_ui.screen[BR_PAGE_FX]; br_ui.fx_snap_part = br_ui.part;
+        br_ui.fx_snap_screen = (uint8_t)(br_ui.page << 4 | br_ui.screen[br_ui.page]); br_ui.fx_snap_part = br_ui.part;
         buttons &= ~(1u << BTN_OCT_DOWN);
     }
     /* GLO is a tap on release unless a SELECT gesture consumes the hold. */
@@ -1514,13 +1849,25 @@ static void br_app_tick_inner(void)
         br_ui.edit_key = 0xffffffffu; br_ui.redraw = 1u;
     }
     if (released & (1u << BTN_GLO)) {
-        if (br_ui.glo_pending && !br_ui.glo_used && !locked_at_start) buttons |= 1u << BTN_GLO;
+        /* A GLO press without a SELECT gesture is a normal tap on release. */
+        if (br_ui.glo_pending && !br_ui.glo_used && !locked_at_start) {
+            buttons |= 1u << BTN_GLO;
+        }
         br_ui.glo_pending = br_ui.glo_used = br_ui.glo_snap = 0u;
     }
-    /* HOME and ARP navigate on release, so holding one for 0.8 seconds can
-     * toggle HOLD or the arpeggiator without leaving the current page. */
+    /* HOME and ARP toggle HOLD and arpeggiator after 0.8 s. On the SMK-37 the HOLD button is the printed
+     * PATCH (logical SEL) and HOME (KNOB BANK) is only deferred to its release, as on the FM-1, so that
+     * OCT- + HOME behaves in either press order. */
+#if BR_PRODUCT_SMK37
+#define BR_MODE_BUTTON(k) ((k) == 0u ? BR_HOLD_BUTTON : (k) == 1u ? BTN_ARP : BTN_HOME)
+#define BR_MODE_FIRES(k) ((k) < 2u)     /* a long HOME press does nothing and still taps on release */
+    for (k = 0u; k < 3u; ++k) {
+#else
+#define BR_MODE_BUTTON(k) ((k) ? BTN_ARP : BTN_HOME)
+#define BR_MODE_FIRES(k) 1
     for (k = 0u; k < 2u; ++k) {
-        const uint32_t bit = 1u << (k ? BTN_ARP : BTN_HOME);
+#endif
+        const uint32_t bit = 1u << BR_MODE_BUTTON(k);
         if (buttons & bit) {
             if (!locked_at_start) {
                 br_ui.mode_pending |= bit; br_ui.mode_fired &= ~bit;
@@ -1528,14 +1875,15 @@ static void br_app_tick_inner(void)
             }
             buttons &= ~bit;
         }
-        if ((br_ui.mode_pending & bit) && !(br_ui.mode_fired & bit) &&
+        if ((br_ui.mode_pending & bit) && !(br_ui.mode_fired & bit) && BR_MODE_FIRES(k) &&
             (fm1_in.buttons & bit) && fm1_ms - br_ui.mode_start[k] >= 800u) {
             br_ui.mode_fired |= bit;
             BR_FOREGROUND_MUTATE(k ? br_arp_toggle() : br_hold_toggle());
         }
         if (released & bit) {
-            if ((br_ui.mode_pending & bit) && !(br_ui.mode_fired & bit) && !locked_at_start)
-                buttons |= bit;
+            if ((br_ui.mode_pending & bit) && !locked_at_start) {
+                if (!(br_ui.mode_fired & bit)) buttons |= bit;
+            }
             br_ui.mode_pending &= ~bit; br_ui.mode_fired &= ~bit;
         }
     }
@@ -1545,13 +1893,16 @@ static void br_app_tick_inner(void)
         static const char *shown;
         const char *cue = 0;
         for (k = 0u; k < 2u; ++k) {
-            const uint32_t bit = 1u << (k ? BTN_ARP : BTN_HOME);
+            const uint32_t bit = 1u << BR_MODE_BUTTON(k);
             if ((br_ui.mode_pending & bit) && !(br_ui.mode_fired & bit) && fm1_ms - br_ui.mode_start[k] >= 400u)
+#if BR_PRODUCT_SMK37
+                /* SMK-37: the drum track's ARP page is a cue, not RETRIGGER: nothing to name. */
+                cue = k ? (br_ui.part == BR_DRUM_PART ? 0 : br_arp_on ? "HOLD 0.8S: ARP OFF" : "HOLD 0.8S: ARP ON") :
+#else
                 cue = k ? (br_ui.part == BR_DRUM_PART ? "RETRIGGER" : br_arp_on ? "HOLD 0.8S: ARP OFF" : "HOLD 0.8S: ARP ON") :
+#endif
                           (br_hold_on ? "HOLD 0.8S: HOLD OFF" : "HOLD 0.8S: HOLD ON");
         }
-        if (br_ui.glo_pending && !br_ui.glo_used && fm1_ms - br_ui.glo_start >= 400u)
-            cue = br_ui.glo_snap ? "TURN: SNAP TO 0 50 100" : "TURN SELECT: FILTER";
         if (cue) {
             if (cue != shown) { br_message(cue); shown = cue; }
             br_ui.message_until = fm1_ms + 700u;
@@ -1567,28 +1918,35 @@ static void br_app_tick_inner(void)
     /* This precedes project input: on device it otherwise defers REC until release. */
     if (buttons && locked_at_start && br_seq_grid_page() && br_step_press_pending() &&
         (keys & (1u << br_ui.step_press_key))) {
-        /* Held step consumes REC/PLAY instead of changing transport. */
+        /* Held step consumes REC (copy) and PLAY (paste) instead of changing
+         * transport; with nothing copied PLAY stays transport. */
+        uint32_t paste = br_step_clipboard.valid ? 1u << BTN_PLAY : 0u;
         if (buttons & (1u << BTN_REC)) BR_FOREGROUND_MUTATE(br_step_clipboard_action(0u));
-        else if (buttons & (1u << BTN_PLAY)) BR_FOREGROUND_MUTATE(br_step_clipboard_action(1u));
-        buttons &= ~((1u << BTN_REC) | (1u << BTN_PLAY));
+        else if (buttons & paste) BR_FOREGROUND_MUTATE(br_step_clipboard_action(1u));
+        else if (buttons & (1u << BTN_PLAY)) br_ui.step_edit_active = 1u;
+        buttons &= ~((1u << BTN_REC) | paste);
     }
 #if defined(DINGHY_EMULATOR_SAVE) || defined(FM1_DEVICE) || defined(DINGHY_DEVICE_SAVE_TEST)
     if (es_input(&buttons, &released, keys)) {
         if (buttons & (1u << BTN_PLAY)) BR_FOREGROUND_MUTATE(br_buttons(1u << BTN_PLAY));
-        while (midi_get(&status, &d1, &d2)) BR_FOREGROUND_MUTATE(br_midi(status, d1, d2));
+        while (midi_get(&status, &d1, &d2)) BR_FOREGROUND_MUTATE(br_midi_played(status, d1, d2));
         br_ps_tick_transport();
         br_ps_tick_release();
         br_ps_tick_service();
 #if (defined(FM1_DEVICE) || defined(DINGHY_DEVICE_SAVE_TEST)) && !defined(DINGHY_EMULATOR_SAVE)
         static uint32_t cue_was_active;
         uint32_t cue_active=(int32_t)(br_ui.message_until-fm1_ms)>0;
-        es_scan_tick();
         if(cue_active!=cue_was_active){br_ui.redraw=1;cue_was_active=cue_active;}
-        if (br_ui.redraw || (!cue_active && fm1_ms-br_ui.last_draw>=250u)) {
-            es_draw();br_ui.redraw=0;br_ui.last_draw=fm1_ms;
+        /* es_draw sends only what changed, a pass at a time (br_draw_pass_with); the 250 ms tick only notices
+         * changes (the playhead, the battery) and sends nothing while nothing moves. */
+        if (br_ui.redraw || br_draw_more || (!cue_active && fm1_ms-br_ui.last_draw>=250u)) {
+            if (!br_draw_more) br_ui.last_draw=fm1_ms;
+            br_ui.redraw=0;br_draw_more=(uint8_t)br_draw_pass_with(es_draw);
         } else if (cue_active && fm1_ms-br_ui.last_draw>=32u) {
-            br_draw_cue_bar(es.mode==1?2u:es.mode==3?10u:es.mode==4?9u:es.mode==5?5u:es.mode>=4?4u:3u,0u);br_ui.last_draw=fm1_ms;
+            br_draw_more=(uint8_t)br_draw_pass_with(es_draw_cue);br_ui.last_draw=fm1_ms;
         }
+        /* Show the page before doing storage work, then scan between draws. */
+        if (!br_ui.redraw && !br_draw_more) es_scan_tick();
 #endif
         return;
     }
@@ -1614,8 +1972,12 @@ static void br_app_tick_inner(void)
         }
     }
     /* Release notes held across a transition to a non-playable page. */
-    if (!br_page_plays_keys() && br_ui.page != BR_PAGE_PUNCH) {
-        for (k = 0; k < 27u; ++k)
+    if (!br_page_plays_keys() && br_ui.page != BR_PAGE_PUNCH
+#if BR_PRODUCT_SMK37 && defined(FM1_DEVICE)
+        && !br_seq_grid_page()
+#endif
+        ) {
+        for (k = 0; k < BR_PLAY_KEYS; ++k)
             if (br_ui.held_note[k]) BR_FOREGROUND_MUTATE(br_key_up(k));
     }
     seq_grid = br_ui.page == BR_PAGE_SEQ && !br_ui.screen[BR_PAGE_SEQ];
@@ -1645,6 +2007,7 @@ static void br_app_tick_inner(void)
         BR_FOREGROUND_MUTATE(br_preset_encoder_turn(turn));
     }
 
+#if BR_PRODUCT_SMK37
     /* Establish the step target before controls are sampled. Kit lane keys
      * sort ahead of white trigger keys; tonal black keys set insertion pitch
      * before a simultaneous white-key tap uses it. */
@@ -1662,6 +2025,18 @@ static void br_app_tick_inner(void)
             }
         }
     }
+#else
+    /* Establish the step target before controls are sampled. On the step grid
+     * only white keys act; black keys are inert. */
+    if (seq_grid) {
+        /* Further keys behind a held step are taps until it becomes an edit,
+         * then its pitch; they never record or reach the generic key path. */
+        for (k = 0; k < 27u; ++k)
+            if ((down >> k) & 1u) BR_FOREGROUND_MUTATE(locked_at_start ? br_step_other_key(k) :
+                                                       br_key_down(k, (keys >> k) & 1u));
+        handled_down |= down & ((1u << 27) - 1u);
+    }
+#endif
     if (br_step_press_pending() && br_ui.step_press_active &&
         (fm1_in.buttons & (1u << BTN_SEQ))) {
         if (!br_ui.step_edit_active) BR_FOREGROUND_MUTATE(br_step_edit_begin());
@@ -1714,29 +2089,34 @@ static void br_app_tick_inner(void)
             BR_FOREGROUND_MUTATE(br_buttons(1u << BTN_OCT_DOWN));
         br_ui.fx_snap_pending = br_ui.fx_snap_used = 0u;
     }
+#if BR_PRODUCT_SMK37
     /* A simultaneous lane/step press edits the newly selected lane, regardless
      * of where those physical keys appear in the keyboard scan. */
     uint32_t drum_grid = (br_ui.page == BR_PAGE_SEQ && !br_ui.screen[BR_PAGE_SEQ]) && br_is_kit(br_part[br_ui.part].sound.preset);
     if (drum_grid) for (k = 0; k < 27u; k++)
         if (((down >> k) & 1u) && !(handled_down & (1u << k)) && br_black_key(k))
-            BR_FOREGROUND_MUTATE(br_key_down(k, (keys >> k) & 1u));
+            BR_FOREGROUND_MUTATE(br_key_played(k, 1u, (keys >> k) & 1u));
     for (k = 0; k < 27u; k++) {
         if (((down >> k) & 1u) && !(handled_down & (1u << k)) && (!drum_grid || !br_black_key(k)))
+#else
+    for (k = 0; k < 27u; k++) {
+        if (((down >> k) & 1u) && !(handled_down & (1u << k)))
+#endif
         {
-            BR_FOREGROUND_MUTATE(br_key_down(k, (keys >> k) & 1u));
+            BR_FOREGROUND_MUTATE(br_key_played(k, 1u, (keys >> k) & 1u));
 #if defined(BR_PATTERN_SONG_EXPERIMENT) && defined(BR_PATTERN_OWNER_HOST)
             BR_PS_SERVICE_SELECTION();
 #endif
         }
         if ((up >> k) & 1u) {
-            BR_FOREGROUND_MUTATE(br_key_up(k));
+            BR_FOREGROUND_MUTATE(br_key_played(k, 0u, 0));
 #if defined(BR_PATTERN_SONG_EXPERIMENT) && defined(BR_PATTERN_OWNER_HOST)
             BR_PS_SERVICE_SELECTION();
 #endif
         }
     }
     while (midi_get(&status, &d1, &d2))
-        BR_FOREGROUND_MUTATE(br_midi(status, d1, d2));
+        BR_FOREGROUND_MUTATE(br_midi_played(status, d1, d2));
     BR_FOREGROUND_MUTATE(br_arp_record_drain());
     br_ps_tick_transport();
     br_ps_tick_release();
@@ -1749,21 +2129,35 @@ static void br_app_tick_inner(void)
     {   /* LED levels change at human speed: recompute them at most once a millisecond. */
         static uint32_t leds_ms = 0xffffffffu;
         if (fm1_ms != leds_ms) { leds_ms = fm1_ms; br_leds(); }
+#if BR_PRODUCT_SMK37 && defined(FM1_DEVICE)
+        br_smk_pad_lights();
+#endif
     }
-    if (br_ui.redraw || fm1_ms - br_ui.last_draw >= 32u) {
+    /* A frame goes out over several passes of this loop, at most BR_PASS_BYTES each (br_draw_pass_with), so
+     * input is serviced between its parts; a frame starts every BR_FRAME_MS or at once after an edit. */
+    if (br_ui.redraw || br_draw_more || fm1_ms - br_ui.last_draw >= BR_FRAME_MS) {
 #if BR_AUDIO_FOREGROUND_FIXED8_PLAN
         /* A screen draw can hold the loop for milliseconds; hand the audio scheduler
          * any plan it is waiting on first. */
         br_audio_fixed8_foreground_service();
 #endif
-        br_draw(); br_ui.last_draw = fm1_ms;
-    } else if (br_mon.on && fm1_ms - br_mon.at >= 100u) {
+        if (!br_draw_more) br_ui.last_draw = fm1_ms;
+        br_draw_more = (uint8_t)br_draw_pass_with(br_draw);
+    } else if (br_mon.on && fm1_ms - br_mon.at >= BR_MON_MS) {
         br_monitor_overlay();
     }
 }
 
 static void br_app_tick(void)
 {
+    BR_UIT_LOOP_PASS();                  /* diagnostic builds only: pass timing, remote input */
+#if defined(FM1_DEVICE)
+    {   /* CPU1 was lost: sound continues on CPU0 (no polyphony), SAVE works. Say so once. */
+        static uint8_t told;
+        if (br_cpu1_lost && !told) { told = 1u; br_message("SAFE AUDIO: SAVE+RESTART"); }
+    }
+    br_cpu_warning_poll();
+#endif
     if (br_engine_pipeline_uncontained_fault_get() || br_diagnostic_restore_in_progress) {
 #if defined(BR_PATTERN_SONG_EXPERIMENT) && defined(BR_PATTERN_OWNER_HOST) && \
     defined(FM1_PATTERN_TICK_CLAIM_PROTOTYPE) && FM1_PATTERN_TICK_CLAIM_PROTOTYPE
@@ -1781,7 +2175,15 @@ static void br_app_tick(void)
     int claimed=br_pattern_irq_foreground_claim();
     br_foreground_irq_restore(irq_state);
     if (!claimed) {
+#ifdef BR_ARRANGER   /* not for the song's own block changes: it would show at every one */
+        if (!br_ps_tick_service() && !br_ps_state.song_enabled
+#if BR_ARR_UI
+            && !br_chain.count
+#endif
+            ) br_message("PATTERN SWITCH BUSY");
+#else
         if (!br_ps_tick_service()) br_message("PATTERN SWITCH BUSY");
+#endif
         return;
     }
     br_ps_tick_claimed=1u; br_ps_tick_start=fm1_ms;
@@ -1791,6 +2193,9 @@ static void br_app_tick(void)
     /* Also releases on every early return from the input path. */
     br_ps_tick_release();
     br_ps_tick_service();
+#if BR_CAP_READER
+    br_reader_tick();
+#endif
 }
 
 #if defined(FM1_DEVICE) && defined(FM1_PATTERN_PROJECT_TARGET_EXPERIMENT) && FM1_PATTERN_PROJECT_TARGET_EXPERIMENT
@@ -1811,7 +2216,12 @@ static void app_main(void)
         if(br_ready && !project_recovery.done && !br_ps_external_restore_completed) {
             int ready=br_pp_target_ready();
             if(br_pattern_boot_should_try(&project_recovery,ready,fm1_ms)) {
-                int rc=br_project_target_recover();
+                int rc;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+                if (!br_engine_quiet() || !br_poly_before_update()) rc=FM1_PROJECT_BUSY;
+                else
+#endif
+                    rc=br_project_target_recover();
                 int status=br_pattern_boot_result(&project_recovery,fm1_ms,rc,br_ps_target_project_faulted());
                 if(status==-1) { es_project_boot_state=2u; br_message("PROJECT RECOVERY NEEDED"); }
                 else if(status==-2) { es_project_boot_state=2u; br_message("PROJECT RECOVERY FAILED"); }

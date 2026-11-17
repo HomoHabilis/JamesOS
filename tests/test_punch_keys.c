@@ -57,25 +57,8 @@ int main(void)
     DOWN(25u);
     for (uint32_t k = 0u; k < 25u; ++k) if (!br_punch_group(k)) assert(!br_punch_key(&s, k, 1u));
     UP(25u);
-    /* Settings round trip: defaults save as zeros, every other setting survives. */
-    {
-        br_punch_cfg_t c = BR_PUNCH_CFG_DEFAULTS, back;
-        uint8_t bytes[4];
-        br_punch_cfg_pack(&c, bytes);
-        assert(!bytes[0] && !bytes[1] && !bytes[2] && !bytes[3] && br_punch_cfg_packed_valid(bytes));
-        for (uint32_t trial = 0u; trial < 5000u; ++trial) {
-            uint32_t r = trial * 2654435761u;
-            c.loop_len = r & 3u; c.echo_time = (r >> 2) & 3u; c.filter_shape = (r >> 4) & 3u;
-            c.trem_rate = (r >> 6) & 3u; c.echo_fb = (r >> 8) & 31u;
-            c.filter_amount = (r >> 13) & 31u; c.trem_depth = (r >> 18) & 31u;
-            br_punch_cfg_pack(&c, bytes);
-            assert(br_punch_cfg_packed_valid(bytes));
-            br_punch_cfg_unpack(&back, bytes);
-            assert(!memcmp(&c, &back, sizeof c));
-        }
-        bytes[0] = 0x99u; assert(!br_punch_cfg_packed_valid(bytes));
-        bytes[0] = BR_PUNCH_SAVE_MARK; bytes[3] = 0x80u; assert(!br_punch_cfg_packed_valid(bytes));
-    }
+    /* Settings round trip: tests/test_session_wire.c (session v17 KIT section). */
+    assert(br_punch_cfg_is_default(&(br_punch_cfg_t)BR_PUNCH_CFG_DEFAULTS));
     /* Effects: trem chops at the tempo grid and filter changes the signal; others do nothing. */
     {
         br_punch_cfg_t c = BR_PUNCH_CFG_DEFAULTS;

@@ -19,6 +19,10 @@ static uint32_t br_diagnostic_source_cost[4][BR_AUDIO_DIAGNOSTIC_SOURCE_SLOTS];
 #if defined(BR_CPU1_AUDIO)
 #include "../hal/fm1_cpu1_worker.h"
 volatile uint32_t br_audio_source_worker_fault;
+/* Read-only record of worker faults for 0xB2 (every build level): the first and
+ * the last fault site (BR_AUDIO_FAULT_*, instrument.h) and the master-stream wait
+ * budget in ticks at the last stream fault. Never cleared before a reboot. */
+volatile uint32_t br_audio_fault_site[3];
 #endif
 #endif
 #if (defined(BR_DIAGNOSTIC_TEST) || defined(BR_SOURCE_QUEUE_TEST)) && \
@@ -41,7 +45,21 @@ volatile uint32_t br_audio_source_worker_fault;
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Main-loop events become sound only in the audio interrupt. */
 #include "instrument.h"
+#include "instrument_glide.h"
+#include "instrument_lpg.h"
 #include "instrument_math.h"
+/* BR_COLD_SIZE marks a function that runs per event, per step or at most once per part
+ * per audio block, never per sample, and is called only from such code (or from another
+ * BR_COLD_SIZE / BR_POLY_COLD function): minsize compiles it for size inside this -O3 unit.
+ * Unlike BR_POLY_COLD it does not force noinline. Same configuration as BR_POLY_COLD (FM-1
+ * with polyphony, product.h); every other build keeps its code generation byte for byte.
+ * Never apply it to a helper that a render loop or any non-cold caller also calls: the
+ * attribute changes how the helper is simplified and inlined into those callers too. */
+#if BR_POLY_SIZE_CONSTRAINED && defined(__clang__)
+#define BR_COLD_SIZE __attribute__((minsize))
+#else
+#define BR_COLD_SIZE
+#endif
 #if defined(FM1_PATTERN_AUDIO_IRQ_PROTOTYPE) && FM1_PATTERN_AUDIO_IRQ_PROTOTYPE
 #include "pattern_publication_irq.h"
 #include "pattern_bar_clock.h"
@@ -72,13 +90,13 @@ static void br_pattern_host_clock_shift(uint64_t shift);
 #define BR_PLAY_FIELD(p, f) (br_pattern_host_snapshot ? br_pattern_host_snapshot->f[p] : br_part[p].f)
 #define BR_PLAY_STEP(p, i) (br_pattern_host_snapshot ? br_pattern_host_snapshot->step[p][i] : br_part[p].step[i])
 #define BR_PLAY_META(name, a, b) (br_pattern_host_snapshot ? br_pattern_host_snapshot->name[a][b] : br_seq_##name[a][b])
-static inline int32_t br_play_micro(uint32_t p, uint32_t i, uint32_t l)
+BR_COLD_SIZE static inline int32_t br_play_micro(uint32_t p, uint32_t i, uint32_t l)
 { return !br_pattern_host_snapshot ? br_step_micro_get(p,i,l) : p == BR_DRUM_PART ? br_pattern_host_snapshot->kit_micro[i][l] : br_pattern_host_snapshot->synth_micro[p][i]; }
-static inline uint32_t br_play_condition(uint32_t p, uint32_t i, uint32_t l)
+BR_COLD_SIZE static inline uint32_t br_play_condition(uint32_t p, uint32_t i, uint32_t l)
 { return !br_pattern_host_snapshot ? br_step_condition_get(p,i,l) : p == BR_DRUM_PART ? br_pattern_host_snapshot->kit_condition[i][l] : br_pattern_host_snapshot->synth_condition[p][i]; }
-static inline uint32_t br_play_length(uint32_t p, uint32_t i, uint32_t l)
+BR_COLD_SIZE static inline uint32_t br_play_length(uint32_t p, uint32_t i, uint32_t l)
 { uint32_t n; if (!br_pattern_host_snapshot) return br_step_length_get(p,i,l); n = p == BR_DRUM_PART ? br_pattern_host_snapshot->kit_length[i][l] : br_pattern_host_snapshot->synth_length[p][i]; return p != BR_DRUM_PART && !n ? BR_STEP_LENGTH_DEFAULT : n; }
-static inline uint32_t br_play_pitch(uint32_t p, uint32_t i, uint32_t l)
+BR_COLD_SIZE static inline uint32_t br_play_pitch(uint32_t p, uint32_t i, uint32_t l)
 { uint32_t n; if (!br_pattern_host_snapshot) return br_step_note_get(p,i,l); n = br_pattern_host_snapshot->kit_pitch[i][l]; return n >= 36u && n <= 84u ? n : BR_STEP_PITCH_DEFAULT; }
 #else
 #define BR_PLAY_FIELD(p, f) br_part[p].f
@@ -127,6 +145,28 @@ static inline uint32_t br_play_pitch(uint32_t p, uint32_t i, uint32_t l)
 /* Pitched tracks use Plaits only. */
 #include "instrument_drums.c"
 #include "instrument_filter.c"
+#include "instrument_level_smoothing.h"
+static br_level_slew_t br_level_slew[BR_PARTS];
+static br_level_block_t br_level_block[BR_PARTS];
+static void br_level_apply(uint32_t part, int32_t *row, int32_t *key, uint32_t n)
+{
+    const br_level_block_t *b = &br_level_block[part];
+    if (!b->active) return;
+    int32_t gain = b->start, error = 0;
+    int32_t rem = b->remainder < 0 ? -b->remainder : b->remainder;
+    int32_t sign = b->remainder < 0 ? -1 : 1;
+    for (uint32_t i = 0; i < n; ++i) {
+        if (gain != 32768) {
+            row[i] = br_filter_mul_q15(row[i], (uint32_t)gain);
+            if (key) key[i] = br_filter_mul_q15(key[i], (uint32_t)gain);
+        }
+        if (i < b->frames) {
+            gain += b->step; error += rem;
+            if (error >= (int32_t)b->frames) { gain += sign; error -= (int32_t)b->frames; }
+        }
+    }
+}
+
 #include "instrument_modulation.c"
 #ifndef RING_PUBLISH
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
@@ -525,7 +565,6 @@ typedef struct {
 static br_audio_c1_late_record_t br_audio_c1_late_record;
 /* Written only by the audio owner. Diagnostic readers exclude the audio IRQ. */
 static volatile uint32_t br_audio_late_render;
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
 static volatile uint32_t br_audio_late_drop_count;
 static volatile uint32_t br_audio_partial_drop_count;
 static volatile uint32_t br_audio_late_last_index, br_audio_late_last_count;
@@ -533,10 +572,8 @@ static volatile uint32_t br_audio_late_last_deadline, br_audio_late_last_return;
 static volatile uint32_t br_audio_late_last_sequence;
 static volatile uint32_t br_audio_late_last_cutoff;
 static volatile uint32_t br_audio_late_last_core;
-#endif
 
 uint32_t br_engine_late_drop_get(void) { return br_audio_late_render; }
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
 void br_audio_late_drop_snapshot(uint32_t out[9])
 {
     if (!out) return;
@@ -560,7 +597,6 @@ void br_audio_late_drop_reset(void)
     br_audio_late_last_cutoff = 0u;
     br_audio_late_last_core = 0u;
 }
-#endif
 #if BR_AUDIO_FAILURE_JOB_PROFILE_DIAG
 /* CPU0-owned BSS only. The C1-shared job fields are copied here after a
  * confirmed hold/reset and before any output or engine state is cleared. */
@@ -1287,8 +1323,10 @@ typedef struct {
     uint32_t attack, decay, release;
     uint32_t attack_step, decay_step, release_step;
     uint32_t sustain, amp, release_start, release_step_start;
+    uint32_t pos, decay_target;          /* Q16 level (attack) or Q31 x (decay/release, level x^2) */
     uint32_t velocity_gain_q15, velocity_gain_target_q15;
     uint32_t velocity_gain_ramp_left;
+    uint32_t lpg_gate_remaining;
     int32_t velocity_gain_step;
 } br_env_t;
 
@@ -1316,19 +1354,109 @@ static br_kit_source_controls_t br_audio_kit_source_controls[BR_PARTS];
 static uint32_t br_cached_revision[BR_PARTS];
 static uint8_t br_cached_mod_inactive[BR_PARTS];
 static uint8_t br_effective_valid[BR_PARTS];
+/* The track LEVEL (after modulation) each rebuild produced: the level slew
+ * replaces br_effective_sound[p].level with the law value, so it keeps the knob here. */
+static uint8_t br_level_raw[BR_PARTS];
 static uint8_t br_mode[BR_PARTS];           /* 1 BRAIDS/sample kit, 3 Plaits mono, 4 Plaits kit; 0/2 retired. */
 static uint8_t br_active_preset[BR_PARTS];
+#if BR_MODEL_MOD_EXPERIMENT
+#if !FM1_PLAITS_PREWARM_MODEL
+#error "MODEL modulation experiment requires Plaits model preparation"
+#endif
+/* Limit modulation-driven mono model changes to one track per source frame.
+ * Manual preset selection retains its normal path. This is a work scheduling
+ * bound, not a proof that one cold start meets the target deadline. */
+static uint8_t br_model_mono_base[BR_SYNTH_PARTS] = {255u, 255u, 255u};
+static uint8_t br_model_mono_applied[BR_SYNTH_PARTS] = {255u, 255u, 255u};
+static uint8_t br_model_mono_cursor;
+static void br_model_mono_limit(void)
+{
+    uint32_t turn, p, admitted = 0u, start = br_model_mono_cursor;
+    for (p = 0u; p < BR_SYNTH_PARTS; ++p) {
+        uint32_t base = br_cached_sound[p].preset;
+        if (!br_is_plaits(base)) { br_model_mono_base[p] = br_model_mono_applied[p] = 255u; continue; }
+        if (br_model_mono_base[p] != base) {
+            br_model_mono_base[p] = br_model_mono_applied[p] = (uint8_t)base;
+        }
+    }
+    for (turn = 0u; turn < BR_SYNTH_PARTS; ++turn) {
+        p = (start + turn) % BR_SYNTH_PARTS;
+        if (br_model_mono_applied[p] == 255u || !br_is_plaits(br_effective_sound[p].preset)) continue;
+        if (br_effective_sound[p].preset != br_model_mono_applied[p]) {
+            if (!admitted) {
+                br_model_mono_applied[p] = (uint8_t)br_effective_sound[p].preset;
+                br_model_mono_cursor = (uint8_t)((p + 1u) % BR_SYNTH_PARTS);
+                admitted = 1u;
+            } else {
+                br_effective_sound[p].preset = br_model_mono_applied[p];
+                br_effective_valid[p] = 0u; /* retry even after modulation turns off */
+            }
+        }
+    }
+}
+#endif
 static br_env_t br_env[BR_PARTS];
+static br_glide_t br_mono_glide[BR_SYNTH_PARTS];
+static int32_t br_mono_lpg[BR_SYNTH_PARTS];
 static br_filter_t br_filter[BR_PARTS];
 static br_mod_state_t br_mod_state[BR_PARTS];
+/* One free-running oscillator supplies the same signal to every track. */
+static br_mod_state_t br_global_lfo_state = {.held = {16384}, .rng = 0x474c464fu};
+static void br_global_lfo_advance(uint32_t n)
+{
+    uint32_t old = br_global_lfo_state.phase[0];
+    br_global_lfo_state.phase[0] += br_mod_lfo_delta(br_mod_clamp_u7(br_master.global_lfo.rate) * 256u, n);
+    if (br_global_lfo_state.phase[0] < old && br_master.global_lfo.wave == BR_WAVE_RANDOM)
+        br_global_lfo_state.held[0] = (int32_t)(br_mod_rng(&br_global_lfo_state.rng) >> 16) - 32768;
+}
+static int32_t br_global_lfo_signal(void)
+{
+    uint32_t wave = br_master.global_lfo.wave;
+    return br_mod_lfo(&br_global_lfo_state, 0u, wave < BR_WAVE_COUNT ? wave : BR_WAVE_SINE);
+}
+/* Modulation is temporary: never write it back to a saved master setting. */
+static uint32_t br_global_lfo_value(uint32_t target, uint32_t base, uint32_t maximum)
+{
+    uint32_t depth = br_mod_clamp_u7(br_master.global_lfo.depth);
+    uint32_t wave = br_master.global_lfo.wave;
+    int32_t signal, delta, result;
+    if (!depth || br_master.global_lfo.target != target) return base;
+    signal = br_mod_lfo(&br_global_lfo_state, 0u, wave < BR_WAVE_COUNT ? wave : BR_WAVE_SINE);
+    delta = signal * (int32_t)depth * (int32_t)maximum / (32767 * 127);
+    result = (int32_t)base + delta;
+    return result < 0 ? 0u : (uint32_t)result > maximum ? maximum : (uint32_t)result;
+}
 static uint8_t br_active_raw_note[BR_PARTS], br_active_dsp_note[BR_PARTS];
 static volatile uint32_t br_events[BR_EVENT_CAP];
+/* Clock events: their receipt tick. Note on/off: the tick they are due (played time + BR_NOTE_DELAY_MS),
+ * 0 = at once. */
+static uint32_t br_event_timestamp[BR_EVENT_CAP];
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
-static uint32_t br_event_timestamp[BR_EVENT_CAP], br_event_generation[BR_EVENT_CAP];
+static uint32_t br_event_generation[BR_EVENT_CAP];
 static uint8_t br_clock_source_prev;
 static uint32_t br_clock_generation_seen;
 #endif
 static volatile uint32_t br_event_read, br_event_write;
+/* Played-note timing (br_engine_note_arrival, br_engine_note_clock): the foreground's due tick for the
+ * note events it enqueues next (0 = at once), a request to apply every waiting note now, the current
+ * half's start tick and frames rendered into it, and the current block's start tick. */
+typedef struct {
+    uint32_t due_next, half_tick, frames, block_tick, held_off[BR_PARTS];
+    volatile uint32_t hurry;
+    uint8_t clock_valid;
+} br_note_timing_t;
+static br_note_timing_t br_nt;   /* defined at the end of this file: other globals keep their addresses */
+#define br_note_due_next br_nt.due_next
+#define br_note_hurry br_nt.hurry
+#define br_note_half_tick br_nt.half_tick
+#define br_note_frames br_nt.frames
+#define br_note_block_tick br_nt.block_tick
+#define br_note_clock_valid br_nt.clock_valid
+#define br_note_held_off br_nt.held_off
+#define BR_NOTE_RING_SPARE 16u
+#define BR_NOTE_DELAY_TICKS (BR_NOTE_DELAY_MS * 24000u)
+#define BR_NOTE_TICKS_Q8 ((uint32_t)((24000000ull * 256u + FS / 2u) / FS))   /* timer ticks a frame, Q8 */
+#define BR_NOTE_FRAMES_TICKS(f) (((uint32_t)(f) * BR_NOTE_TICKS_Q8 + 128u) >> 8)
 static volatile uint32_t br_panic_parts;
 static uint32_t br_dropped_events;
 #ifdef BR_SPLIT_AUDIO
@@ -1385,11 +1513,20 @@ volatile uint32_t br_kit_mute_mask, br_kit_solo_mask;
 volatile uint8_t br_seq_kit_note[BR_STEPS][BR_DRUM_LANES];
 volatile uint8_t br_seq_kit_pitch[BR_STEPS][BR_DRUM_LANES];
 volatile int8_t br_seq_synth_micro[BR_SYNTH_PARTS][BR_STEPS];
+#if BR_PRODUCT_SMK37 && defined(FM1_DEVICE)
+/* Pool RAM is not startup-cleared: br_step_metadata_clear initializes this
+ * array before project restore and before the audio engine starts. */
+volatile int8_t br_seq_kit_micro[BR_STEPS][BR_DRUM_LANES] __attribute__((section(".pool")));
+#else
 volatile int8_t br_seq_kit_micro[BR_STEPS][BR_DRUM_LANES];
+#endif
 volatile uint8_t br_seq_record_quantize[BR_PARTS];
 volatile uint32_t br_fill_active;
 static volatile uint32_t br_seq_clock[BR_PARTS];
 static uint32_t br_seq_cycle[BR_SEQ_TRACKS], br_seq_rng[BR_SEQ_TRACKS];
+/* Per track/kit lane: step + 1 whose next firing is skipped once (0 = none);
+ * set by br_engine_record_skip for a note already heard live. */
+static uint8_t br_seq_skip[BR_SEQ_TRACKS];
 static uint32_t br_seq_lane_gate_frames[BR_PARTS][BR_DRUM_LANES];
 typedef struct {
     uint32_t remaining, interval, gate;
@@ -1733,16 +1870,6 @@ static uint32_t br_tempo_quarter_frames(void)
     return br_tempo_cached_quarter;
 }
 
-BR_AUDIO_API uint32_t br_time_samples(uint32_t value, uint32_t scale)
-{
-    /* The time curve is authored at 44.1 kHz. Scale the entire duration,
-     * including its minimum click-safe ramp, to the selected output rate. */
-    uint64_t samples;
-    value = br_bound(value, 127u);
-    samples = 32u + (uint64_t)value * value * scale;
-    return (uint32_t)((samples * FS + 22050u) / 44100u);
-}
-
 static uint32_t br_q15(uint32_t value)
 {
     return br_scale_7bit_q15_exact(br_bound(value, 127u));
@@ -1759,7 +1886,7 @@ static uint32_t br_env_curve_control_key(const br_sound_t *s)
     uint32_t decay = br_bound(s->decay, 127u);
     uint32_t release = br_bound(s->release, 127u);
     uint32_t sustain = br_bound(s->sustain, 127u);
-    return attack | (decay << 7) | (release << 14) | (sustain << 21);
+    return attack | (decay << 7) | (release << 14) | (sustain << 21) | ((s->amp_mode != 0u) << 28);
 }
 #endif
 
@@ -1767,7 +1894,7 @@ static uint32_t br_env_curve_control_key(const br_sound_t *s)
  * then share immutable controls across each kit's split render jobs. */
 /* Freeze the detector source with its compressor controls before any source
  * worker starts. The same snapshot travels with pipelined bus/key audio. */
-static void br_snapshot_source_compressor(void)
+BR_POLY_COLD static void br_snapshot_source_compressor(void)
 {
     uint32_t before = br_master.revision, after;
     br_compressor_config_t c;
@@ -1779,11 +1906,22 @@ static void br_snapshot_source_compressor(void)
     RING_PUBLISH(); after = br_master.revision;
     if (before != after || (after & 1u)) return;
     if (c.source >= BR_COMP_SOURCE_COUNT) c.source = BR_COMP_OFF;
-    br_source_compressor = c; br_source_compressor_revision = after;
-    RING_PUBLISH();
+    c.mix = br_global_lfo_value(BR_GLOBAL_TARGET_COMP_MIX, c.mix, 127u);
+    c.threshold = br_global_lfo_value(BR_GLOBAL_TARGET_COMP_THRESHOLD, c.threshold, 48u);
+    c.makeup = br_global_lfo_value(BR_GLOBAL_TARGET_COMP_MAKEUP, c.makeup, 24u);
+    c.attack = br_global_lfo_value(BR_GLOBAL_TARGET_COMP_ATTACK, c.attack, 127u);
+    c.release = br_global_lfo_value(BR_GLOBAL_TARGET_COMP_RELEASE, c.release, 127u);
+    c.hold = br_global_lfo_value(BR_GLOBAL_TARGET_COMP_HOLD, c.hold, 127u);
+    /* The compressor caches by revision; advance an even generation whenever
+     * effective controls change, including changes caused solely by the LFO. */
+    if (br_source_compressor_revision == 0xffffffffu || memcmp(&c, &br_source_compressor, sizeof c)) {
+        br_source_compressor = c;
+        br_source_compressor_revision = br_source_compressor_revision == 0xffffffffu ? 0u : br_source_compressor_revision + 2u;
+        RING_PUBLISH();
+    }
 }
 
-static void br_prepare_kit_source_controls(void)
+BR_POLY_COLD static void br_prepare_kit_source_controls(void)
 {
     uint32_t p, has_kit = 0u;
     for (p = 0; p < BR_PARTS; ++p)
@@ -1809,9 +1947,16 @@ static void br_prepare_kit_source_controls(void)
                     /* Per-lane trim (Q4, 16 = unity) so the kits balance: measured on the unit, the hats and
                      * cymbals of the sample kits sat 13 to 26 dB under the kick. */
                     static const uint8_t lane_trim_q4[BR_DRUM_LANES] = {16u, 24u, 56u, 40u};
-                    for (lane = 0u; lane < BR_DRUM_LANES; ++lane)
+                    /* Q13 holds the lane law's fraction too: lane^2 * part / 127^2 with
+                     * seven fractional bits (<= 127^3 * 128, inside uint32_t), so low
+                     * levels keep the (v/127)^2 law instead of the Q7 integer's steps. */
+                    uint32_t part_level = sound->mute ? 0u : br_bound(sound->level, 127u);
+                    for (lane = 0u; lane < BR_DRUM_LANES; ++lane) {
+                        uint32_t l = br_bound(br_cached_lane[p][lane], 127u);
+                        uint32_t x128 = (l * l * part_level * 128u + 8064u) / 16129u;
                         br_audio_kit_source_controls[p].level[lane] =
-                            (br_audio_kit_source_controls[p].level[lane] * q6 * lane_trim_q4[lane]) >> 4;
+                            (x128 * q6 * lane_trim_q4[lane]) >> 11;
+                    }
                 } else if (q6 < 64u) {
                     for (lane = 0u; lane < BR_DRUM_LANES; ++lane)
                         br_audio_kit_source_controls[p].level[lane] =
@@ -1869,17 +2014,20 @@ static int32_t *br_audio_kit_key_output(uint32_t p, uint32_t slot,
     return br_audio_kit_key_partial[0][slot];
 }
 
-static void br_copy_sound(br_sound_t *d, volatile br_sound_t *s)
+BR_COLD_SIZE static void br_copy_sound(br_sound_t *d, volatile br_sound_t *s)
 {
     d->preset = s->preset; d->timbre = s->timbre; d->color = s->color;
     d->tune = s->tune; d->level = s->level; d->attack = s->attack;
     d->decay = s->decay; d->sustain = s->sustain; d->release = s->release;
     d->drive = s->drive; d->delay = s->delay; d->reverb = s->reverb;
-    d->space = s->space; d->mute = s->mute; d->filter = s->filter;
+    d->mute = s->mute; d->filter = s->filter;
     d->filter_resonance = s->filter_resonance;
     d->filter_keytrack = s->filter_keytrack;
+    d->filter_env_depth = s->filter_env_depth;
     d->timbre_mod = s->timbre_mod; d->fm_mod = s->fm_mod;
     d->morph_mod = s->morph_mod;
+    d->harmonics_mod = s->harmonics_mod;
+    d->portamento = s->portamento; d->glide_mode = s->glide_mode; d->amp_mode = s->amp_mode; d->lpg_gate = s->lpg_gate;
     d->drum_snap = s->drum_snap;
     d->plaits_harmonics = s->plaits_harmonics; d->plaits_aux = s->plaits_aux;
     d->pan = s->pan;
@@ -1888,44 +2036,42 @@ static void br_copy_sound(br_sound_t *d, volatile br_sound_t *s)
     d->drum_key_lane = 0u;
 }
 
-static void br_copy_mod(br_mod_config_t *d, volatile br_mod_config_t *s)
+BR_COLD_SIZE static void br_copy_mod(br_mod_config_t *d, volatile br_mod_config_t *s)
 {
     uint32_t i;
     d->attack = s->attack; d->decay = s->decay; d->sustain = s->sustain;
     d->release = s->release; d->amount = s->amount; d->target = s->target;
-    d->loop = s->loop; d->retrigger = s->retrigger; d->scale = s->scale;
-    d->root = s->root; d->quantize = s->quantize; d->transpose = s->transpose;
+    d->loop = s->loop; d->retrigger = s->retrigger;
     for (i = 0; i < BR_LFOS; ++i) {
         d->lfo[i].wave = s->lfo[i].wave; d->lfo[i].rate = s->lfo[i].rate;
         d->lfo[i].depth = s->lfo[i].depth; d->lfo[i].target = s->lfo[i].target;
     }
-    for (i = 0; i < BR_ROUTES; ++i) {
+    for (i = 0; i < BR_EFFECTIVE_ROUTES; ++i) {
         d->route[i].source = s->route[i].source; d->route[i].target = s->route[i].target;
         d->route[i].amount = s->route[i].amount; d->route[i].enabled = s->route[i].enabled;
     }
 }
 
-static void br_copy_fx(br_fx_config_t *d, volatile br_fx_config_t *s)
+BR_COLD_SIZE static void br_copy_fx(br_fx_config_t *d, volatile br_fx_config_t *s)
 {
     d->drive_mode = s->drive_mode; d->drive_gain = s->drive_gain; d->drive_tone = s->drive_tone;
     d->delay_engine = s->delay_engine;
     d->delay_time = s->delay_time; d->delay_feedback = s->delay_feedback;
-    d->reverb_engine = s->reverb_engine; d->reverb_tone = s->reverb_tone;
     d->mod_engine = s->mod_engine; d->mod_rate = s->mod_rate;
     d->mod_depth = s->mod_depth; d->mod_mix = s->mod_mix;
 }
 
-static uint32_t br_mod_has_active_target(const br_mod_config_t *mod,
+BR_COLD_SIZE static uint32_t br_mod_has_active_target(const br_mod_config_t *mod,
                                          const br_sound_t *sound)
 {
     uint32_t i;
-    if (sound->timbre_mod != 64u || sound->fm_mod != 64u ||
-        (br_is_plaits(sound->preset) && sound->morph_mod != 64u)) return 1u;
     for (i = 0; i < BR_LFOS; ++i)
         if (mod->lfo[i].depth && br_mod_target_supported(sound->preset, mod->lfo[i].target)) return 1u;
     if (mod->amount && br_mod_target_supported(sound->preset, mod->target))
         return 1u;
-    for (i = 0; i < BR_ROUTES; ++i) {
+    if (sound->filter_env_depth && br_mod_target_supported(sound->preset, BR_TARGET_FILTER))
+        return 1u;
+    for (i = 0; i < BR_EFFECTIVE_ROUTES; ++i) {
         const br_route_config_t *r = &mod->route[i];
         if (r->enabled && r->amount && br_mod_source_active(r->source) &&
             br_mod_target_supported(sound->preset, r->target)) return 1u;
@@ -1939,7 +2085,7 @@ static uint32_t br_mod_has_active_target(const br_mod_config_t *mod,
  * is applied as it comes. DRIVE is smoothed per sample inside its own stage. */
 static uint8_t br_send_now[BR_PARTS][3];
 static uint8_t br_send_ready[BR_PARTS];
-static uint32_t br_send_walk(uint32_t *value, uint32_t base, uint8_t *now, uint32_t step)
+BR_COLD_SIZE static uint32_t br_send_walk(uint32_t *value, uint32_t base, uint8_t *now, uint32_t step)
 {
     uint32_t cur = *now;
     int32_t delta = (int32_t)*value - (int32_t)base, out;
@@ -1951,7 +2097,7 @@ static uint32_t br_send_walk(uint32_t *value, uint32_t base, uint8_t *now, uint3
     *value = (uint32_t)(out < 0 ? 0 : out > 127 ? 127 : out);
     return cur != base;
 }
-static void br_smooth_sends(void)
+BR_POLY_COLD static void br_smooth_sends(void)
 {
     uint32_t p;
     for (p = 0; p < BR_PARTS; ++p) {
@@ -1972,20 +2118,74 @@ static void br_smooth_sends(void)
     }
 }
 
-static void br_build_effective(uint32_t p)
+#if BR_CAP_WHEELS && defined(FM1_DEVICE)
+volatile int32_t br_smk_bend_q7[BR_SYNTH_PARTS];
+volatile uint8_t br_smk_mod_wheel[BR_SYNTH_PARTS];
+#endif
+
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+static uint32_t br_poly_scheduler_amp(uint32_t part, uint32_t fallback);
+#endif
+BR_COLD_SIZE static void br_build_effective(uint32_t p)
 {
+#if BR_CAP_WHEELS && defined(FM1_DEVICE)
+    static uint8_t applied[BR_PARTS];
+    uint8_t wheel = p < BR_SYNTH_PARTS ? br_smk_mod_wheel[p] : 0;
+    if (applied[p] != wheel) {
+        applied[p] = wheel;
+        br_effective_valid[p] = 0u;
+    }
+#endif
     if (br_cached_mod_inactive[p] && br_effective_valid[p]) return;
     int32_t amp = (int32_t)br_env[p].amp;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    amp = (int32_t)br_poly_scheduler_amp(p, (uint32_t)amp);
+#endif
+    for (uint32_t i = 0; i < BR_EFFECTIVE_ROUTES; ++i)
+        if (br_cached_mod[p].route[i].enabled && br_cached_mod[p].route[i].source == BR_SOURCE_GLOBAL_LFO) {
+            br_mod_state[p].global_lfo = br_global_lfo_signal();
+            break;
+        }
     br_mod_effective(&br_mod_state[p], &br_cached_mod[p], &br_cached_sound[p],
                      &br_cached_fx[p], amp, &br_effective_sound[p], &br_effective_fx[p],
                      &br_pitch_mod_q7[p]);
+    br_level_raw[p] = (uint8_t)br_bound(br_effective_sound[p].level, 127u);
+#if BR_CAP_WHEELS && defined(FM1_DEVICE)
+    uint32_t timbre = br_effective_sound[p].timbre;
+    br_effective_sound[p].timbre = timbre + ((127u - timbre) * wheel + 63u) / 127u;
+#endif
     if (br_cached_mod_inactive[p]) br_effective_valid[p] = 1u;
 }
 
-static void br_env_start(uint32_t p, uint32_t note, uint32_t velocity,
+/* Fractional steps: a segment of N samples moves pos by ceil(span/N) each
+ * sample and lands exactly on its end on or just before sample N. */
+static void br_env_set_decay(br_env_t *e)
+{
+    e->decay_target = br_env_pos(e->sustain);
+    e->decay_step = (BR_ENV_POS_TOP - e->decay_target + e->decay - 1u) / e->decay;
+}
+
+/* Release always takes the release time, whatever level it starts from. */
+static void br_env_set_release(br_env_t *e)
+{
+    uint32_t start = br_env_pos(e->release_start);
+    if (e->release_step_start != e->release_start) {
+        e->release_step_start = e->release_start;
+        e->pos = start;
+    }
+    e->release_step = (start + e->release - 1u) / e->release;
+}
+
+#if BR_POLY_SUPPORT
+BR_COLD_SIZE static void br_env_start_state(br_env_t *e, uint32_t note, uint32_t velocity,
+                               const br_sound_t *s, uint32_t keep_amp)
+{
+#else
+BR_COLD_SIZE static void br_env_start(uint32_t p, uint32_t note, uint32_t velocity,
                          const br_sound_t *s, uint32_t keep_amp)
 {
     br_env_t *e = &br_env[p];
+#endif
     uint32_t new_velocity = br_bound(velocity, 127u);
     uint32_t amp = keep_amp && e->stage != BR_ENV_OFF ? e->amp : 0u;
     if (keep_amp) {
@@ -2005,21 +2205,23 @@ static void br_env_start(uint32_t p, uint32_t note, uint32_t velocity,
         }
     }
     e->stage = BR_ENV_ATTACK; e->note = note;
+    e->lpg_gate_remaining = s->amp_mode ? br_lpg_gate_samples(s->lpg_gate) : 0u;
     e->velocity = new_velocity;
-#if BR_AUDIO_ENV_CURVE_CONTROL_KEY
-    e->level = br_env_curve_control_key(s);
-#else
-    e->level = br_bound(s->level, 127u);
-#endif
-    e->attack = br_time_samples(s->attack, 3u);
-    e->decay = br_time_samples(s->decay, 8u);
-    e->release = br_time_samples(s->release, 8u);
-    e->sustain = br_q15(s->sustain);
-    e->amp = amp; e->release_start = e->release_step_start = 0;
-    e->attack_step = (32767u - e->amp + e->attack - 1u) / e->attack;
-    e->decay_step = (32767u - e->sustain + e->decay - 1u) / e->decay;
-    e->release_step = (e->release_start + e->release - 1u) / e->release;
+    /* The first br_env_refresh (every render runs it before advancing)
+     * sets up all segments: no key or time matches these values. */
+    e->level = UINT32_MAX;
+    e->attack = e->decay = e->release = 0u;
+    e->amp = amp; e->pos = amp << 16; e->release_start = 0;
+    e->release_step_start = UINT32_MAX;   /* set up at the first release refresh */
 }
+
+#if BR_POLY_SUPPORT
+BR_COLD_SIZE static void br_env_start(uint32_t p, uint32_t note, uint32_t velocity,
+                         const br_sound_t *s, uint32_t keep_amp)
+{
+    br_env_start_state(&br_env[p], note, velocity, s, keep_amp);
+}
+#endif
 
 static uint32_t br_map_pitch_q7(uint32_t p, uint32_t raw_note)
 {
@@ -2029,6 +2231,9 @@ static uint32_t br_map_pitch_q7(uint32_t p, uint32_t raw_note)
     if (base_tune < -48) base_tune = -48;
     if (base_tune > 48) base_tune = 48;
     int32_t pitch = ((int32_t)raw_note + base_tune) * 128 + br_pitch_mod_q7[p];
+#if BR_CAP_WHEELS && defined(FM1_DEVICE)
+    if (p < BR_SYNTH_PARTS) pitch += br_smk_bend_q7[p];
+#endif
     if (pitch < 0) pitch = 0;
     if (pitch > 127 * 128) pitch = 127 * 128;
     return (uint32_t)pitch;
@@ -2039,7 +2244,7 @@ static uint32_t br_map_note(uint32_t p, uint32_t raw_note)
     return (br_map_pitch_q7(p, raw_note) + 64u) / 128u;
 }
 
-static void br_snapshot(uint32_t p)
+BR_POLY_COLD static void br_snapshot(uint32_t p)
 {
     uint32_t tries, before, after, i;
     br_part_t *part = &br_part[p];
@@ -2095,7 +2300,7 @@ static uint32_t br_pack_event(uint32_t op, uint32_t part, uint32_t note, uint32_
     return (op << 30) | ((part & 3u) << 28) | ((note & 127u) << 21) | ((vel & 127u) << 14);
 }
 
-static void br_enqueue_timed(uint32_t event, uint32_t timestamp)
+BR_POLY_COLD static void br_enqueue_timed(uint32_t event, uint32_t timestamp)
 {
     uint32_t w = br_event_write, r = br_event_read;
     if (w - r >= BR_EVENT_CAP) {
@@ -2110,12 +2315,13 @@ static void br_enqueue_timed(uint32_t event, uint32_t timestamp)
         }
         return;
     }
+    /* Played notes wait in this ring until they are due; when it runs low on room, everything waiting is
+     * applied at the next block instead (oldest first, the ring's order), so nothing is dropped for it. */
+    if (w - r >= BR_EVENT_CAP - BR_NOTE_RING_SPARE) br_note_hurry = 1u;
     br_events[w & BR_EVENT_MASK] = event;
-#if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
     br_event_timestamp[w & BR_EVENT_MASK] = timestamp;
+#if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
     br_event_generation[w & BR_EVENT_MASK] = br_midi_clock_generation;
-#else
-    (void)timestamp;
 #endif
     RING_PUBLISH();
     br_event_write = w + 1u;
@@ -2123,10 +2329,45 @@ static void br_enqueue_timed(uint32_t event, uint32_t timestamp)
 
 static void br_enqueue(uint32_t event) { br_enqueue_timed(event, 0u); }
 
-static void br_start_note_now(uint32_t p, uint32_t note, uint32_t velocity, uint32_t slide)
+/* ---- played-note timing: a note played at tick t sounds in the first block that starts at or after
+ * t + BR_NOTE_DELAY_MS, however long the foreground took to get to it (up to that delay). The audio
+ * interrupt reports each half's start tick (br_engine_note_clock); each block's start tick follows from
+ * the frames rendered since. Events keep their order: a note that is not due holds everything after it. */
+BR_COLD_SIZE BR_AUDIO_API void br_engine_note_arrival(uint32_t tick)
+{
+    uint32_t due = tick + BR_NOTE_DELAY_TICKS;
+    br_note_due_next = due ? due : 1u;
+}
+BR_COLD_SIZE BR_AUDIO_API void br_engine_note_arrival_end(void) { br_note_due_next = 0u; }
+/* Called by the audio interrupt with each half's start tick. Interrupt latency only delays an observation,
+ * so the edge follows the earliest observations and drifts slowly toward later ones; a large jump (a
+ * skipped or late half) resynchronizes. */
+BR_COLD_SIZE BR_AUDIO_API void br_engine_note_clock(uint32_t tick)
+{
+    uint32_t predicted = br_note_half_tick + BR_NOTE_FRAMES_TICKS(FM1_AUDIO_HALF_FRAMES);
+    int32_t late = (int32_t)(tick - predicted);
+    if (!br_note_clock_valid || late < 0 || late > (int32_t)BR_NOTE_FRAMES_TICKS(FM1_AUDIO_HALF_FRAMES / 4u))
+        predicted = tick;
+    else predicted += (uint32_t)(late >> 4);
+    br_note_half_tick = predicted;
+    br_note_frames = 0u;
+    br_note_clock_valid = 1u;
+}
+/* 1: the event at ring index i is a played note that is not due in this block. */
+BR_COLD_SIZE static uint32_t br_note_waits(uint32_t i)
+{
+    uint32_t due = br_event_timestamp[i];
+    int32_t ahead;
+    if (!due || !br_note_clock_valid || br_note_hurry || br_panic_parts || br_midi_transport_overflow)
+        return 0u;
+    ahead = (int32_t)(due - br_note_block_tick);
+    /* Never further ahead than the delay plus a margin: a stale stamp (timer wrap) plays at once. */
+    return ahead > 0 && ahead <= (int32_t)(BR_NOTE_DELAY_TICKS + BR_NOTE_FRAMES_TICKS(2u * BR_BLOCK));
+}
+
+BR_POLY_COLD static void br_start_note_now(uint32_t p, uint32_t note, uint32_t velocity, uint32_t slide)
 {
     br_sound_t *s = &br_effective_sound[p];
-    (void)slide;
     br_mod_note_on(&br_mod_state[p], &br_cached_mod[p], note, velocity);
     if (br_is_kit(s->preset)) {
         uint32_t lane = br_drum_lane(note);
@@ -2153,10 +2394,13 @@ static void br_start_note_now(uint32_t p, uint32_t note, uint32_t velocity, uint
         return;
     }
 
+    if (br_env[p].stage == BR_ENV_OFF) br_mono_lpg[p] = 0;
     br_env_start(p, note, velocity, s, 1u);
     int32_t pitch = (int32_t)br_map_pitch_q7(p, note);
     if (pitch < 0) pitch = 0;
     if (pitch > 16383) pitch = 16383;
+    br_glide_note(&br_mono_glide[p], (uint32_t)pitch, s->portamento, s->glide_mode, slide, FM1_AUDIO_RATE_HZ);
+    pitch = (br_glide_pitch(&br_mono_glide[p]) + 32768) >> 16;
 #if defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
     if (br_is_plaits(s->preset)) {
         plaits_note_on(br_dsp[p].plaits, s->preset - BR_FIRST_PLAITS,
@@ -2203,7 +2447,7 @@ static br_deferred_start_t br_deferred_kit[BR_DEFERRED_KIT_NOTES];
 static uint32_t br_kit_start_at, br_kit_start_open;
 #endif
 
-static void br_deferred_start_flush(uint32_t p)
+BR_COLD_SIZE static void br_deferred_start_flush(uint32_t p)
 {
     if (p < BR_SYNTH_PARTS && br_deferred_start[p].valid) {
         br_deferred_start_t d = br_deferred_start[p];
@@ -2222,7 +2466,7 @@ static void br_deferred_start_flush(uint32_t p)
 #endif
 }
 
-static void br_deferred_start_drop(uint32_t p)
+BR_COLD_SIZE static void br_deferred_start_drop(uint32_t p)
 {
     if (p < BR_SYNTH_PARTS) br_deferred_start[p].valid = 0u;
 #if BR_AUDIO_STAGGER_COLD_KIT_STARTS
@@ -2230,7 +2474,7 @@ static void br_deferred_start_drop(uint32_t p)
 #endif
 }
 
-static void br_deferred_start_reset(void)
+BR_COLD_SIZE static void br_deferred_start_reset(void)
 {
     memset(br_deferred_start, 0, sizeof br_deferred_start);
 #if BR_AUDIO_STAGGER_COLD_KIT_STARTS
@@ -2241,7 +2485,7 @@ static void br_deferred_start_reset(void)
 }
 
 /* Called once per block, before events are applied. */
-static void br_deferred_starts_run(void)
+BR_POLY_COLD static void br_deferred_starts_run(void)
 {
     uint32_t p;
     ++br_start_half;
@@ -2258,7 +2502,7 @@ static void br_deferred_starts_run(void)
 #endif
 }
 
-static void br_start_note(uint32_t p, uint32_t note, uint32_t velocity, uint32_t slide)
+BR_POLY_COLD static void br_start_note(uint32_t p, uint32_t note, uint32_t velocity, uint32_t slide)
 {
     if (p < BR_SYNTH_PARTS && br_is_plaits(br_effective_sound[p].preset) &&
         (BR_AUDIO_STAGGER_WARM_SYNTH_STARTS ||
@@ -2304,7 +2548,18 @@ static void br_start_note(uint32_t p, uint32_t note, uint32_t velocity, uint32_t
     br_deferred_start_flush(p);
     br_start_note_now(p, note, velocity, slide);
 }
+/* Parts with a start staggered to a later half still waiting (a note's end waits for its start). */
+BR_COLD_SIZE static uint32_t br_note_starts_pending(void)
+{
+    uint32_t p, mask = 0u;
+    for (p = 0u; p < BR_SYNTH_PARTS; ++p) mask |= (uint32_t)br_deferred_start[p].valid << p;
+#if BR_AUDIO_STAGGER_COLD_KIT_STARTS
+    if (br_kit_start_open) mask |= 1u << BR_DRUM_PART;
+#endif
+    return mask;
+}
 #else
+#define br_note_starts_pending() 0u
 #define br_deferred_start_flush(p) ((void)(p))
 #define br_deferred_start_drop(p) ((void)(p))
 #define br_deferred_start_reset() ((void)0)
@@ -2315,7 +2570,7 @@ static void br_start_note(uint32_t p, uint32_t note, uint32_t velocity, uint32_t
 }
 #endif
 
-static void br_release_note(uint32_t p, uint32_t note)
+BR_POLY_COLD static void br_release_note(uint32_t p, uint32_t note)
 {
     br_env_t *e = &br_env[p];
     br_deferred_start_flush(p);
@@ -2358,7 +2613,7 @@ static void br_release_note(uint32_t p, uint32_t note)
             /* Raw MIDI identity is checked here, before pitch mapping. */
             plaits_note_off(br_dsp[p].plaits, 128u);
             br_mod_note_off(&br_mod_state[p]);
-            if (br_env[p].stage != BR_ENV_OFF) {
+            if (br_env[p].stage != BR_ENV_OFF && br_env[p].stage != BR_ENV_RELEASE) {
                 br_env[p].stage = BR_ENV_RELEASE;
                 br_env[p].release_start = br_env[p].amp;
             }
@@ -2366,7 +2621,7 @@ static void br_release_note(uint32_t p, uint32_t note)
         return;
     }
 #endif
-    if (e->stage == BR_ENV_OFF || (note < 128u && e->note != note)) return;
+    if (e->stage == BR_ENV_OFF || e->stage == BR_ENV_RELEASE || (note < 128u && e->note != note)) return;
     br_mod_note_off(&br_mod_state[p]);
     e->stage = BR_ENV_RELEASE;
     e->release_start = e->amp;
@@ -2378,11 +2633,19 @@ static void br_release_note(uint32_t p, uint32_t note)
 typedef struct { uint8_t note, velocity, count; } br_live_note_t;
 static br_live_note_t br_live_notes[BR_SYNTH_PARTS][128];
 static uint8_t br_live_count[BR_SYNTH_PARTS];
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+static int br_poly_scheduler_event(uint32_t op, uint32_t part, uint32_t note,
+                                   uint32_t velocity, uint32_t tag);
+static int br_poly_scheduler_defer_transport(uint32_t op, uint32_t event);
+static uint32_t br_poly_scheduler_is_enabled(void);
+static int br_poly_scheduler_retired_event(uint32_t op, uint32_t part, uint32_t note,
+                                           uint32_t velocity, uint32_t tag);
+#endif
 
-static void br_live_note_on(uint32_t p, uint32_t note, uint32_t velocity)
+BR_POLY_COLD static void br_live_note_on(uint32_t p, uint32_t note, uint32_t velocity)
 {
     br_live_note_t *notes = br_live_notes[p], entry;
-    uint32_t i, n = br_live_count[p];
+    uint32_t i, n = br_live_count[p], overlapping = br_live_count[p] != 0u;
     for (i = 0u; i < n && notes[i].note != note; ++i) {}
     entry.note = (uint8_t)note; entry.velocity = (uint8_t)velocity;
     entry.count = i < n && notes[i].count < 255u ? (uint8_t)(notes[i].count + 1u) : 1u;
@@ -2393,10 +2656,10 @@ static void br_live_note_on(uint32_t p, uint32_t note, uint32_t velocity)
     }
     notes[n++] = entry;
     br_live_count[p] = (uint8_t)n;
-    br_start_note(p, note, velocity, 0u);
+    br_start_note(p, note, velocity, overlapping);
 }
 
-static void br_live_note_off(uint32_t p, uint32_t note)
+BR_POLY_COLD static void br_live_note_off(uint32_t p, uint32_t note)
 {
     br_live_note_t *notes = br_live_notes[p];
     uint32_t i, n = br_live_count[p], active;
@@ -2407,11 +2670,11 @@ static void br_live_note_off(uint32_t p, uint32_t note)
     memmove(&notes[i], &notes[i + 1u], (n - i - 1u) * sizeof *notes);
     br_live_count[p] = (uint8_t)--n;
     br_deferred_start_flush(p);
-    if (active && n) br_start_note(p, notes[n - 1u].note, notes[n - 1u].velocity, 0u);
+    if (active && n) br_start_note(p, notes[n - 1u].note, notes[n - 1u].velocity, 1u);
     else br_release_note(p, note);
 }
 
-static void br_stop_part(uint32_t p)
+BR_POLY_COLD static void br_stop_part(uint32_t p)
 {
     br_deferred_start_drop(p);
     if (p < BR_SYNTH_PARTS) br_live_count[p] = 0u;
@@ -2468,7 +2731,7 @@ static void br_stop_part(uint32_t p)
 
 /* Release sounding voices on MIDI Stop, but keep the exact sequencer
  * deadlines and pending events frozen until Continue. */
-static void br_midi_pause_part(uint32_t p)
+BR_POLY_COLD static void br_midi_pause_part(uint32_t p)
 {
     uint32_t frames = br_seq_frames[p], gate = br_seq_gate_frames[p];
     uint32_t lane_gates[BR_DRUM_LANES];
@@ -2495,7 +2758,7 @@ static void br_midi_pause_part(uint32_t p)
     if (p == BR_DRUM_PART) memcpy(br_retrig, retrig, sizeof retrig);
 }
 
-static void br_transport_reset_position(void)
+BR_POLY_COLD static void br_transport_reset_position(void)
 {
     uint32_t p;
     br_midi_paused = 0u;
@@ -2527,6 +2790,7 @@ static void br_transport_reset_position(void)
     }
     for (p = 0u; p < BR_SEQ_TRACKS; ++p) {
         br_seq_cycle[p] = 0u;
+        br_seq_skip[p] = 0u;
         br_seq_prev_condition_valid[p] = 0u;
         br_seq_prev_condition_result[p] = 0u;
     }
@@ -2534,7 +2798,7 @@ static void br_transport_reset_position(void)
         br_seq_lane_gate_frames[BR_DRUM_PART][p] = 0u;
 }
 
-static void br_midi_apply_transport(uint32_t status)
+BR_POLY_COLD static void br_midi_apply_transport(uint32_t status)
 {
     uint32_t p;
     if (status == 0xFCu) {
@@ -2605,7 +2869,7 @@ static void br_clock_fail(uint32_t reason)
 
 /* Runs on the audio owner. The producer's timestamp remains the follower
  * observation time even when processing it in a later writable block. */
-static int br_clock_event(uint32_t status, uint32_t tick)
+BR_POLY_COLD static int br_clock_event(uint32_t status, uint32_t tick)
 {
     uint64_t event_frame;
     uint32_t flags;
@@ -2710,7 +2974,7 @@ static int br_clock_event(uint32_t status, uint32_t tick)
     }
     return 1;
 }
-static void br_clock_project(void)
+BR_POLY_COLD static void br_clock_project(void)
 {
     fm1_midi_clock_t projected = br_clock_experiment.follower;
     uint32_t flags;
@@ -2756,13 +3020,50 @@ static void br_clock_project(void)
 }
 #endif
 
-static void br_take_events(void)
+/* A played note's end that would land in the block that started its part's note (both late behind a
+ * long stall, or a note shorter than a block) waits here one block, so the note sounds for at least a
+ * block instead of not at all. Anything later for that part applies it first: per part, order holds. */
+BR_POLY_COLD static void br_note_off_apply(uint32_t e)
 {
-    br_deferred_starts_run();
+    uint32_t p = (e >> 28) & 3u, note = (e >> 21) & 127u;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (br_poly_scheduler_event(BR_EVENT_OFF, p, note, 0u, e & 0x3fffu)) return;
+    if (br_poly_scheduler_retired_event(BR_EVENT_OFF, p, note, 0u, e & 0x3fffu)) return;
+#endif
+    if (p < BR_SYNTH_PARTS) br_live_note_off(p, note);
+    else br_release_note(p, note);
+}
+BR_POLY_COLD static void br_note_held_off_apply(uint32_t mask)
+{
+    uint32_t q;
+    for (q = 0u; q < BR_PARTS; ++q)
+        if (((mask >> q) & 1u) && br_note_held_off[q]) {
+            uint32_t e = br_note_held_off[q];
+            br_note_held_off[q] = 0u;
+            br_note_off_apply(e);
+        }
+}
+
+BR_POLY_COLD static void br_take_events(void)
+{
+    /* Parts whose note starts in this block or later (staggered): a played end for them waits. */
+    uint32_t started = br_note_starts_pending();
+    /* This block's start tick (blocks are BR_BLOCK frames; on the unit one block is one half). */
+    br_note_block_tick = br_note_half_tick + BR_NOTE_FRAMES_TICKS(br_note_frames);
+    br_note_frames += BR_BLOCK;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (!br_poly_scheduler_is_enabled())
+#endif
+        br_deferred_starts_run();
+    br_note_held_off_apply(15u & ~started);   /* ends held from the last block */
+    started |= br_note_starts_pending();
     while (br_event_read != br_event_write) {
         uint32_t e = br_events[br_event_read & BR_EVENT_MASK];
         uint32_t op = e >> 30, p = (e >> 28) & 3u;
         uint32_t note = (e >> 21) & 127u, vel = (e >> 14) & 127u;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+        if (br_poly_scheduler_defer_transport(op, e)) break;
+#endif
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
         if (op == 0u && br_event_generation[br_event_read & BR_EVENT_MASK] !=
                         br_midi_clock_generation) {
@@ -2776,8 +3077,25 @@ static void br_take_events(void)
             continue;
         }
 #endif
+        if ((op == BR_EVENT_ON || op == BR_EVENT_OFF) && br_note_waits(br_event_read & BR_EVENT_MASK)) break;
+        if (op != 0u) {
+            uint32_t timed = br_event_timestamp[br_event_read & BR_EVENT_MASK] && br_note_clock_valid;
+            br_note_held_off_apply(op == BR_EVENT_STOP && p == 3u && note == 127u && vel == 127u ? 15u : 1u << p);
+            if (timed && op == BR_EVENT_OFF && !br_note_hurry &&
+                ((started | br_note_starts_pending()) & (1u << p))) {
+                br_note_held_off[p] = e;
+                RING_PUBLISH(); br_event_read++;
+                continue;
+            }
+            if (timed && op == BR_EVENT_ON) started |= 1u << p;
+        }
         RING_PUBLISH();
         br_event_read++;
+        if (op == BR_EVENT_OFF) { br_note_off_apply(e); continue; }
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+        if (br_poly_scheduler_event(op, p, note, vel, e & 0x3fffu)) continue;
+        if (br_poly_scheduler_retired_event(op, p, note, vel, e & 0x3fffu)) continue;
+#endif
         if (op == 0u) {
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
             if ((e & 255u) == 0xFCu && br_midi_clock_enabled) {
@@ -2794,9 +3112,6 @@ static void br_take_events(void)
         else if (op == BR_EVENT_ON) {
             if (p < BR_SYNTH_PARTS) br_live_note_on(p, note, vel);
             else br_start_note(p, note, vel, 0u);
-        } else if (op == BR_EVENT_OFF) {
-            if (p < BR_SYNTH_PARTS) br_live_note_off(p, note);
-            else br_release_note(p, note);
         }
         else if (op == BR_EVENT_STOP) {
             if (p == 3u && note == 127u && vel == 127u) {
@@ -2805,6 +3120,7 @@ static void br_take_events(void)
             else br_stop_part(p);
         }
     }
+    if (br_event_read == br_event_write) br_note_hurry = 0u;
     if (br_midi_transport_overflow) {
         br_midi_transport_overflow = 0u;
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
@@ -2817,11 +3133,18 @@ static void br_take_events(void)
         uint32_t mask = br_panic_parts, p;
         br_panic_parts = 0;
         for (p = 0; p < BR_PARTS; ++p)
-            if (mask & (1u << p)) br_stop_part(p);
+            if (mask & (1u << p)) {
+                br_note_held_off[p] = 0u;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+                if (br_poly_scheduler_event(BR_EVENT_STOP, p, 0u, 0u, 0u)) continue;
+                (void)br_poly_scheduler_retired_event(BR_EVENT_STOP, p, 0u, 0u, 0u);
+#endif
+                br_stop_part(p);
+            }
     }
 }
 
-static void br_select_mode(uint32_t p)
+BR_POLY_COLD static void br_select_mode(uint32_t p)
 {
     if (!br_preset_allowed_on_part(p, br_cached_sound[p].preset)) {
         br_cached_sound[p].preset = br_default_part_preset(p);
@@ -2895,7 +3218,7 @@ static void br_select_mode(uint32_t p)
         br_seq_lane_gate_frames[p][lane] = 0u;
 }
 
-static uint32_t br_step_base_duration(uint32_t p)
+BR_COLD_SIZE static uint32_t br_step_base_duration(uint32_t p)
 {
     uint32_t division = br_bound(BR_PLAY_FIELD(p, division), 2u);
     uint32_t quarter = br_tempo_quarter_frames();
@@ -2903,13 +3226,13 @@ static uint32_t br_step_base_duration(uint32_t p)
     return base ? base : 1u;
 }
 
-static uint32_t br_step_duration_from_base(uint32_t p, uint32_t step, uint32_t base)
+BR_COLD_SIZE static uint32_t br_step_duration_from_base(uint32_t p, uint32_t step, uint32_t base)
 {
     /* Track 1's legacy swing field is the shared project setting. Older
      * projects with different track values retain their bytes on save. */
     uint32_t swing;
     (void)p;
-    swing = br_bound(br_part[0].swing, BR_SWING_MAX);
+    swing = br_bound(br_swing, BR_SWING_MAX);
     if (step & 1u) base = base * (128u - swing) / 128u;
     else base = base * (128u + swing) / 128u;
     return base ? base : 1u;
@@ -2920,13 +3243,13 @@ static uint32_t br_step_duration(uint32_t p, uint32_t step)
     return br_step_duration_from_base(p, step, br_step_base_duration(p));
 }
 
-BR_AUDIO_API uint32_t br_engine_step_duration(uint32_t p, uint32_t step)
+BR_COLD_SIZE BR_AUDIO_API uint32_t br_engine_step_duration(uint32_t p, uint32_t step)
 {
     (void)step;
     return p < BR_PARTS ? br_step_base_duration(p) : 1u;
 }
 
-static uint32_t br_seq_random(uint32_t row)
+BR_COLD_SIZE static uint32_t br_seq_random(uint32_t row)
 {
     uint32_t x = br_seq_rng[row];
     if (!x) x = 0x9E3779B9u ^ (row + 1u);
@@ -2935,12 +3258,12 @@ static uint32_t br_seq_random(uint32_t row)
     return br_seq_rng[row];
 }
 
-static uint32_t br_seq_is_pre_condition(uint32_t condition)
+BR_COLD_SIZE static uint32_t br_seq_is_pre_condition(uint32_t condition)
 {
     return condition == BR_STEP_COND_PRE || condition == BR_STEP_COND_NOT_PRE;
 }
 
-static uint32_t br_seq_condition_for_cycle(uint32_t row, uint32_t condition,
+BR_POLY_COLD static uint32_t br_seq_condition_for_cycle(uint32_t row, uint32_t condition,
                                            uint32_t previous_valid,
                                            uint32_t previous_result, uint32_t cycle)
 {
@@ -2979,7 +3302,7 @@ static uint32_t br_seq_condition_result(uint32_t row, uint32_t condition,
                                         uint32_t previous_valid, uint32_t previous_result)
 { return br_seq_condition_for_cycle(row, condition, previous_valid, previous_result, br_seq_cycle[row]); }
 
-static uint32_t br_seq_length_frames(uint32_t duration, uint32_t units)
+BR_COLD_SIZE static uint32_t br_seq_length_frames(uint32_t duration, uint32_t units)
 {
     uint32_t frames;
     if (!units) units = BR_STEP_LENGTH_DEFAULT;
@@ -2988,7 +3311,7 @@ static uint32_t br_seq_length_frames(uint32_t duration, uint32_t units)
     return frames ? frames : 1u;
 }
 
-static void br_seq_note_expire(uint32_t p)
+BR_COLD_SIZE static void br_seq_note_expire(uint32_t p)
 {
     if (br_seq_note[p] != 255u) br_release_note(p, br_seq_note[p]);
     br_seq_note[p] = 255u;
@@ -2997,7 +3320,7 @@ static void br_seq_note_expire(uint32_t p)
     br_seq_deferred_off[p] = 0u;
 }
 
-static void br_start_sequence_kit_voice(uint32_t p, uint32_t lane,
+BR_POLY_COLD static void br_start_sequence_kit_voice(uint32_t p, uint32_t lane,
                                        uint32_t voice_id, uint32_t velocity,
                                        uint32_t pitch)
 {
@@ -3032,7 +3355,10 @@ static void br_start_sequence_kit_voice(uint32_t p, uint32_t lane,
 }
 
 /* Emit one step/voice with the original conditional and gate behavior. */
-static void br_seq_fire_timed(uint32_t p, uint32_t pos, uint32_t event_lane, uint32_t cycle,
+#if defined(BR_PATTERN_TRANSITION_TEST)
+static uint32_t br_pattern_test_hits[BR_PARTS][BR_DRUM_LANES];
+#endif
+BR_COLD_SIZE static void br_seq_fire_timed(uint32_t p, uint32_t pos, uint32_t event_lane, uint32_t cycle,
                               uint32_t frozen_base_duration)
 {
     uint32_t word = BR_PLAY_STEP(p, pos);
@@ -3079,6 +3405,9 @@ static void br_seq_fire_timed(uint32_t p, uint32_t pos, uint32_t event_lane, uin
                 }
             }
             br_start_sequence_kit_voice(p, lane, voice, velocity, pitch);
+#if defined(BR_PATTERN_TRANSITION_TEST)
+            ++br_pattern_test_hits[p][lane];
+#endif
         }
         br_seq_gate_frames[p] = 0u;
     } else {
@@ -3110,6 +3439,9 @@ static void br_seq_fire_timed(uint32_t p, uint32_t pos, uint32_t event_lane, uin
             if (br_seq_note[p] != 255u && !sustain && !slide)
                 br_release_note(p, br_seq_note[p]);
             if (!sustain) br_start_note(p, note, velocity, slide);
+#if defined(BR_PATTERN_TRANSITION_TEST)
+            if (!sustain) ++br_pattern_test_hits[p][0];
+#endif
             br_seq_note[p] = (uint8_t)note;
             br_seq_tie[p] = (uint8_t)tie;
             br_seq_deferred_off[p] = 0u;
@@ -3127,7 +3459,7 @@ static void br_seq_fire_timed(uint32_t p, uint32_t pos, uint32_t event_lane, uin
 static void br_seq_fire(uint32_t p, uint32_t pos, uint32_t lane, uint32_t cycle)
 { br_seq_fire_timed(p, pos, lane, cycle, 0u); }
 
-static void br_micro_schedule_timed(uint32_t part, uint32_t step, uint32_t lane,
+BR_COLD_SIZE static void br_micro_schedule_timed(uint32_t part, uint32_t step, uint32_t lane,
                                     uint32_t delay, uint32_t cycle, uint32_t clock_base)
 {
     for (uint32_t i = 0u; i < BR_SEQ_EVENT_SLOTS; ++i) {
@@ -3145,7 +3477,7 @@ static void br_micro_schedule_timed(uint32_t part, uint32_t step, uint32_t lane,
 }
 static void br_micro_schedule(uint32_t part, uint32_t step, uint32_t lane, uint32_t delay, uint32_t cycle)
 { br_micro_schedule_timed(part, step, lane, delay, cycle, 0u); }
-static void br_micro_due(uint32_t part)
+BR_COLD_SIZE static void br_micro_due(uint32_t part)
 {
     for (uint32_t i = 0u; i < BR_SEQ_EVENT_SLOTS; ++i) {
         br_micro_event_t *event = &br_micro_event[part][i];
@@ -3170,7 +3502,7 @@ static uint8_t br_loop_on[BR_PARTS], br_loop_start[BR_PARTS], br_loop_i[BR_PARTS
 /* Bind and retire require a stopped/quiescent renderer except submission
  * to the publication mailbox. A retired slot must be released by the host
  * after every prior audio worker has joined. */
-BR_AUDIO_API int br_pattern_irq_audio_bind(br_pattern_irq_publication *pub)
+BR_COLD_SIZE BR_AUDIO_API int br_pattern_irq_audio_bind(br_pattern_irq_publication *pub)
 {
     if (!pub || (br_pattern_host_publication && br_pattern_host_publication != pub) ||
         br_playing || br_midi_paused || br_pattern_irq_gate ||
@@ -3191,7 +3523,7 @@ BR_AUDIO_API int br_pattern_irq_audio_bind(br_pattern_irq_publication *pub)
  * workers and all editors, and resolve/cancel the bank transaction first.
  * A paused MIDI position is not reset here: the caller must establish a
  * fully stopped transport and use a fresh Start for a new bar origin. */
-BR_AUDIO_API int br_pattern_irq_audio_reset(br_pattern_irq_publication *pub)
+BR_POLY_COLD BR_AUDIO_API int br_pattern_irq_audio_reset(br_pattern_irq_publication *pub)
 {
     if (!pub || pub != br_pattern_host_publication || br_playing || br_midi_paused || br_pattern_irq_gate ||
         br_pattern_irq_return_request || br_pattern_irq_foreground_busy ||
@@ -3229,7 +3561,7 @@ BR_AUDIO_API int br_pattern_irq_globals_ready(void)
     if (!br_pattern_irq_gate || br_pattern_irq_return_request) return 0;
     fm1_memory_publish_sync(); br_pattern_irq_return_request = 1u; return 1;
 }
-static void br_pattern_host_reset_clock(void)
+BR_COLD_SIZE static void br_pattern_host_reset_clock(void)
 {
     br_pattern_host_due = 0u;
     br_pattern_irq_internal_quarter = br_tempo_quarter_frames();
@@ -3239,7 +3571,7 @@ static void br_pattern_host_reset_clock(void)
         br_pattern_host_error = 1u;
 #endif
 }
-static void br_pattern_host_clock_shift(uint64_t shift)
+BR_COLD_SIZE static void br_pattern_host_clock_shift(uint64_t shift)
 {
     if (br_pattern_host_publication && !fm1_pattern_bar_external_shift(&br_pattern_host_clock, shift))
         br_pattern_host_error = 1u;
@@ -3285,6 +3617,7 @@ static void br_pattern_host_begin_block(void)
 #endif
     }
     memset(br_seq_cycle, 0, sizeof br_seq_cycle);
+    memset(br_seq_skip, 0, sizeof br_seq_skip);
     memset(br_seq_prev_condition_valid, 0, sizeof br_seq_prev_condition_valid);
     memset(br_seq_prev_condition_result, 0, sizeof br_seq_prev_condition_result);
 }
@@ -3337,12 +3670,25 @@ static void br_pattern_host_end_block(uint32_t n)
 }
 #endif
 
-static void br_seq_step(uint32_t p)
+BR_COLD_SIZE static void br_seq_count_cycle(uint32_t p)
+{
+    if (p == BR_DRUM_PART) {
+        for (uint32_t lane = 0u; lane < BR_DRUM_LANES; ++lane)
+            ++br_seq_cycle[BR_SYNTH_PARTS + lane];
+    } else ++br_seq_cycle[p];
+}
+
+BR_POLY_COLD static void br_seq_step(uint32_t p)
 {
     uint32_t length = br_bound(BR_PLAY_FIELD(p, length), BR_STEPS), pos = br_seq_next[p];
     uint32_t duration, base_duration, next, unit, lanes, loop_next = 0xffffffffu;
     if (!length) length = 1u;
-    if (pos >= length) pos = 0u;
+    if (pos >= length) {
+        /* The pattern was shortened past the playhead: this wrap starts a new
+         * cycle, as the ordinary wrap at the end of the last step does. */
+        pos = 0u;
+        br_seq_count_cycle(p);
+    }
     base_duration = br_step_base_duration(p);
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
     if (br_clock_experiment.enabled) {
@@ -3378,7 +3724,7 @@ static void br_seq_step(uint32_t p)
             fm1_clock_div64((uint64_t)br_clock_experiment.block_offset << 32, br_clock_experiment.period_q16, 0);
         uint32_t planned = fm1_mcs_next(&br_clock_experiment.track[p], phase,
             br_clock_experiment.period_q16, br_bound(BR_PLAY_FIELD(p, division), 2u),
-            br_bound(br_part[0].swing, BR_SWING_MAX), pos);
+            br_bound(br_swing, BR_SWING_MAX), pos);
         if (!planned) { br_clock_experiment.invalid = 1u; br_playing = 0u; }
         else duration = planned;
     }
@@ -3397,7 +3743,9 @@ static void br_seq_step(uint32_t p)
         uint32_t cycle = br_seq_cycle[row];
         int32_t micro = br_play_micro(p, pos, lane);
         int32_t next_micro = br_play_micro(p, next, lane);
-        if (active && (micro >= 0 || !br_seq_started[p])) {
+        uint32_t skip = br_seq_skip[row] == pos + 1u;
+        if (skip) br_seq_skip[row] = 0u;
+        if (active && !skip && (micro >= 0 || !br_seq_started[p])) {
             uint32_t delay = micro > 0 ? (uint32_t)micro * unit : 0u;
             if (delay >= duration) delay = duration - 1u;
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
@@ -3407,7 +3755,7 @@ static void br_seq_step(uint32_t p)
             br_micro_schedule(p, pos, lane, delay, cycle);
 #endif
         }
-        if (next_active && next_micro < 0) {
+        if (next_active && next_micro < 0 && br_seq_skip[row] != next + 1u) {
             uint32_t early = (uint32_t)(-next_micro) * unit;
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
             br_micro_schedule_timed(p, next, lane, early < duration ? duration - early : 0u,
@@ -3421,12 +3769,7 @@ static void br_seq_step(uint32_t p)
     if (lanes == 1u && !(BR_PLAY_STEP(p, pos) & BR_STEP_ON)) br_seq_tie[p] = 0u;
     br_seq_started[p] = 1u;
     br_seq_next[p] = (uint8_t)next;
-    if (!next) {
-        if (p == BR_DRUM_PART) {
-            for (uint32_t lane = 0u; lane < BR_DRUM_LANES; ++lane)
-                ++br_seq_cycle[BR_SYNTH_PARTS + lane];
-        } else ++br_seq_cycle[p];
-    }
+    if (!next) br_seq_count_cycle(p);
     br_seq_frames[p] = duration;
 }
 
@@ -3435,7 +3778,7 @@ BR_AUDIO_API uint32_t br_engine_record_clock(uint32_t p)
     return p < BR_PARTS ? br_seq_clock[p] : 0u;
 }
 
-BR_AUDIO_API void br_engine_record_position(uint32_t part, uint32_t *step,
+BR_POLY_COLD BR_AUDIO_API void br_engine_record_position(uint32_t part, uint32_t *step,
                                                    uint32_t *elapsed, uint32_t *duration,
                                                    uint32_t *unit)
 {
@@ -3468,7 +3811,26 @@ BR_AUDIO_API void br_engine_record_position(uint32_t part, uint32_t *step,
     if (*elapsed > *duration) *elapsed = *duration;
 }
 
-static void br_seq_process(uint32_t p, uint32_t n)
+/* A note recorded while playing has just been heard live. When it was
+ * quantised forward onto a step the playhead has not reached in this pass
+ * (at most half a loop ahead), skip that step's next firing once so the
+ * note does not attack twice. */
+BR_COLD_SIZE BR_AUDIO_API void br_engine_record_skip(uint32_t part, uint32_t step, uint32_t lane)
+{
+    uint32_t length, next;
+    if (!br_playing || part >= BR_PARTS || br_loop_on[part]) return;
+    length = br_bound(BR_PLAY_FIELD(part, length), BR_STEPS);
+    if (step >= length) return;
+    next = br_seq_next[part] < length ? br_seq_next[part] : 0u;
+    if (2u * ((step + length - next) % length + 1u) > length) return;
+    if (br_is_kit(br_cached_sound[part].preset)) {
+        if (lane >= BR_DRUM_LANES) return;
+        part = BR_SYNTH_PARTS + lane;
+    }
+    br_seq_skip[part] = (uint8_t)(step + 1u);
+}
+
+BR_POLY_COLD static void br_seq_process(uint32_t p, uint32_t n)
 {
     uint32_t remaining = n;
     if (!remaining) return;
@@ -3561,17 +3923,25 @@ static void br_seq_process(uint32_t p, uint32_t n)
 static void br_env_advance(br_env_t *e)
 {
     if (e->stage == BR_ENV_ATTACK) {
-        e->amp += e->attack_step;
-        if (e->amp >= 32767u) { e->amp = 32767u; e->stage = BR_ENV_DECAY; }
+        e->pos += e->attack_step;
+        if (e->pos >= 32767u << 16) {
+            e->pos = BR_ENV_POS_TOP; e->amp = 32767u; e->stage = BR_ENV_DECAY;
+        } else e->amp = e->pos >> 16;
     } else if (e->stage == BR_ENV_DECAY) {
-        if (e->amp <= e->sustain) { e->amp = e->sustain; e->stage = BR_ENV_SUSTAIN; }
-        else {
-            e->amp = e->amp > e->decay_step ? e->amp - e->decay_step : e->sustain;
-            if (e->amp <= e->sustain) { e->amp = e->sustain; e->stage = BR_ENV_SUSTAIN; }
-        }
+        e->pos -= e->decay_step;
+        if ((int32_t)e->pos <= (int32_t)e->decay_target) {
+            e->pos = e->decay_target; e->amp = e->sustain; e->stage = BR_ENV_SUSTAIN;
+        } else e->amp = br_env_level(e->pos);
     } else if (e->stage == BR_ENV_RELEASE) {
-        e->amp = e->amp > e->release_step ? e->amp - e->release_step : 0;
-        if (!e->amp) e->stage = BR_ENV_OFF;
+        e->pos -= e->release_step;
+        if ((int32_t)e->pos <= 0) { e->pos = e->amp = 0u; e->stage = BR_ENV_OFF; }
+        else e->amp = br_env_level(e->pos);
+    }
+    if (e->lpg_gate_remaining && e->stage != BR_ENV_RELEASE && e->stage != BR_ENV_OFF &&
+        !--e->lpg_gate_remaining) {
+        e->stage = BR_ENV_RELEASE;
+        e->release_start = e->amp;
+        br_env_set_release(e);
     }
 }
 
@@ -3636,62 +4006,532 @@ static __attribute__((noinline)) int32_t br_env_render_velocity_ramp(
 
 static void br_env_refresh(br_env_t *e, const br_sound_t *s, uint32_t keep_amp)
 {
+    uint32_t release_changed = 0u;
+    if (!s->amp_mode) e->lpg_gate_remaining = 0u;
 #if BR_AUDIO_ENV_CURVE_CONTROL_KEY
     uint32_t curve_key = br_env_curve_control_key(s);
     if (curve_key != e->level) {
-        uint32_t attack = br_time_samples(s->attack, 3u);
-        uint32_t decay = br_time_samples(s->decay, 8u);
-        uint32_t release = br_time_samples(s->release, 8u);
+#endif
+        uint32_t attack = br_time_samples(s->attack, 0u);
+        uint32_t decay = br_time_samples(s->decay, 1u);
+        uint32_t release = s->amp_mode ? br_lpg_release_samples() : br_time_samples(s->release, 1u);
         uint32_t sustain = br_q15(s->sustain);
         /* Live modulation still takes effect on this block. Stable
          * parameters do not need three duration calculations per block. */
         if (e->attack != attack) {
             e->attack = attack;
-            e->attack_step = (32767u - (keep_amp ? e->amp : 0u) + attack - 1u) / attack;
+            e->attack_step = (((32767u - (keep_amp ? e->amp : 0u)) << 16) +
+                              attack - 1u) / attack;
         }
         if (e->decay != decay || e->sustain != sustain) {
             e->decay = decay;
             e->sustain = sustain;
-            e->decay_step = (32767u - sustain + decay - 1u) / decay;
+            br_env_set_decay(e);
         }
-        if (e->release != release || e->release_step_start != e->release_start) {
-            e->release = release;
-            e->release_step_start = e->release_start;
-            e->release_step = (e->release_start + release - 1u) / release;
-        }
-        e->level = curve_key;
-    } else if (e->release_step_start != e->release_start) {
-        /* Release can be initiated without changing a live curve control. */
-        e->release_step_start = e->release_start;
-        e->release_step = (e->release_start + e->release - 1u) / e->release;
-    }
-#else
-    uint32_t attack = br_time_samples(s->attack, 3u);
-    uint32_t decay = br_time_samples(s->decay, 8u);
-    uint32_t release = br_time_samples(s->release, 8u);
-    uint32_t sustain = br_q15(s->sustain);
-    /* Live modulation still takes effect on this block. Stable parameters do
-     * not need three duration calculations on every source block. */
-    if (e->attack != attack) {
-        e->attack = attack;
-        e->attack_step = (32767u - (keep_amp ? e->amp : 0u) + attack - 1u) / attack;
-    }
-    if (e->decay != decay || e->sustain != sustain) {
-        e->decay = decay;
-        e->sustain = sustain;
-        e->decay_step = (32767u - sustain + decay - 1u) / decay;
-    }
-    if (e->release != release || e->release_step_start != e->release_start) {
+        release_changed = e->release != release;
         e->release = release;
-        e->release_step_start = e->release_start;
-        e->release_step = (e->release_start + release - 1u) / release;
+#if BR_AUDIO_ENV_CURVE_CONTROL_KEY
+        e->level = curve_key;
     }
 #endif
+    /* Release can be initiated without changing a live curve control. */
+    if (e->stage == BR_ENV_RELEASE &&
+        (release_changed || e->release_step_start != e->release_start))
+        br_env_set_release(e);
 }
+
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+#include "instrument_poly_events.h"
+static br_poly_render_t br_poly_scheduler;
+static br_poly_events_t br_poly_scheduler_events;
+static uint32_t br_poly_scheduler_part;
+static uint32_t br_poly_retired_part;
+static volatile uint8_t br_poly_scheduler_enabled;
+#if BR_MODEL_MOD_EXPERIMENT
+/* One worker owns each voice. The audio owner publishes one requested switch
+ * per frame and retires it only after that worker's jobs have joined. */
+static uint32_t br_model_poly_interval;
+static volatile uint8_t br_model_poly_voice = BR_SWEEP_NONE;
+static volatile uint8_t br_model_poly_target, br_model_poly_prepared;
+#endif
+static volatile uint8_t br_poly_scheduler_waiting;
+#if BR_ADAPTIVE_POLY
+#include "instrument_poly_limits.h"
+static uint8_t br_poly_sweep_capable;
+static uint32_t br_poly_model_mod_active(const br_mod_config_t *m)
+{
+#if BR_MODEL_MOD_EXPERIMENT
+    if (m->target == BR_TARGET_MODEL && m->amount) return 1u;
+    for (uint32_t i = 0u; i < BR_LFOS; ++i)
+        if (m->lfo[i].target == BR_TARGET_MODEL && m->lfo[i].depth) return 1u;
+    for (uint32_t i = 0u; i < BR_EFFECTIVE_ROUTES; ++i)
+        if (m->route[i].enabled && m->route[i].target == BR_TARGET_MODEL &&
+            m->route[i].amount && br_mod_source_active(m->route[i].source)) return 1u;
+#else
+    (void)m;
+#endif
+    return 0u;
+}
+#endif
+static uint32_t br_poly_mix_gain_q15;
+#define BR_POLY_STANDARD_GRAPH (!br_poly_scheduler_enabled)
+BR_COLD_SIZE static uint32_t br_poly_scheduler_is_enabled(void) { return br_poly_scheduler_enabled; }
+BR_COLD_SIZE static uint32_t br_poly_scheduler_deferred_pending(void)
+{
+#if BR_AUDIO_STAGGER_COLD_SYNTH_STARTS && defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
+    for (uint32_t i = 0; i < BR_SYNTH_PARTS; ++i) if (br_deferred_start[i].valid) return 1u;
+#if BR_AUDIO_STAGGER_COLD_KIT_STARTS
+    for (uint32_t i = 0; i < BR_DEFERRED_KIT_NOTES; ++i) if (br_deferred_kit[i].valid) return 1u;
+#endif
+#endif
+    return 0u;
+}
+/* Ignore the internal tail timer and inactive tracks' release tails, while
+ * preserving held notes and the selected track's audible envelope. */
+BR_COLD_SIZE static uint32_t br_poly_scheduler_sources_releasable(uint32_t selected)
+{
+    if (br_event_read != br_event_write || br_panic_parts || br_midi_transport_overflow) return 0u;
+    for (uint32_t p = 0; p < BR_SYNTH_PARTS; ++p)
+        if (br_live_count[p]) return 0u;
+    return selected < BR_SYNTH_PARTS && br_env[selected].stage == BR_ENV_OFF;
+}
+BR_COLD_SIZE static uint32_t br_poly_scheduler_amp(uint32_t part, uint32_t fallback)
+{
+    if (!br_poly_scheduler_enabled || part != br_poly_scheduler_part) return fallback;
+    uint32_t amp = 0u;
+    for (uint32_t i = 0; i < BR_POLY_VOICES; ++i)
+        if (br_poly_scheduler.envelope[i].amp > amp) amp = br_poly_scheduler.envelope[i].amp;
+    return amp;
+}
+
+/* Distribute allocated voices evenly across the four source jobs. This avoids
+ * concentrating two costly voices in one job when other lanes are idle. */
+#if BR_ADAPTIVE_POLY
+static inline uint32_t br_poly_lane_count(uint32_t lane)
+{
+    uint32_t limit = br_poly_scheduler.source.allocator.limit;
+    return limit / 4u + (lane < limit % 4u);
+}
+static inline uint32_t br_poly_lane_first(uint32_t lane)
+{
+    uint32_t limit = br_poly_scheduler.source.allocator.limit, rem = limit % 4u;
+    return lane * (limit / 4u) + (lane < rem ? lane : rem);
+}
+#endif
+/* Each voice and output has exactly one worker owner. */
+static uint32_t br_poly_scheduler_source(const br_audio_source_job_t *job)
+{
+#if !BR_ADAPTIVE_POLY
+    static const uint8_t first[4] = {0u, 2u, 4u, 5u};
+    static const uint8_t count[4] = {2u, 2u, 1u, 1u};
+#endif
+    int32_t voice_buffer[BR_BLOCK];
+    uint32_t lane;
+    for (lane = 0; lane < 4u && job->lane_mask != (1u << lane); ++lane) {}
+    if (lane == 4u || job->frames > BR_BLOCK) return 0u;
+    memset(job->output, 0, job->frames * sizeof(*job->output));
+#if BR_ADAPTIVE_POLY
+    uint32_t first_voice = br_poly_lane_first(lane), lane_voices = br_poly_lane_count(lane);
+#else
+    uint32_t first_voice = first[lane], lane_voices = count[lane];
+#endif
+    for (uint32_t i = 0; i < lane_voices; ++i) {
+        uint32_t voice = first_voice + i;
+        uint32_t note = br_poly_scheduler.envelope[voice].note;
+#if BR_MODEL_MOD_EXPERIMENT
+        if (voice == br_model_poly_voice) {
+            if (!br_poly_source_prepare_voice(&br_poly_scheduler.source, (uint8_t)voice, br_model_poly_target)) return 0u;
+            br_model_poly_prepared = 1u;
+            fm1_memory_publish_sync();
+        }
+#endif
+        br_poly_render_voice(&br_poly_scheduler, (uint8_t)voice,
+            &br_effective_sound[job->part], (int32_t)br_map_pitch_q7(job->part, note),
+            voice_buffer, job->frames);
+        for (uint32_t j = 0; j < job->frames; ++j) job->output[j] += voice_buffer[j];
+    }
+    return 1u;
+}
+
+/* Experimental storage transitions must run outside the audio callback after
+ * both workers have been parked by the caller. Until that ownership protocol
+ * is connected, these entry points are used only by host tests. */
+BR_COLD_SIZE static int br_poly_scheduler_queue_idle(void)
+{
+    return !br_audio_source_queue.lock &&
+        br_audio_source_queue.count == br_audio_source_queue.completed;
+}
+BR_POLY_COLD static int br_poly_scheduler_enter(uint32_t part, int workers_parked)
+{
+    if (!workers_parked || br_poly_scheduler_enabled || br_playing || br_transport_prev ||
+        part >= BR_SYNTH_PARTS || !br_poly_scheduler_queue_idle() ||
+        !br_poly_scheduler_sources_releasable(part) || br_poly_scheduler_events.count ||
+        br_poly_scheduler_deferred_pending() || br_punch_effect ||
+        !br_is_plaits(br_cached_sound[part].preset)) return 0;
+    uint32_t model = br_cached_sound[part].preset - BR_FIRST_PLAITS;
+#if BR_ADAPTIVE_POLY
+    uint32_t sweep = br_poly_model_mod_active(&br_cached_mod[part]);
+    uint32_t limit = sweep ? 3u : br_poly_model_limit(model);
+    uint32_t capacity_model = sweep ? 15u : model;
+    uint32_t bytes = plaits_compact_state_bytes(capacity_model);
+#else
+    uint32_t limit = BR_POLY_VOICES;
+    uint32_t capacity_model =
+#if BR_MODEL_MOD_EXPERIMENT
+        15u;
+#else
+        model;
+#endif
+    uint32_t bytes = plaits_compact_state_bytes(capacity_model);
+#endif
+    uint32_t primary_count = bytes ? (uint32_t)(sizeof br_dsp / bytes) : 0u;
+    void *extra = 0;
+    uint32_t extra_bytes = 0u;
+    if (!bytes) return 0;
+    if (primary_count < limit &&
+        !br_fx_poly_loan_acquire(part, (limit - primary_count) * bytes, &extra, &extra_bytes)) return 0;
+    if (!br_fx_poly_mode_set(part, 1u)) {
+        (void)br_fx_poly_loan_release();
+        return 0;
+    }
+    if (!br_poly_render_init_capacity_count(&br_poly_scheduler, model, capacity_model,
+        br_dsp, sizeof br_dsp, extra, extra_bytes, limit)) {
+        if (!br_fx_poly_loan_release()) return -1;
+        if (!br_fx_poly_mode_set(part, 0u)) return -1;
+        /* Planning occurs first, but if initialization fails unexpectedly,
+         * reconstruct every ordinary track before audio can resume. */
+        for (uint32_t p = 0; p < BR_PARTS; ++p) {
+            br_mode[p] = 0u;
+            br_active_preset[p] = 255u;
+            br_select_mode(p);
+        }
+        return 0;
+    }
+    memset(&br_poly_scheduler_events, 0, sizeof br_poly_scheduler_events);
+    br_poly_scheduler_part = part;
+#if BR_ADAPTIVE_POLY
+    br_poly_sweep_capable = (uint8_t)sweep;
+#endif
+    br_poly_mix_gain_q15 = 32768u;
+    br_poly_scheduler_enabled = 1u;
+#if BR_MODEL_MOD_EXPERIMENT
+    br_model_poly_interval = 0u; br_model_poly_voice = BR_SWEEP_NONE; br_model_poly_prepared = 0u;
+#endif
+    return 1;
+}
+BR_POLY_COLD static int br_poly_scheduler_leave(int workers_parked)
+{
+    if (!br_poly_scheduler_enabled) return 1;
+    if (!workers_parked || !br_poly_scheduler_queue_idle()) return 0;
+    if (!br_fx_poly_loan_release()) return 0;
+    if (!br_fx_poly_mode_set(br_poly_scheduler_part, 0u)) return -1;
+    br_poly_scheduler_enabled = 0u;
+    br_poly_scheduler_waiting = 0u;
+    br_poly_retired_part = br_poly_scheduler_part;
+    br_deferred_start_reset();
+    for (uint32_t p = 0; p < BR_PARTS; ++p) {
+        uint8_t paused_note = br_seq_note[p], paused_tie = br_seq_tie[p];
+        uint32_t paused_gate = br_seq_gate_frames[p], paused_lanes[BR_DRUM_LANES];
+        if (br_midi_paused) memcpy(paused_lanes, br_seq_lane_gate_frames[p], sizeof paused_lanes);
+        br_mode[p] = 0u;
+        br_active_preset[p] = 255u;
+        br_snapshot(p);
+        br_select_mode(p);
+        if (br_midi_paused) {
+            br_seq_note[p] = paused_note; br_seq_tie[p] = paused_tie;
+            br_seq_gate_frames[p] = paused_gate;
+            memcpy(br_seq_lane_gate_frames[p], paused_lanes, sizeof paused_lanes);
+        }
+        if (p < BR_SYNTH_PARTS) br_live_count[p] = 0u;
+    }
+    return 1;
+}
+static int br_poly_scheduler_transport(int workers_parked)
+{
+    if (!br_playing && !br_poly_scheduler_waiting) return 1;
+    return br_poly_scheduler_leave(workers_parked);
+}
+
+/* Foreground requests are advisory; commit rechecks all conditions only
+ * after the audio callback and worker have been fenced and parked. */
+#ifdef BR_SPLIT_AUDIO
+volatile uint8_t br_poly_user_off;
+#endif
+BR_POLY_COLD BR_AUDIO_API uint32_t br_poly_transition_needed(uint32_t part, uint32_t suspend)
+{
+#if defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO)
+    if (fm1_cpu1_worker_fault) return br_poly_scheduler_enabled ? 2u : 0u;
+#endif
+    if (part >= BR_SYNTH_PARTS || br_part[part].sound.voice_mode == 1u ||
+        (br_part[part].sound.voice_mode == 0u && br_poly_user_off))
+        return br_poly_scheduler_enabled ? 2u : 0u;
+    if (br_poly_scheduler_enabled) {
+        if (suspend || br_playing || br_arp_on || br_pipeline_mode || !br_audio_source_fx_fusion ||
+            br_poly_scheduler_waiting || part != br_poly_scheduler_part ||
+            part >= BR_SYNTH_PARTS || br_part[part].sound.preset !=
+                BR_FIRST_PLAITS + br_poly_scheduler.source.model) return 2u;
+#if BR_ADAPTIVE_POLY
+        if (br_poly_sweep_capable != br_poly_model_mod_active(&br_cached_mod[part]) &&
+            br_poly_scheduler_sources_releasable(part) && !br_poly_scheduler_events.count)
+            return 2u;
+#endif
+        return 0u;
+    }
+    if (suspend || br_playing || br_transport_prev || br_punch_effect || br_arp_on ||
+        br_pipeline_mode ||
+        part >= BR_SYNTH_PARTS || !br_audio_source_fx_fusion ||
+        !br_poly_scheduler_sources_releasable(part) || br_poly_scheduler_events.count || br_poly_scheduler_deferred_pending() ||
+        !br_is_plaits(br_part[part].sound.preset)) return 0u;
+    uint32_t model = br_part[part].sound.preset - BR_FIRST_PLAITS;
+#if BR_ADAPTIVE_POLY
+    uint32_t sweep = br_poly_model_mod_active(&br_cached_mod[part]);
+    uint32_t limit = sweep ? 3u : br_poly_model_limit(model);
+    uint32_t capacity_model = sweep ? 15u : model;
+    uint32_t bytes = plaits_compact_state_bytes(capacity_model);
+#else
+    uint32_t limit = BR_POLY_VOICES;
+    uint32_t capacity_model =
+#if BR_MODEL_MOD_EXPERIMENT
+        15u;
+#else
+        model;
+#endif
+    uint32_t bytes = plaits_compact_state_bytes(capacity_model);
+#endif
+    if (!bytes) return 0u;
+    uint32_t count = (uint32_t)(sizeof br_dsp / bytes);
+    return count >= limit ||
+        br_fx_poly_can_loan(part, (limit - count) * bytes) ? 1u : 0u;
+}
+BR_AUDIO_API uint32_t br_poly_mode_active(void) { return br_poly_scheduler_enabled; }
+#if BR_ADAPTIVE_POLY
+BR_AUDIO_API void br_poly_capacity_snapshot(uint32_t words[4])
+{
+    uint32_t held = 0u, sounding = 0u;
+    words[0] = br_poly_scheduler_enabled;
+    words[1] = br_poly_scheduler_enabled ? br_poly_scheduler.source.allocator.limit : 0u;
+    if (br_poly_scheduler_enabled) for (uint32_t i = 0u; i < words[1]; ++i) {
+        held += br_poly_scheduler.source.allocator.voice[i].count != 0u;
+        sounding += br_poly_scheduler.envelope[i].stage != BR_ENV_OFF;
+    }
+    words[2] = held; words[3] = sounding;
+}
+#endif
+
+BR_POLY_COLD BR_AUDIO_API int br_poly_transition_commit(uint32_t action, uint32_t part)
+{
+    if (action == 1u && part < BR_SYNTH_PARTS) {
+        br_snapshot(part);
+        br_build_effective(part);
+        return br_poly_scheduler_enter(part, 1);
+    }
+    if (action == 2u) return br_poly_scheduler_leave(1);
+    return 0;
+}
+
+BR_COLD_SIZE static int br_poly_scheduler_defer_transport(uint32_t op, uint32_t event)
+{
+    uint32_t status = event & 255u;
+#if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
+    if (op == 0u && br_event_generation[br_event_read & BR_EVENT_MASK] != br_midi_clock_generation)
+        return 0;
+#endif
+    if (!br_poly_scheduler_enabled || op != 0u || (status != 0xfau && status != 0xfbu)) return 0;
+    br_poly_scheduler_waiting = 1u;
+    return 1;
+}
+
+BR_POLY_COLD static int br_poly_scheduler_event(uint32_t op, uint32_t part, uint32_t note,
+                                   uint32_t velocity, uint32_t tag)
+{
+    if (!br_poly_scheduler_enabled) return 0;
+    if (op == BR_EVENT_STOP) {
+        if (part == br_poly_scheduler_part || (part == 3u && note == 127u && velocity == 127u)) {
+            for (uint32_t i = 0; i < BR_POLY_VOICES; ++i) {
+                plaits_all_off(br_poly_scheduler.source.storage.voice[i]);
+                if (br_poly_scheduler.envelope[i].stage != BR_ENV_OFF) {
+                    br_poly_scheduler.envelope[i].stage = BR_ENV_RELEASE;
+                    br_poly_scheduler.envelope[i].release_start = br_poly_scheduler.envelope[i].amp;
+                }
+            }
+            { uint8_t limit = br_poly_scheduler.source.allocator.limit;
+              memset(&br_poly_scheduler.source.allocator, 0, sizeof br_poly_scheduler.source.allocator);
+              br_poly_scheduler.source.allocator.limit = limit; }
+            memset(&br_poly_scheduler_events, 0, sizeof br_poly_scheduler_events);
+            br_mod_note_off(&br_mod_state[br_poly_scheduler_part]);
+        }
+        return 1; /* the ordinary track states are loaned */
+    }
+    if (op != BR_EVENT_ON && op != BR_EVENT_OFF) return 0;
+    if (part != br_poly_scheduler_part) return 1; /* inactive tracks own no DSP */
+    if (!tag) tag = 4096u + note; /* legacy callers remain grouped by pitch */
+    if (op == BR_EVENT_ON) {
+        if (!br_poly_events_on(&br_poly_scheduler_events, &br_poly_scheduler,
+            &br_effective_sound[part], (uint16_t)tag, (uint8_t)note,
+            (int32_t)br_map_pitch_q7(part, note), (uint8_t)velocity))
+            (void)br_poly_scheduler_event(BR_EVENT_STOP, part, 0u, 0u, 0u);
+        else br_mod_note_on(&br_mod_state[part], &br_cached_mod[part], note, velocity);
+    } else if (br_poly_events_off(&br_poly_scheduler_events, &br_poly_scheduler,
+                                  (uint16_t)tag, (uint8_t)note)) {
+        uint32_t newest = BR_POLY_VOICES;
+        for (uint32_t i = 0; i < BR_POLY_VOICES; ++i) {
+            br_poly_voice_t *v = &br_poly_scheduler.source.allocator.voice[i];
+            if (v->count && (newest == BR_POLY_VOICES ||
+                (int32_t)(v->age - br_poly_scheduler.source.allocator.voice[newest].age) > 0)) newest = i;
+        }
+        if (newest == BR_POLY_VOICES) br_mod_note_off(&br_mod_state[part]);
+        else {
+            br_mod_state[part].note = br_poly_scheduler.envelope[newest].note;
+            br_mod_state[part].velocity = br_poly_scheduler.envelope[newest].velocity;
+        }
+    }
+    return 1;
+}
+
+BR_COLD_SIZE static int br_poly_scheduler_retired_event(uint32_t op, uint32_t part, uint32_t note,
+                                           uint32_t velocity, uint32_t tag)
+{
+    if (br_poly_scheduler_enabled || !br_poly_scheduler_events.count) return 0;
+    if (op == BR_EVENT_STOP && (part == br_poly_retired_part ||
+        (part == 3u && note == 127u && velocity == 127u))) {
+        memset(&br_poly_scheduler_events, 0, sizeof br_poly_scheduler_events);
+        return 0; /* normal engine still needs its stop */
+    }
+    if (op != BR_EVENT_OFF || part != br_poly_retired_part) return 0;
+    uint32_t ignored;
+    if (!tag) tag = 4096u + note;
+    return br_poly_events_take(&br_poly_scheduler_events, (uint16_t)tag, (uint8_t)note, &ignored);
+}
+
+/* Build a complete experimental fused graph, preserving a silent FX job for
+ * every inactive track so the shared reverb and fusion accounting still run. */
+static uint32_t br_poly_scheduler_build_jobs(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t frames)
+{
+    if (!br_poly_scheduler_enabled || !bus || !frames || frames > BR_BLOCK ||
+        br_poly_scheduler_part >= BR_SYNTH_PARTS || !BR_AUDIO_FUSION_FOUR_WAY_KIT) return 0u;
+#if BR_MODEL_MOD_EXPERIMENT
+    if (br_model_poly_voice != BR_SWEEP_NONE && br_model_poly_prepared) {
+        fm1_memory_publish_sync();
+        (void)br_poly_source_commit_model(&br_poly_scheduler.source, br_model_poly_voice, br_model_poly_interval);
+    }
+    ++br_model_poly_interval;
+    br_model_poly_voice = BR_SWEEP_NONE; br_model_poly_prepared = 0u;
+    if (
+#if BR_ADAPTIVE_POLY
+        br_poly_sweep_capable &&
+#endif
+        br_is_plaits(br_effective_sound[br_poly_scheduler_part].preset) &&
+        br_poly_source_request_model(&br_poly_scheduler.source,
+            br_effective_sound[br_poly_scheduler_part].preset - BR_FIRST_PLAITS)) {
+        uint8_t voice = br_poly_source_next_model_voice(&br_poly_scheduler.source, br_model_poly_interval);
+        if (voice != BR_SWEEP_NONE) {
+            br_model_poly_target = br_poly_scheduler.source.sweep.target;
+            br_model_poly_voice = voice;
+            fm1_memory_publish_sync();
+        }
+    }
+#endif
+    memset(br_audio_source_jobs, 0, sizeof br_audio_source_jobs);
+    for (uint32_t lane = 0; lane < 4u; ++lane) {
+        br_audio_source_job_t *job = &br_audio_source_jobs[lane];
+        job->part = br_poly_scheduler_part; job->frames = frames;
+        job->kind = BR_AUDIO_JOB_SOURCE; job->lane_mask = 1u << lane;
+        job->output = br_audio_kit_partial[0][lane];
+#if BR_ADAPTIVE_POLY
+        job->cost_hint = 250u + 1000u * br_poly_lane_count(lane);
+#else
+        job->cost_hint = lane < 2u ? 2000u : 1000u;
+#endif
+#if BR_MODEL_MOD_EXPERIMENT
+        if (br_model_poly_voice != BR_SWEEP_NONE &&
+#if BR_ADAPTIVE_POLY
+            (br_model_poly_voice >= br_poly_lane_first(lane) &&
+             br_model_poly_voice < br_poly_lane_first(lane) + br_poly_lane_count(lane))
+#else
+            ((lane == 0u && br_model_poly_voice < 2u) ||
+             (lane == 1u && br_model_poly_voice >= 2u && br_model_poly_voice < 4u) ||
+             (lane == 2u && br_model_poly_voice == 4u) ||
+             (lane == 3u && br_model_poly_voice == 5u))
+#endif
+            ) job->cost_hint += 30000u;
+#endif
+        job->affinity_core = UINT32_MAX;
+        job->predecessor = job->predecessor2 = job->predecessor3 = job->predecessor4 = UINT32_MAX;
+    }
+    br_audio_source_job_t *merge = &br_audio_source_jobs[4];
+    merge->part = br_poly_scheduler_part; merge->frames = frames;
+    merge->kind = BR_AUDIO_JOB_KIT_FINALIZE; merge->lane_mask = BR_DRUM_ALL_MASK;
+    merge->output = bus[br_poly_scheduler_part];
+    merge->cost_hint = 1000u; merge->affinity_core = UINT32_MAX;
+    merge->predecessor = 0u; merge->predecessor2 = 1u;
+    merge->predecessor3 = 2u; merge->predecessor4 = 3u;
+    uint32_t at = 5u;
+    for (uint32_t part = 0; part < BR_PARTS; ++part) {
+        if (part == br_poly_scheduler_part) continue;
+        br_audio_source_job_t *job = &br_audio_source_jobs[at++];
+        job->part = part; job->frames = frames; job->kind = BR_AUDIO_JOB_FUSED_TRACK;
+        job->lane_mask = BR_DRUM_ALL_MASK; job->output = bus[part];
+        job->cost_hint = 250u; job->affinity_core = UINT32_MAX;
+        job->predecessor = job->predecessor2 = job->predecessor3 = job->predecessor4 = UINT32_MAX;
+    }
+    return at;
+}
+
+/* Prototype shared post stage. The six envelopes have already been applied.
+ * Filter key tracking follows the newest allocated voice; this needs further
+ * musical and timing validation before the mode can be enabled on hardware. */
+static int32_t br_poly_scheduler_post(uint32_t part, int32_t *row, uint32_t n)
+{
+    br_sound_t *sound = &br_effective_sound[part];
+    uint32_t newest = 0u, active = 0u;
+    int32_t sum = 0; /* bounded by BR_BLOCK * 32767 */
+    uint32_t peak = 0u;
+    /* Only admitted slots own voices. Avoid checking the unused slots on
+     * every block, especially for the lowest-capacity models. */
+    for (uint32_t i = 0; i < br_poly_scheduler.source.allocator.limit; ++i) {
+        if (br_poly_scheduler.envelope[i].stage != BR_ENV_OFF ||
+            !plaits_quiet(br_poly_scheduler.source.storage.voice[i])) active = 1u;
+        if ((int32_t)(br_poly_scheduler.source.allocator.voice[i].age -
+                      br_poly_scheduler.source.allocator.voice[newest].age) > 0) newest = i;
+    }
+    br_level_apply(part, row, 0, n);
+    for (uint32_t i = 0; i < n; ++i) {
+        uint32_t magnitude = row[i] < 0 ? 0u - (uint32_t)row[i] : (uint32_t)row[i];
+        if (magnitude > peak) peak = magnitude;
+    }
+    uint32_t target = peak > 32767u ? (32767u * 32768u) / peak : 32768u;
+    if (target < br_poly_mix_gain_q15) br_poly_mix_gain_q15 = target;
+    else if (target > br_poly_mix_gain_q15) {
+        uint32_t step = (target - br_poly_mix_gain_q15) / 16u;
+        br_poly_mix_gain_q15 += step ? step : 1u;
+    }
+    for (uint32_t i = 0; i < n; ++i) {
+        int32_t sample = br_clip(br_filter_mul_q15(row[i], br_poly_mix_gain_q15), -32767, 32767);
+        sum += sample;
+        if (!sound->filter_resonance && !sound->filter_keytrack)
+            row[i] = br_filter_process(&br_filter[part], sample, br_bound(sound->filter, 127u));
+        else row[i] = br_filter_process_controls(&br_filter[part], sample,
+                br_bound(sound->filter, 127u), br_bound(sound->filter_resonance, 127u),
+                sound->filter_keytrack, br_poly_scheduler.envelope[newest].note);
+    }
+    br_quiet_part[part] = !active && br_filter_quiet(&br_filter[part]);
+    return n ? (int32_t)(sum / n) : 0;
+}
+#endif
+#ifndef BR_POLY_STANDARD_GRAPH
+#define BR_POLY_STANDARD_GRAPH 1
+#endif
 
 BR_AUDIO_API __attribute__((minsize, noinline)) void br_engine_init(void)
 {
     uint32_t p, i;
+    memset(br_level_slew, 0, sizeof br_level_slew);
+    memset(br_level_block, 0, sizeof br_level_block);
+    memset(br_mono_glide, 0, sizeof br_mono_glide);
+    memset(br_mono_lpg, 0, sizeof br_mono_lpg);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (!br_poly_scheduler_enabled) memset(&br_poly_scheduler_events, 0, sizeof br_poly_scheduler_events);
+#endif
 #if BR_AUDIO_FOREGROUND_FIXED8_PLAN
     br_audio_fixed8_foreground_invalidate();
 #endif
@@ -3699,6 +4539,8 @@ BR_AUDIO_API __attribute__((minsize, noinline)) void br_engine_init(void)
     PLAITS_STATE_ABI_GUARD();
 #endif
     br_event_read = br_event_write = br_dropped_events = br_panic_parts = 0;
+    memset(br_note_held_off, 0, sizeof br_note_held_off);
+    br_note_hurry = 0u;
     memset(br_live_count, 0, sizeof br_live_count);
     br_deferred_start_reset();
     br_arp_reset();
@@ -3780,6 +4622,7 @@ BR_AUDIO_API __attribute__((minsize, noinline)) void br_engine_init(void)
     }
     for (i = 0u; i < BR_SEQ_TRACKS; ++i) {
         br_seq_cycle[i] = 0u;
+        br_seq_skip[i] = 0u;
         br_seq_rng[i] = 0x4D595DF4u ^ (i * 0x9E3779B9u);
         br_seq_prev_condition_valid[i] = 0u;
         br_seq_prev_condition_result[i] = 0u;
@@ -3875,8 +4718,13 @@ static void br_engine_source_part(uint32_t p, int32_t *output,
     }
 #if defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
     else {
-        uint32_t pitch = br_map_pitch_q7(p, e->note);
-        if (pitch > 16383u) pitch = 16383u;
+        int32_t mapped = (int32_t)br_map_pitch_q7(p, e->note);
+        int32_t pitch = mapped;
+        if (p < BR_SYNTH_PARTS && br_mono_glide[p].valid) {
+            int32_t target = br_mono_glide[p].target_q16 >> 16;
+            pitch = (int32_t)br_glide_advance(&br_mono_glide[p], n) + mapped - target;
+        }
+        if (pitch < 0) pitch = 0; else if (pitch > 16383) pitch = 16383;
         if (e->stage != BR_ENV_OFF || !plaits_quiet(br_dsp[p].plaits)) {
 #if defined(FM1_DEVICE)
             uint32_t synth_start = fm1_ticks();
@@ -4071,6 +4919,24 @@ uint32_t br_audio_worker_sources(void *opaque_job)
     }
     if (job->kind == BR_AUDIO_JOB_FUSED_TRACK ||
         job->kind == BR_AUDIO_JOB_TRACK_SOURCE) {
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+        if (br_poly_scheduler_enabled && job->part != br_poly_scheduler_part) {
+            memset(job->output, 0, job->frames * sizeof(*job->output));
+            br_audio_fused_osc_block[job->part] = 0;
+            br_quiet_part[job->part] = 1u;
+            if (job->kind == BR_AUDIO_JOB_FUSED_TRACK)
+                br_audio_call_fx_fusion_process_track(job->part, job->output, job->frames);
+#if BR_AUDIO_FUSION_JOB_TIMING_DIAG
+            br_audio_job_timing_job_end(job, timing_core, timing_started);
+#elif BR_AUDIO_FUSION_EWMA_SCHEDULER
+            if (br_audio_source_fx_fusion_active) {
+                job->duration_ticks = br_audio_job_timing_now() - timing_started;
+                job->executor_core = timing_core;
+            }
+#endif
+            return 1u;
+        }
+#endif
         br_engine_source_part(job->part, job->output, job->key, job->frames,
                               job->lane_mask ? job->lane_mask : BR_DRUM_ALL_MASK);
 #if BR_AUDIO_FAILURE_JOB_STAGE_PROFILE_DIAG
@@ -4141,22 +5007,58 @@ uint32_t br_audio_worker_sources(void *opaque_job)
     }
     if (job->kind == BR_AUDIO_JOB_KIT_FINALIZE) {
         uint32_t i, lane;
-        for (i = 0u; i < job->frames; ++i) {
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+        /* Read the (volatile) polyphony switch once per job, not per sample and lane: the
+         * per-sample read cost the normal kit about 50 % more work (FM-1, 12 Nov 2026). The
+         * polyphonic merge has no compressor key, so it gets its own loop and the normal
+         * loop below stays exactly the code a build without polyphony has. */
+        if (br_poly_scheduler_enabled && job->part == br_poly_scheduler_part) {
+            for (i = 0u; i < job->frames; ++i) {
+                int32_t sample = 0;
+                for (lane = 0u; lane < BR_AUDIO_KIT_JOB_LANES; ++lane)
+                    sample += br_audio_kit_partial[0][lane][i];
+                br_comp_key[job->part][i] = 0;
+#if defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
+                if (br_mode[job->part] == 4u) {
+                    if (sample > 32767) sample = 32767;
+                    if (sample < -32768) sample = -32768;
+                }
+#endif
+                job->output[i] = sample;
+            }
+        } else
+#endif
+        {
+        /* The key rows are chosen from controls snapshotted before the source
+         * jobs run; look them up once per job, not per frame and lane (the
+         * int32 stores below could otherwise force the lookup's uint32 globals
+         * to be reloaded every frame). Same rows, same additions, same order. */
+        const int32_t *key_row[BR_AUDIO_KIT_JOB_LANES];
+        const uint32_t frames = job->frames;
+        int32_t *const merged = job->output;
+        int32_t *const comp_key = br_comp_key[job->part];
+#if defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
+        const uint32_t saturate = br_mode[job->part] == 4u;
+#endif
+        for (lane = 0u; lane < BR_AUDIO_KIT_JOB_LANES; ++lane)
+            key_row[lane] = br_audio_kit_key_output(
+                job->part, lane, br_audio_kit_key_lane_mask(lane));
+        for (i = 0u; i < frames; ++i) {
             int32_t sample = 0, key_sample = 0;
             for (lane = 0u; lane < BR_AUDIO_KIT_JOB_LANES; ++lane) {
-                int32_t *key = br_audio_kit_key_output(
-                    job->part, lane, br_audio_kit_key_lane_mask(lane));
+                const int32_t *key = key_row[lane];
                 sample += br_audio_kit_partial[0][lane][i];
                 if (key) key_sample += key[i];
             }
-            br_comp_key[job->part][i] = key_sample;
+            comp_key[i] = key_sample;
 #if defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
-            if (br_mode[job->part] == 4u) {
+            if (saturate) {
                 if (sample > 32767) sample = 32767;
                 if (sample < -32768) sample = -32768;
             }
 #endif
-            job->output[i] = sample;
+            merged[i] = sample;
+        }
         }
 #if BR_AUDIO_FAILURE_JOB_STAGE_PROFILE_DIAG
         if (job->failure_profile_stage_flags &
@@ -4169,8 +5071,13 @@ uint32_t br_audio_worker_sources(void *opaque_job)
                 job, BR_AUDIO_FAILURE_STAGE_ID_POST, timing_finished);
         }
 #endif
-        br_audio_fused_osc_block[job->part] = br_engine_post_part_row(
-            job->part, job->output, br_comp_key[job->part], job->frames);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+        if (br_poly_scheduler_enabled && job->part == br_poly_scheduler_part)
+            br_audio_fused_osc_block[job->part] = br_poly_scheduler_post(job->part, job->output, job->frames);
+        else
+#endif
+            br_audio_fused_osc_block[job->part] = br_engine_post_part_row(
+                job->part, job->output, br_comp_key[job->part], job->frames);
 #if BR_AUDIO_FAILURE_JOB_STAGE_PROFILE_DIAG
         if (job->failure_profile_stage_flags &
             BR_AUDIO_FAILURE_STAGE_ACTIVE_VALID) {
@@ -4223,8 +5130,14 @@ uint32_t br_audio_worker_sources(void *opaque_job)
 #endif
         return 1u;
     }
-    br_engine_source_part(job->part, job->output, job->key, job->frames,
-                          job->lane_mask ? job->lane_mask : BR_DRUM_ALL_MASK);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+    if (br_poly_scheduler_enabled && job->kind == BR_AUDIO_JOB_SOURCE &&
+        job->part == br_poly_scheduler_part) {
+        if (!br_poly_scheduler_source(job)) return 0u;
+    } else
+#endif
+        br_engine_source_part(job->part, job->output, job->key, job->frames,
+                              job->lane_mask ? job->lane_mask : BR_DRUM_ALL_MASK);
 #if BR_AUDIO_FAILURE_JOB_STAGE_PROFILE_DIAG
     if (job->failure_profile_stage_flags &
         BR_AUDIO_FAILURE_STAGE_ACTIVE_VALID) {
@@ -4811,7 +5724,7 @@ static uint32_t br_audio_foreground_fixed8_take_candidate(
 
 /* Called from the preemptible CPU0 main loop. Only the copied DTO is read; no
  * engine, job, UI, or worker-owned memory is touched. */
-void br_audio_fixed8_foreground_service(void)
+BR_POLY_COLD void br_audio_fixed8_foreground_service(void)
 {
     br_audio_foreground_fixed8_dto_t snapshot;
     uint8_t core_for_job[8], order_for_job[8], count_for_core[2];
@@ -6085,7 +6998,6 @@ static void br_audio_source_drop_partial(uint32_t count, uint32_t deadline,
     /* Some post jobs did not run, so their old quiet flags are not evidence
      * that the newly consumed events left those parts quiet. */
     for (p = 0u; p < BR_PARTS; ++p) br_quiet_part[p] = 0u;
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
     br_audio_late_last_index = UINT32_MAX;
     br_audio_late_last_count = count;
     br_audio_late_last_deadline = deadline;
@@ -6095,9 +7007,6 @@ static void br_audio_source_drop_partial(uint32_t count, uint32_t deadline,
     br_audio_late_last_core = UINT32_MAX;
     ++br_audio_late_drop_count;
     ++br_audio_partial_drop_count;
-#else
-    (void)count; (void)deadline; (void)sequence; (void)observed;
-#endif
     br_audio_late_render = 1u;
 }
 
@@ -6199,6 +7108,9 @@ static uint32_t br_audio_source_record_late(
 static uint32_t br_audio_source_completion_watch_eligible(
     const br_audio_source_late_t *late_out)
 {
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+    if (br_poly_scheduler_enabled) return 0u;
+#endif
     return late_out && BR_AUDIO_C1_LATE_OWNER_KNOWN &&
         BR_AUDIO_FUSION_ONLY_BUILD && BR_AUDIO_FUSION_FOUR_WAY_KIT &&
         BR_BLOCK == FM1_AUDIO_HALF_FRAMES &&
@@ -6822,7 +7734,6 @@ static uint32_t br_audio_fusion_job_signature(
 #endif
 #endif
     BR_FUSION_SIGNATURE_WORD(fx->delay_engine);
-    BR_FUSION_SIGNATURE_WORD(fx->reverb_engine);
     BR_FUSION_SIGNATURE_WORD(fx->mod_engine);
 #if BR_AUDIO_FUSION_PLAITS_COLD_MODEL_SIGNATURE && \
     defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
@@ -7333,6 +8244,24 @@ static int32_t br_engine_post_part_row(uint32_t p, int32_t *row,
         if (e->stage != BR_ENV_OFF) {
             uint32_t calibration_q6 = br_audio_preset_gain(s->preset);
             br_env_refresh(e, s, 1u);
+            if (s->amp_mode && p < BR_SYNTH_PARTS) {
+                uint32_t level = s->mute ? 0u : br_bound(s->level, 127u);
+                for (i = 0; i < n; ++i) {
+                    int32_t sample = row[i]; uint32_t gain;
+                    if (e->velocity_gain_ramp_left) {
+                        uint32_t level_gain = level * 127u;
+                        if (calibration_q6 != 64u) level_gain = (level_gain * calibration_q6 + 32u) >> 6;
+                        gain = (br_env_advance_velocity_gain(e) * level_gain + 16384u) >> 15;
+                    } else {
+                        gain = e->velocity * level;
+                        if (calibration_q6 != 64u) gain = (gain * calibration_q6 + 32u) >> 6;
+                    }
+                    br_env_advance(e);
+                    int32_t filtered = br_lpg_sample(sample, e->amp, &br_mono_lpg[p]);
+                    row[i] = br_div16129_exact(((filtered * (int32_t)e->amp) >> 15) * (int32_t)gain);
+                    osc_sum += sample;
+                }
+            } else {
             int32_t gain = (int32_t)e->velocity *
                 (int32_t)(s->mute ? 0u : br_bound(s->level, 127u));
             uint32_t ramp_count = e->velocity_gain_ramp_left;
@@ -7380,6 +8309,7 @@ static int32_t br_engine_post_part_row(uint32_t p, int32_t *row,
 #endif
                 osc_sum += sample;
             }
+            }
         }
     } if (br_mode[p] == 1u || br_mode[p] == 4u) {
         if (e->stage != BR_ENV_OFF) {
@@ -7394,6 +8324,7 @@ static int32_t br_engine_post_part_row(uint32_t p, int32_t *row,
             key[i] = 0;
         }
     }
+    br_level_apply(p, row, (br_mode[p] == 1u || br_mode[p] == 4u) ? key : 0, n);
     if (!s->filter_resonance && !s->filter_keytrack) {
         br_filter[p].band = 0;
         for (i = 0; i < n; ++i)
@@ -7403,7 +8334,7 @@ static int32_t br_engine_post_part_row(uint32_t p, int32_t *row,
         for (i = 0; i < n; ++i)
             row[i] = br_filter_process_controls(&br_filter[p], row[i],
                 br_bound(s->filter, 127u), br_bound(s->filter_resonance, 127u),
-                s->filter_keytrack != 0u, e->note);
+                s->filter_keytrack, e->note);
     }
     if ((br_mode[p] == 1u && br_drum_pair_quiet(p))
 #if defined(BR_ENABLE_PLAITS) && BR_ENABLE_PLAITS
@@ -7637,7 +8568,7 @@ static const uint8_t br_arp_divisor[BR_ARP_RATES] = {2u, 3u, 4u, 6u, 8u};
 
 /* Tell the main loop about an arp note while the transport runs, with the
  * sequencer position at this block's start, so REC can write it. */
-static void br_arp_record(uint32_t p, uint32_t note, uint32_t on)
+BR_COLD_SIZE static void br_arp_record(uint32_t p, uint32_t note, uint32_t on)
 {
     uint32_t w = br_arp_rec_write;
     volatile br_arp_rec_t *e;
@@ -7653,7 +8584,7 @@ static void br_arp_record(uint32_t p, uint32_t note, uint32_t on)
     br_arp_rec_write = w + 1u;
 }
 
-static void br_arp_stop_note(uint32_t p, br_arp_state_t *a)
+BR_COLD_SIZE static void br_arp_stop_note(uint32_t p, br_arp_state_t *a)
 {
     if (!a->sounding) return;
     br_release_note(p, a->sounding - 1u);
@@ -7662,12 +8593,47 @@ static void br_arp_stop_note(uint32_t p, br_arp_state_t *a)
     a->gate_left = 0u;
 }
 
+/* Each track's LFOs modulate the live arp settings without altering their
+ * stored values. Full depth spans the destination's complete range. */
+BR_POLY_COLD static uint32_t br_arp_modulated(uint32_t p, uint32_t target,
+                                               uint32_t base, uint32_t low, uint32_t high)
+{
+    int32_t amount = 0;
+    for (uint32_t i = 0; i < BR_LFOS; ++i) {
+        const br_lfo_config_t *l = &br_cached_mod[p].lfo[i];
+        if (l->target == target && l->depth) {
+            uint32_t wave = l->wave < BR_WAVE_COUNT ? l->wave : BR_WAVE_SINE;
+            amount += br_mod_lfo(&br_mod_state[p], i, wave) * (int32_t)br_mod_clamp_u7(l->depth) / 127;
+        }
+    }
+    {
+        int32_t lfo[BR_LFOS];
+        br_mod_state[p].global_lfo = br_global_lfo_signal();
+        for (uint32_t i = 0; i < BR_LFOS; ++i) {
+            uint32_t wave = br_cached_mod[p].lfo[i].wave;
+            lfo[i] = br_mod_lfo(&br_mod_state[p], i, wave < BR_WAVE_COUNT ? wave : BR_WAVE_SINE);
+        }
+        for (uint32_t i = 0; i < BR_EFFECTIVE_ROUTES; ++i) {
+            const br_route_config_t *r = &br_cached_mod[p].route[i];
+            if (r->enabled && r->target == target && br_mod_source_active(r->source))
+                amount += br_mod_source(&br_mod_state[p], r->source, (int32_t)br_env[p].amp, lfo) *
+                          br_mod_clamp_i7(r->amount) / 127;
+        }
+    }
+    if (amount > 32767) amount = 32767;
+    if (amount < -32767) amount = -32767;
+    int32_t delta = amount * (int32_t)(high - low);
+    delta = delta < 0 ? -((-delta + 16383) / 32767) : (delta + 16383) / 32767;
+    int32_t value = (int32_t)base + delta;
+    return (uint32_t)(value < (int32_t)low ? low : value > (int32_t)high ? high : value);
+}
+
 /* Start note at this block's start. A gate shorter than the block still
  * sounds for one block, like a short sequencer gate. */
-static void br_arp_play(uint32_t p, br_arp_state_t *a, uint32_t note,
+BR_COLD_SIZE static void br_arp_play(uint32_t p, br_arp_state_t *a, uint32_t note,
                         uint32_t frames, uint32_t n)
 {
-    uint32_t gate = br_bound(br_part[p].arp_gate, 127u), length;
+    uint32_t gate = br_arp_modulated(p, BR_TARGET_ARP_GATE, br_part[p].arp_gate, 1u, 127u), length;
     br_arp_stop_note(p, a);
     br_start_note(p, note, 100u, 0u);
     br_arp_record(p, note, 1u);
@@ -7677,10 +8643,10 @@ static void br_arp_play(uint32_t p, br_arp_state_t *a, uint32_t note,
 }
 
 /* The next note for the current mode, keys and octave range. */
-static uint32_t br_arp_next_note(uint32_t p, br_arp_state_t *a, uint32_t octaves)
+BR_COLD_SIZE static uint32_t br_arp_next_note(uint32_t p, br_arp_state_t *a, uint32_t octaves)
 {
     uint8_t sorted[BR_ARP_MAX_NOTES];
-    uint32_t mode = br_bound(br_part[p].arp_mode, BR_ARP_MODES - 1u);
+    uint32_t mode = br_arp_modulated(p, BR_TARGET_ARP_MODE, br_part[p].arp_mode, 0u, BR_ARP_MODES - 1u);
     uint32_t count = a->count, length = count * octaves, i, j, index;
     uint32_t pos = a->order_pos++;
     for (i = 0u; i < count; ++i) sorted[i] = a->notes[i];
@@ -7701,9 +8667,9 @@ static uint32_t br_arp_next_note(uint32_t p, br_arp_state_t *a, uint32_t octaves
     return i > 127u ? 127u : i;
 }
 
-static void br_arp_step(uint32_t p, br_arp_state_t *a, uint32_t step_frames, uint32_t n)
+BR_POLY_COLD static void br_arp_step(uint32_t p, br_arp_state_t *a, uint32_t step_frames, uint32_t n)
 {
-    uint32_t octaves = br_part[p].arp_octaves, repeats = 1u;
+    uint32_t octaves = br_arp_modulated(p, BR_TARGET_ARP_OCTAVES, br_part[p].arp_octaves, 1u, BR_ARP_MAX_OCTAVES), repeats = 1u;
     if (octaves < 1u) octaves = 1u;
     if (octaves > BR_ARP_MAX_OCTAVES) octaves = BR_ARP_MAX_OCTAVES;
     if (repeats < 1u) repeats = 1u;
@@ -7717,7 +8683,7 @@ static void br_arp_step(uint32_t p, br_arp_state_t *a, uint32_t step_frames, uin
     ++a->step_count;
 }
 
-static void br_arp_process(uint32_t p, uint32_t n)
+BR_POLY_COLD static void br_arp_process(uint32_t p, uint32_t n)
 {
     br_arp_state_t *a = &br_arp_state[p];
     const volatile br_arp_keys_t *keys = &br_arp_keys[p];
@@ -7764,13 +8730,13 @@ static void br_arp_process(uint32_t p, uint32_t n)
         return;
     }
 #endif
-    rate = br_bound(br_part[p].arp_rate, BR_ARP_RATES - 1u);
+    rate = br_arp_modulated(p, BR_TARGET_ARP_RATE, br_part[p].arp_rate, 0u, BR_ARP_RATES - 1u);
     quarter = br_tempo_quarter_frames();
     step = quarter / br_arp_divisor[rate];
     if (!step) step = 1u;
     /* Swing follows the project setting on straight rates only. */
     swing = br_arp_divisor[rate] % 3u ?
-        br_bound(br_part[0].swing, BR_SWING_MAX) : 0u;
+        br_bound(br_swing, BR_SWING_MAX) : 0u;
     /* Notes started in earlier blocks: gate, then any repeat. */
     if (a->sounding && a->gate_left) {
         if (a->gate_left <= n) br_arp_stop_note(p, a);
@@ -7843,7 +8809,7 @@ static void br_arp_process(uint32_t p, uint32_t n)
     a->last_count = a->count;
 }
 
-static void br_arp_reset(void)
+BR_COLD_SIZE static void br_arp_reset(void)
 {
     uint32_t p;
     memset(br_arp_state, 0, sizeof br_arp_state);
@@ -7880,6 +8846,7 @@ static void br_engine_post_join_run(void)
         for (i = 0; i < br_post_join.n; ++i)
             for (p = 0; p < BR_PARTS; ++p) sum += br_post_join.bus[p][i];
         mix = sum / (int32_t)br_post_join.n;
+        br_global_lfo_advance(br_post_join.n);
         for (p = 0; p < BR_PARTS; ++p) {
             br_mod_capture(&br_mod_state[p], br_post_join.osc[p], mix);
 #if BR_MOD_LFO_PHASE_DELTA_CACHE
@@ -7902,6 +8869,13 @@ BR_AUDIO_API void br_engine_post_join_finish(void)
 BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 {
     uint32_t p, i;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (br_poly_scheduler_enabled && br_playing) {
+        br_poly_scheduler_waiting = 1u;
+        for (p = 0; p < BR_PARTS; ++p) memset(bus[p], 0, n * sizeof(bus[p][0]));
+        return;
+    }
+#endif
     int32_t osc_block[BR_PARTS] = {0, 0, 0, 0};
 #ifdef BR_SPLIT_AUDIO
     br_audio_source_late_t late_job = {UINT32_MAX, 0u, 0u};
@@ -7939,7 +8913,8 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
     if (n > BR_BLOCK) n = BR_BLOCK;
     for (p = 0u; p < BR_PARTS; ++p) br_seq_clock[p] += n;
 #if defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO)
-    if (fm1_cpu1_worker_fault) br_audio_source_worker_fault = 1u;
+    /* A contained C1 (held in reset) leaves CPU0 to render alone. */
+    if (fm1_cpu1_worker_fault && !fm1_cpu1_worker_contained()) br_audio_source_worker_fault = 1u;
 #endif
     for (p = 0; p < BR_PARTS; ++p)
         for (i = 0; i < BR_BLOCK; ++i) br_comp_key[p][i] = 0;
@@ -7966,9 +8941,20 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 #endif
     for (p = 0; p < BR_PARTS; ++p) {
         br_snapshot(p);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+        if (!br_poly_scheduler_enabled)
+#endif
         br_select_mode(p);
         br_build_effective(p);
     }
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (br_poly_scheduler_enabled && br_cached_sound[br_poly_scheduler_part].preset !=
+            BR_FIRST_PLAITS + br_poly_scheduler.source.model) {
+        br_poly_scheduler_waiting = 1u;
+        for (p = 0; p < BR_PARTS; ++p) memset(bus[p], 0, n * sizeof(bus[p][0]));
+        return;
+    }
+#endif
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
     if (!!br_midi_clock_enabled != br_clock_source_prev ||
         br_clock_generation_seen != br_midi_clock_generation) {
@@ -7991,6 +8977,12 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
     }
 #endif
     br_take_events();
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (br_poly_scheduler_enabled && br_poly_scheduler_waiting) {
+        for (p = 0; p < BR_PARTS; ++p) memset(bus[p], 0, n * sizeof(bus[p][0]));
+        return;
+    }
+#endif
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
     br_clock_project();
     if (br_clock_experiment.enabled && br_clock_experiment.period_q16)
@@ -8031,16 +9023,39 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
     } else if (!br_midi_paused) {
         br_transport_phase = 0u;
     }
-    for (p = 0; p < BR_SYNTH_PARTS; ++p) br_arp_process(p, n);
-    for (p = 0; p < BR_PARTS; ++p) br_seq_process(p, n);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (!br_poly_scheduler_enabled)
+#endif
+    {
+        for (p = 0; p < BR_SYNTH_PARTS; ++p) br_arp_process(p, n);
+        for (p = 0; p < BR_PARTS; ++p) br_seq_process(p, n);
+    }
 #if defined(BR_MIDI_CLOCK_EXPERIMENT) && BR_MIDI_CLOCK_EXPERIMENT
     if (br_clock_experiment.anchor.valid) br_clock_experiment.render_frame += n;
 #endif
     for (p = 0; p < BR_PARTS; ++p) {
         br_build_effective(p);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+        if (!br_poly_scheduler_enabled)
+#endif
         br_select_mode(p);
     }
+#if BR_MODEL_MOD_EXPERIMENT
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    if (!br_poly_scheduler_enabled)
+#endif
+        br_model_mono_limit();
+#endif
     br_smooth_sends();
+    /* LEVEL maps to (v/127)^2 first (br_level_law), then the existing 5 ms
+     * slew runs on that gain: a common source level for the short fade and the
+     * fractional correction before the track filter; unchanged levels remain
+     * bit-exact and cost nothing extra per sample. */
+    for (p = 0; p < BR_PARTS; ++p) {
+        uint32_t target = br_level_law(br_level_raw[p]);
+        br_effective_sound[p].level = br_level_prepare(&br_level_slew[p], &br_level_block[p],
+                                                       target, n, FS / 200u);
+    }
     br_snapshot_source_compressor();
     br_prepare_kit_source_controls();
 #if defined(FM1_DEVICE) && (!defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS)
@@ -8059,9 +9074,21 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
         !br_audio_call_fx_fusion_prepare(bus, n))
         br_audio_source_fx_fusion_active = 0u;
     if (br_audio_source_fx_fusion_active) {
-        source_job_count = br_audio_build_fusion_jobs(bus, n);
-        br_audio_fusion_cost_hints(source_job_count);
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+        if (br_poly_scheduler_enabled) source_job_count = br_poly_scheduler_build_jobs(bus, n);
+        else
+#endif
+        {
+            source_job_count = br_audio_build_fusion_jobs(bus, n);
+            br_audio_fusion_cost_hints(source_job_count);
+        }
     } else {
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+    if (br_poly_scheduler_enabled) {
+        for (p = 0; p < BR_PARTS; ++p) memset(bus[p], 0, n * sizeof(bus[p][0]));
+        return;
+    }
+#endif
     for (p = 0; p < BR_PARTS; ++p) {
         if (br_mode[p] == 1u || br_mode[p] == 4u) {
 #if BR_AUDIO_FUSION_FOUR_WAY_KIT
@@ -8239,6 +9266,9 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
     }
 #if BR_AUDIO_FUSION_FIXED_PLAN
     if (br_audio_source_fx_fusion_active)
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+        if (!br_poly_scheduler_enabled)
+#endif
         (void)br_audio_fixed_plan_prepare(source_job_count);
 #endif
 #if BR_AUDIO_FUSION_JOB_TIMING_DIAG
@@ -8253,7 +9283,7 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 #endif
     br_audio_source_publish();
 #if defined(BR_SOURCE_QUEUE_TEST)
-    if (br_audio_source_test_parallel &&
+    if (br_audio_source_test_parallel && BR_POLY_STANDARD_GRAPH &&
         br_audio_source_can_publish_late(n, source_job_count)) {
         br_audio_source_publication_enabled = 1u;
         br_audio_source_publish();
@@ -8543,7 +9573,7 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
                 (void *)&br_audio_source_queue :
                 br_audio_source_legacy_mode ?
                 (void *)&br_audio_legacy_batches[1] : (void *)&br_audio_source_queue;
-            if (context == &br_audio_source_queue &&
+            if (context == &br_audio_source_queue && BR_POLY_STANDARD_GRAPH &&
                 br_audio_source_can_publish_late(n, source_job_count)) {
                 br_audio_source_publication_enabled = 1u;
                 br_audio_source_publish();
@@ -8582,6 +9612,7 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
         if (!br_audio_source_dispatch_local(reverse_sources || hybrid_sources,
                 use_cpu1, submitted)) {
             br_audio_source_worker_fault = 1u;
+            BR_AUDIO_FAULT_SITE(BR_AUDIO_FAULT_CPU0_QUEUE);
             if (hybrid_sources)
                 return; /* Do not read current buses while C1 may own a job. */
         }
@@ -8628,6 +9659,17 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 #if BR_AUDIO_RUNTIME_TRACE_ENABLED
             if (runtime_trace_chunk)
                 fm1_runtime_trace_mark(FM1_RUNTIME_TRACE_MARK_WAIT_BEGIN);
+#endif
+#if BR_POLY_SUPPORT
+/* With polyphony support (BR_POLY_SUPPORT, product.h: any polyphonic build, and
+ * every SMK-37 build) the four late-owner selectors below also require the
+ * standard (non-polyphonic) graph. Same tokens as smk37-import's
+ * "BR_POLY_STANDARD_GRAPH && BR_AUDIO_C1_LATE_OWNER_KNOWN"; the FM-1 text of
+ * the selectors stays unchanged (tests/run_target_wait_orchestration.py
+ * extracts it). Restored after the last selector. */
+#undef BR_AUDIO_C1_LATE_OWNER_KNOWN
+#define BR_AUDIO_C1_LATE_OWNER_KNOWN BR_POLY_STANDARD_GRAPH && \
+    (BR_AUDIO_FUSION_JOB_TIMING_DIAG || BR_AUDIO_FUSION_EWMA_SCHEDULER)
 #endif
             if (BR_AUDIO_C1_LATE_OWNER_KNOWN && BR_AUDIO_FUSION_ONLY_BUILD &&
                 BR_AUDIO_FUSION_FOUR_WAY_KIT && n == BR_BLOCK &&
@@ -8810,6 +9852,11 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
                     }
                 } else cpu0_ok = BR_AUDIO_QUEUE_FAILED;
             } else if (BR_AUDIO_C1_LATE_OWNER_KNOWN && BR_AUDIO_FUSION_ONLY_BUILD &&
+#if BR_POLY_SUPPORT
+#undef BR_AUDIO_C1_LATE_OWNER_KNOWN
+#define BR_AUDIO_C1_LATE_OWNER_KNOWN \
+    (BR_AUDIO_FUSION_JOB_TIMING_DIAG || BR_AUDIO_FUSION_EWMA_SCHEDULER)
+#endif
                 BR_AUDIO_FUSION_FOUR_WAY_KIT && n == BR_BLOCK &&
                 BR_BLOCK == FM1_AUDIO_HALF_FRAMES &&
 #if BR_AUDIO_FUSION_FIXED_PLAN
@@ -8901,6 +9948,7 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 #endif
                 uint32_t reset_confirmed;
                 br_audio_source_worker_fault = 1u;
+                BR_AUDIO_FAULT_SITE(BR_AUDIO_FAULT_SOURCE_JOIN);
 #if BR_AUDIO_FAILURE_JOB_PROFILE_DIAG
                 reset_request_tick = br_audio_job_timing_now();
 #endif
@@ -8925,6 +9973,9 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 #endif
                     for (p = 0; p < BR_PARTS; ++p) {
                         for (i = 0; i < n; ++i) bus[p][i] = 0;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+                        if (br_poly_scheduler_event(BR_EVENT_STOP, p, 0u, 0u, 0u)) continue;
+#endif
                         br_stop_part(p);
                     }
                     for (p = 0; p < BR_PARTS; ++p)
@@ -8960,10 +10011,16 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 #if BR_AUDIO_DEFER_POST_JOIN
     br_post_join.history = br_audio_source_fx_fusion_active &&
         br_audio_source_queue.completed == br_audio_source_queue.count;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+    if (br_poly_scheduler_enabled) br_post_join.history = 0u;
+#endif
     br_post_join.history_count = br_audio_source_queue.completed;
 #elif BR_AUDIO_FUSION_EWMA_SCHEDULER
     if (br_audio_source_fx_fusion_active &&
         br_audio_source_queue.completed == br_audio_source_queue.count)
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+        if (!br_poly_scheduler_enabled)
+#endif
         br_audio_fusion_history_commit(br_audio_source_queue.completed);
 #endif
 #if defined(FM1_DEVICE) && (!defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS)
@@ -9084,7 +10141,11 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
     }
 #endif
     /* The worker jobs have joined and the partial lane buffers are stable. */
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT && defined(BR_SPLIT_AUDIO)
+    br_audio_kit_meter_capture(n, br_poly_scheduler_enabled ? 0u : br_mode[BR_DRUM_PART]);
+#else
     br_audio_kit_meter_capture(n, br_mode[BR_DRUM_PART]);
+#endif
 #if defined(FM1_DEVICE) && (!defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS)
     br_gap_stamp[2] = fm1_ticks();
 #endif
@@ -9117,6 +10178,7 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
         for (i = 0; i < n; ++i)
             for (p = 0; p < BR_PARTS; ++p) sum += bus[p][i];
         mix = sum / (int32_t)n;
+        br_global_lfo_advance(n);
         for (p = 0; p < BR_PARTS; ++p) {
             br_mod_capture(&br_mod_state[p], osc_block[p], mix);
 #if BR_MOD_LFO_PHASE_DELTA_CACHE
@@ -9152,7 +10214,6 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
         /* Source state and modulation advanced exactly once. Master FX and
          * the DMA output are intentionally left for the drop caller. */
         br_audio_source_fusion_cancel();
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
         br_audio_late_last_index = late_job.index;
         br_audio_late_last_count = source_job_count;
         br_audio_late_last_deadline = late_deadline;
@@ -9161,7 +10222,6 @@ BR_AUDIO_API void br_engine_render(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
         br_audio_late_last_core = late_executor;
         br_audio_late_last_cutoff = late_job.cutoff_tick;
         ++br_audio_late_drop_count;
-#endif
         br_audio_late_render = 1u;
     }
 #endif
@@ -9198,7 +10258,7 @@ BR_AUDIO_API void br_engine_clock_dma_invalid(void)
 #endif
     br_clock_fail(BR_CLOCK_FAIL_ANCHOR);
 }
-BR_AUDIO_API void br_engine_clock_dma_edge(uint32_t tick, uint32_t half, uint32_t lead_frames)
+BR_COLD_SIZE BR_AUDIO_API void br_engine_clock_dma_edge(uint32_t tick, uint32_t half, uint32_t lead_frames)
 {
     if (!br_clock_experiment.anchor.valid) {
 #if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
@@ -9233,7 +10293,7 @@ BR_AUDIO_API void br_engine_clock_source_changed(uint32_t tick)
 }
 /* Foreground producer; timestamp and status use the same ordered ring as
  * note/transport events. Calls while clock is off retain internal transport. */
-BR_AUDIO_API void br_engine_clock_midi_event(uint8_t status, uint32_t tick, uint32_t generation)
+BR_COLD_SIZE BR_AUDIO_API void br_engine_clock_midi_event(uint8_t status, uint32_t tick, uint32_t generation)
 {
     if (generation != br_midi_clock_generation) return;
     if (!br_midi_clock_enabled) {
@@ -9251,17 +10311,58 @@ BR_AUDIO_API void br_engine_midi_transport(uint8_t status)
         br_enqueue(status); /* operation zero: ordered transport command */
 }
 
+#if BR_POLY_SIZE_CONSTRAINED
+/* FM-1 polyphony (size-constrained): the four note entry points share one body.
+ * Same checks and the same event word as the separate bodies below: an untagged
+ * call is tag 0, a tagged call needs 0 < tag < 0x4000, a note on needs a velocity. */
+BR_POLY_COLD static void br_engine_note_enqueue(uint32_t op, uint32_t part, uint32_t note,
+                                                uint32_t velocity, uint32_t tag)
+{
+    if (part < BR_PARTS && note < 128u && (op != BR_EVENT_ON || velocity) && tag < 0x4000u)
+        br_enqueue_timed(br_pack_event(op, part, note, velocity) | tag, br_note_due_next);
+}
+BR_AUDIO_API void br_engine_note_on(uint32_t part, uint32_t note, uint32_t velocity)
+{
+    br_engine_note_enqueue(BR_EVENT_ON, part, note, velocity, 0u);
+}
+BR_AUDIO_API void br_engine_note_off(uint32_t part, uint32_t note)
+{
+    br_engine_note_enqueue(BR_EVENT_OFF, part, note, 0u, 0u);
+}
+BR_AUDIO_API void br_engine_note_on_tagged(uint32_t part, uint32_t note, uint32_t velocity, uint32_t tag)
+{
+    if (tag) br_engine_note_enqueue(BR_EVENT_ON, part, note, velocity, tag);
+}
+BR_AUDIO_API void br_engine_note_off_tagged(uint32_t part, uint32_t note, uint32_t tag)
+{
+    if (tag) br_engine_note_enqueue(BR_EVENT_OFF, part, note, 0u, tag);
+}
+#else
 BR_AUDIO_API void br_engine_note_on(uint32_t part, uint32_t note, uint32_t velocity)
 {
     if (part < BR_PARTS && note < 128u && velocity)
-        br_enqueue(br_pack_event(BR_EVENT_ON, part, note, velocity));
+        br_enqueue_timed(br_pack_event(BR_EVENT_ON, part, note, velocity), br_note_due_next);
 }
 
 BR_AUDIO_API void br_engine_note_off(uint32_t part, uint32_t note)
 {
     if (part < BR_PARTS && note < 128u)
-        br_enqueue(br_pack_event(BR_EVENT_OFF, part, note, 0));
+        br_enqueue_timed(br_pack_event(BR_EVENT_OFF, part, note, 0), br_note_due_next);
 }
+
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+BR_AUDIO_API void br_engine_note_on_tagged(uint32_t part, uint32_t note, uint32_t velocity, uint32_t tag)
+{
+    if (part < BR_PARTS && note < 128u && velocity && tag && tag < 0x4000u)
+        br_enqueue_timed(br_pack_event(BR_EVENT_ON, part, note, velocity) | tag, br_note_due_next);
+}
+BR_AUDIO_API void br_engine_note_off_tagged(uint32_t part, uint32_t note, uint32_t tag)
+{
+    if (part < BR_PARTS && note < 128u && tag && tag < 0x4000u)
+        br_enqueue_timed(br_pack_event(BR_EVENT_OFF, part, note, 0u) | tag, br_note_due_next);
+}
+#endif
+#endif /* BR_POLY_SIZE_CONSTRAINED */
 
 BR_AUDIO_API void br_engine_part_off(uint32_t part)
 {
@@ -9289,17 +10390,18 @@ BR_AUDIO_API int br_engine_quiet(void)
 
 /* Sample the same signal and signed amount used by the modulation matrix.
  * This is a display-only read; it never advances the audio state. */
-BR_AUDIO_API int32_t br_audio_patch_value(uint32_t part, uint32_t slot)
+BR_POLY_COLD BR_AUDIO_API int32_t br_audio_patch_value(uint32_t part, uint32_t slot)
 {
     br_mod_state_t state;
     br_route_config_t route;
     int32_t lfo[BR_LFOS];
     uint32_t i;
-    if (part >= BR_PARTS || slot >= BR_ROUTES) return 0;
+    if (part >= BR_PARTS || slot >= BR_EFFECTIVE_ROUTES) return 0;
     route = br_cached_mod[part].route[slot];
     if (!route.enabled || !route.amount || !br_mod_source_active(route.source) ||
         !br_mod_target_supported(br_cached_sound[part].preset, route.target)) return 0;
     state = br_mod_state[part];
+    state.global_lfo = br_global_lfo_signal();
     for (i = 0; i < BR_LFOS; ++i) {
         uint32_t wave = br_cached_mod[part].lfo[i].wave;
         lfo[i] = br_mod_lfo(&state, i, wave < BR_WAVE_COUNT ? wave : BR_WAVE_SINE);
@@ -9315,3 +10417,23 @@ BR_AUDIO_API uint32_t br_audio_lfo_phase(uint32_t part, uint32_t lfo)
     state = &br_mod_state[part];
     return state->phase[lfo] >> 25;
 }
+
+BR_AUDIO_API uint32_t br_audio_global_lfo_phase(void)
+{
+    return br_global_lfo_state.phase[0] >> 25;
+}
+
+BR_AUDIO_API uint32_t br_audio_global_lfo_target_value(uint32_t target, uint32_t base, uint32_t maximum)
+{
+    return br_global_lfo_value(target, base, maximum);
+}
+#if BR_MODEL_MOD_EXPERIMENT
+BR_AUDIO_API uint32_t br_audio_model_target(uint32_t part, uint32_t fallback)
+{
+    if (part < BR_SYNTH_PARTS && br_is_plaits(br_effective_sound[part].preset))
+        return br_effective_sound[part].preset - BR_FIRST_PLAITS;
+    return fallback;
+}
+#endif
+
+static br_note_timing_t br_nt = {0};

@@ -26,11 +26,11 @@ int main(void)
     CHECK(!br_record_hold[0][60].active, "synth final off closes recording");
     setup();
     br_midi(0x93,36,100); br_midi(0x93,52,100);
-    CHECK(br_record_hold[3][br_drum_lane_note(0)].active, "kit retrigger is held");
+    CHECK((*br_record_hold_for(3, br_drum_lane_note(0))).active, "kit retrigger is held");
     br_midi(0x83,36,0);
-    CHECK(br_record_hold[3][br_drum_lane_note(0)].active, "kit stale pitch off preserves newest hit");
+    CHECK((*br_record_hold_for(3, br_drum_lane_note(0))).active, "kit stale pitch off preserves newest hit");
     br_midi(0x83,52,0);
-    CHECK(!br_record_hold[3][br_drum_lane_note(0)].active, "kit final pitch off closes recording");
+    CHECK(!(*br_record_hold_for(3, br_drum_lane_note(0))).active, "kit final pitch off closes recording");
     setup();
     br_midi(0x90,60,100);
     br_midi_channel_set(0,2); br_midi_channel_set(0,1);
@@ -42,9 +42,25 @@ int main(void)
     setup();
     br_midi_channel_set(4,4); /* D1 and D2 share channel 4 */
     br_midi(0x93,33,100);
-    CHECK(br_record_hold[3][br_drum_lane_note(0)].active && br_record_hold[3][br_drum_lane_note(1)].active, "duplicate channel records both lanes");
+    CHECK((*br_record_hold_for(3, br_drum_lane_note(0))).active && (*br_record_hold_for(3, br_drum_lane_note(1))).active, "duplicate channel records both lanes");
     br_midi(0x83,33,0);
-    CHECK(!br_record_hold[3][br_drum_lane_note(0)].active && !br_record_hold[3][br_drum_lane_note(1)].active, "duplicate channel releases both lane records");
+    CHECK(!(*br_record_hold_for(3, br_drum_lane_note(0))).active && !(*br_record_hold_for(3, br_drum_lane_note(1))).active, "duplicate channel releases both lane records");
+    setup();
+    for (unsigned lane = 0; lane < BR_DRUM_LANES; ++lane) {
+      uint32_t note = br_drum_lane_note(lane);
+      CHECK(br_record_note_begin(BR_DRUM_PART, note, 100, 1, lane, 1), "each kit lane records independently");
+      CHECK(br_record_hold_for(BR_DRUM_PART, note)->active, "kit lane hold is active");
+    }
+    CHECK(br_record_hold_for(BR_DRUM_PART, 35) == br_record_hold_for(BR_DRUM_PART, 36),
+          "MIDI aliases share the same kit lane hold");
+    br_record_note_cancel_part(BR_DRUM_PART, 0);
+    for (unsigned lane = 0; lane < BR_DRUM_LANES; ++lane) {
+      br_record_hold_t *hold = br_record_hold_for(BR_DRUM_PART, br_drum_lane_note(lane));
+      CHECK(!hold->active && hold->midi_stale_offs == 1, "cancel clears each kit lane once");
+    }
+    br_ui_recording_state_reset();
+    for (unsigned lane = 0; lane < BR_DRUM_LANES; ++lane)
+      CHECK(!br_record_kit_hold[lane].midi_stale_offs, "reset clears each kit lane");
     setup();
     { br_session_t saved; CHECK(br_capture(&saved), "capture before recall");
       br_midi(0x90,60,100); CHECK(br_restore(&saved), "restore while MIDI held");

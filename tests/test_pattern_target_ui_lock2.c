@@ -6,6 +6,7 @@
 #define FM1_PATTERN_V16_ONLY 1
 #define main host_unused_main
 #include "../firmware/src/dinghy.c"
+volatile unsigned fm1_project_old_format_seen;   /* pattern_project.c is not linked here */
 #undef main
 #include <assert.h>
 #include <stdio.h>

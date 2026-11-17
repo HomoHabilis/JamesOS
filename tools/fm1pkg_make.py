@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
-"""Build an FM-1 update package (.fwsc) from the Felucca app and update loader.
+"""Build an FM-1 or SMK-37 Pro update package (.fwsc) from the Felucca app and update loader.
 
   flash.bin  head [0, 0x4000): flash header (JieLi SDK default values), JLFS
              entries, the SDK SPL (uboot.boot, Apache-2.0) and an isd_config
@@ -14,7 +14,11 @@
 The SDK files come from the JieLi AC79 SDK (AC79_SDK, or --sdk).
 All integrity checks in the format are CRC16 (poly 0x1021, init 0).
 
-  fm1pkg_make.py APP.bin OTA.bin OUT.fwsc [--product FM-1_9XY] [--sdk DIR]
+The product follows the identity: "SMK-37 Pro_<digits>" selects the SMK-37 Pro
+flash layout (flash_image(..., smk37=True): app slot 0x97400, flash 0x9D000, V016
+region table), anything else the FM-1 layout.
+
+  fm1pkg_make.py APP.bin OTA.bin OUT.fwsc [--product FM-1_9XY | "SMK-37 Pro_9XY"] [--sdk DIR]
 """
 import argparse
 import os
@@ -98,12 +102,31 @@ def sdk_file(rel):
         raise SystemExit(f"fm1pkg_make: {path}: {e.strerror}. Set AC79_SDK to a JieLi AC79 SDK checkout.")
 
 
-def flash_image(app, key):
+SMK37_APP_SLOT = 0x97400
+SMK37_FLASH_SIZE = 0x9D000
+# SMK-37 Pro V016 region descriptors (absolute offsets).
+SMK37_REGIONS = (
+    (0x9D000, 0x23000, 0x12, 0x81, 0, bytes.fromhex("564d00ffffffffffffffffff00800000")),
+    (0, 0x9D000, 0x92, 0x82, 0, bytes.fromhex("5052435400ffffffffffffff434f4445")),
+    (0xC0000, 0x1000, 0x92, 0x82, 0, bytes.fromhex("4254494600ffffffffffffff4155544f")),
+    (0xC1000, 0x1000, 0x92, 0x81, 0, "USRTRIM"),
+    (0xC2000, 0x29000, 0x92, 0x81, 0, "USRFLASH"),
+    (0xF4000, 0xA000, 0x92, 0x81, 1, "USR"),
+)
+
+
+def is_smk37_identity(identity):
+    return identity.startswith("SMK-37 Pro_")
+
+
+def flash_image(app, key, *, smk37=False):
+    app_slot = SMK37_APP_SLOT if smk37 else APP_SLOT
+    flash_size = SMK37_FLASH_SIZE if smk37 else FLASH_SIZE
     spl = sdk_file("uboot.boot")                         # SDK SPL, BANKCB-encoded as in the SDK
     cfg_tool = sdk_file("cfg_tool.bin")
     eq = sdk_file("cfg/eq_cfg_hw.bin")
     isd = key_blob(key) + b"[FELUCCA]\r\n"
-    f = bytearray(b"\xFF" * FLASH_SIZE)
+    f = bytearray(b"\xFF" * flash_size)
     # ---- head
     spl_off = 0xA0
     isd_off = spl_off + len(spl)
@@ -120,20 +143,22 @@ def flash_image(app, key):
         enc(head, o, 32)
     f[0:len(head)] = head
     # ---- app area (plain first, then SFC)
-    if len(app) > APP_SLOT:
-        raise SystemExit(f"app is {len(app)} B, the slot is {APP_SLOT} B")
-    app = app + b"\xFF" * (APP_SLOT - len(app))
-    blk = 0x120 + APP_SLOT + len(cfg_tool)              # app_area_head block size
+    if len(app) > app_slot:
+        raise SystemExit(f"app is {len(app)} B, the slot is {app_slot} B")
+    app = app + b"\xFF" * (app_slot - len(app))
+    blk = 0x120 + app_slot + len(cfg_tool)              # app_area_head block size
     area = bytearray(b"\xFF" * blk)
-    area[0x120:0x120 + APP_SLOT] = app
-    area[0x120 + APP_SLOT:blk] = cfg_tool
-    ents = [entry(crc16(app), 0x120, APP_SLOT, 0x82, 0xFF, 0, "app.bin"),
-            entry(crc16(cfg_tool), 0x120 + APP_SLOT, len(cfg_tool), 0x82, 0xFF, 0, "cfg_tool.bin"),
-            # region descriptors; the bytes after the names are SDK packer fields (VM size, "CODE", "AUTO")
-            entry(0xFFFF, 0x93000, 352256, 0x12, 0x80, 0, bytes.fromhex("564d00ffffffffffffffffff00800000")),
-            entry(0xFFFF, 0, FLASH_SIZE, 0x92, 0x82, 0, bytes.fromhex("5052435400ffffffffffffff434f4445")),
-            entry(0xFFFF, 0xE9000, 0x1000, 0x92, 0x80, 0, bytes.fromhex("4254494600ffffffffffffff4155544f")),
-            entry(0xFFFF, 0xEA000, 0x12000, 0x92, 0x81, 1, "USR")]
+    area[0x120:0x120 + app_slot] = app
+    area[0x120 + app_slot:blk] = cfg_tool
+    ents = [entry(crc16(app), 0x120, app_slot, 0x82, 0xFF, 0, "app.bin"),
+            entry(crc16(cfg_tool), 0x120 + app_slot, len(cfg_tool), 0x82, 0xFF, 0, "cfg_tool.bin")]
+    regions = SMK37_REGIONS if smk37 else (
+        (0x93000, 352256, 0x12, 0x80, 0, bytes.fromhex("564d00ffffffffffffffffff00800000")),
+        (0, FLASH_SIZE, 0x92, 0x82, 0, bytes.fromhex("5052435400ffffffffffffff434f4445")),
+        (0xE9000, 0x1000, 0x92, 0x80, 0, bytes.fromhex("4254494600ffffffffffffff4155544f")),
+        (0xEA000, 0x12000, 0x92, 0x81, 1, "USR"),
+    )
+    ents += [entry(0xFFFF, *region) for region in regions]
     area[32:32 + len(b"".join(ents))] = b"".join(ents)
     area[0:32] = entry(crc16(area[32:blk]), 0x02000120, blk, 0x83, 0xFF, 0, "app_area_head")
     # nested cfg directory right after the block: SDK default EQ table
@@ -142,8 +167,8 @@ def flash_image(app, key):
     cfg = entry(crc16(cfg_body), 0x20, 0x20 + len(cfg_body), 0x83, 0xFF, 1, "cfg") + cfg_body
     region = bytearray(area + cfg)
     sfc(region, 0, len(region), 0, key)
-    if 0x4000 + len(region) > FLASH_SIZE:          # (the update loader writes up to FLASH_SIZE only)
-        raise SystemExit(f"app area too large: ends at 0x{0x4000 + len(region):x}, past 0x{FLASH_SIZE:x}")
+    if 0x4000 + len(region) > flash_size:          # (the update loader writes up to flash_size only)
+        raise SystemExit(f"app area too large: ends at 0x{0x4000 + len(region):x}, past 0x{flash_size:x}")
     f[0x4000:0x4000 + len(region)] = region
     return bytes(f)
 
@@ -199,7 +224,8 @@ def main():
     a = ap.parse_args()
     global SDK
     SDK = a.sdk
-    pkg = ufw(flash_image(a.app.read_bytes(), a.key), a.ota.read_bytes(), a.product)
+    smk37 = is_smk37_identity(a.product)
+    pkg = ufw(flash_image(a.app.read_bytes(), a.key, smk37=smk37), a.ota.read_bytes(), a.product)
     a.out.write_bytes(pkg)
     print(f"package {a.out}: {len(pkg)} B, identity {a.product}, chip key {a.key:#06x}")
 

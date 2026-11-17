@@ -1,0 +1,37 @@
+/* Built from b9ef12f (FMP1 envelope 5, session v17): writes a version-5 project
+ * store image and what the b9ef12f loader restores from it. */
+#define FM1_CUT_FIXTURE 1
+#include "test_pattern_fixed_runtime.c"
+#include <stdio.h>
+static void dump(FILE *f){
+ static br_session_t s; static br_pattern_bank v; static br_pattern_snapshot live; fm1_pattern_song song;
+ assert(br_capture(&s)); assert(fwrite(&s,1,sizeof s,f)==sizeof s);
+ assert(br_ps_host_export(&v,&live,&song));
+ assert(fwrite(&v.used,1,2,f)==2&&fwrite(&v.active,1,1,f)==1);
+ { uint32_t size=(uint32_t)v.size; assert(fwrite(&size,1,4,f)==4); }
+ for(unsigned i=0;i<11;i++){uint32_t o=(uint32_t)v.offset[i],l=(uint32_t)v.length[i];assert(fwrite(&o,1,4,f)==4&&fwrite(&l,1,4,f)==4);}
+ assert(fwrite(v.arena,1,v.size,f)==v.size);
+ assert(fwrite(&live,1,sizeof live,f)==sizeof live);
+}
+int main(int argc,char **argv){
+ fm1_fixed_runtime_port port={0};FILE *f;
+ port.begin=port_begin;port.set_mode=port_mode;port.end=port_end;port.fence=port_fence;port.faulted=port_faulted;port.pair_state=port_state;port.certificate=port_cert;port.activate=port_activate;port.commit_slot=port_slot;port.role[0]=1;port.role[1]=2;port.role[2]=3;port.role[3]=4;port.named_slots=12;port.fixed_partition_auto=1;mutable_port=&port;
+ init_runtime_fixture();assert(fm1_fixed_runtime_bind(&runtime,&port)==PFS_OK);
+ /* Several used patterns (the example song: six), pattern 3 active and edited,
+  * a non-default session. */
+ assert(br_ps_select(3));
+ br_part[1].step[5]=BR_NOTE_STEP(67u,90u); br_part[0].length=12;
+ br_bpm=97u; br_swing=9u; br_part[0].sound.filter_env_depth=13; br_part[2].sound.preset=61u;
+ assert(fm1_fixed_bridge_save(&runtime.bridge,0,"V5 SONG")==PFS_OK);
+ f=fopen(argv[1],"wb");assert(f);
+ assert(fwrite(pair_flash,1,2u*PS_SECTOR,f)==2u*PS_SECTOR);
+ assert(fwrite(pair_flash+24u*PS_SECTOR,1,2u*PS_SECTOR,f)==2u*PS_SECTOR);
+ fclose(f);
+ /* What b9ef12f restores: boot recovery of W00, then LOAD of slot 1. */
+ br_bpm=60u; br_part[0].sound.filter_env_depth=0;
+ assert(fm1_fixed_bridge_recover(&runtime.bridge)==PFS_OK);
+ f=fopen(argv[2],"wb");assert(f);dump(f);fclose(f);
+ br_bpm=61u;
+ assert(fm1_fixed_bridge_load(&runtime.bridge,0)==PFS_OK);
+ f=fopen(argv[3],"wb");assert(f);dump(f);fclose(f);
+ printf("v5 store image written; active %u used %#x bpm %u\n",br_ps_state.active,br_ps_state.used,(unsigned)br_bpm);return 0;}

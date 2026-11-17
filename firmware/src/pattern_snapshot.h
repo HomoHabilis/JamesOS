@@ -21,6 +21,15 @@ typedef struct {
     int8_t kit_micro[BR_STEPS][BR_DRUM_LANES];
 } br_pattern_snapshot;
 
+static inline unsigned br_pattern_snapshot_bars(const br_pattern_snapshot *s)
+{
+    unsigned longest = 1u;
+    for (unsigned p = 0; p < BR_PARTS; ++p)
+        if (s->length[p] > longest) longest = s->length[p];
+    if (longest > BR_STEPS) longest = BR_STEPS;
+    return (longest + 15u) / 16u;
+}
+
 /* Both operations require exclusive access to all sequencer fields, with the
  * audio reader quiesced and foreground editing stopped. Neither operation is
  * atomic, ISR safe, a playback publication mechanism, nor a flash operation.

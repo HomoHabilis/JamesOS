@@ -103,12 +103,17 @@ int fm1_example_song_import(unsigned id, br_pattern_bank *bank,
     }
     staged_song.used=bank->used;
     for (uint32_t i=0u;i<d->entry_count;++i)
-        if (!fm1_song_entry_set(&staged_song,(uint8_t)i,d->entries[i].pattern,d->entries[i].bars))
+        if (d->entries[i].pattern>=FM1_PATTERN_COUNT || !(bank->used & (1u<<d->entries[i].pattern)) ||
+            fm1_arr_insert(&staged_song,(uint8_t)i,d->entries[i].pattern,d->entries[i].bars)!=FM1_ARR_OK)
             return BR_BANK_INVALID;
-    if (!fm1_song_length_set(&staged_song,(uint8_t)d->entry_count)) return BR_BANK_INVALID;
     staged_settings.title=d->title; staged_settings.description=d->description;
     staged_settings.tempo=d->tempo; staged_settings.swing=d->swing;
-    for (uint32_t p=0u;p<BR_PARTS;++p) staged_settings.preset[p]=d->preset[p];
+    for (uint32_t p=0u;p<BR_PARTS;++p) {
+        uint32_t preset=d->preset[p];
+        if (p==BR_DRUM_PART && (preset==BR_KIT_808 || preset==BR_KIT_909))
+            preset=BR_ENABLE_PLAITS ? BR_KIT_PLAITS : BR_KIT_BRAIDS;
+        staged_settings.preset[p]=preset;
+    }
     *song=staged_song; *settings=staged_settings;
     return BR_BANK_OK;
 }

@@ -53,6 +53,11 @@ void SwarmEngine::Render(
     float* aux,
     size_t size,
     bool* already_enveloped) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_unpatched = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool trigger_unpatched = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
   const float f0 = NoteToFrequency(parameters.note);
   const float control_rate = static_cast<float>(size);
   const float density = NoteToFrequency(parameters.timbre * 120.0f) * \
@@ -62,7 +67,7 @@ void SwarmEngine::Render(
   float size_ratio = 0.25f * SemitonesToRatio(
       (1.0f - parameters.morph) * 84.0f);
   
-  const bool burst_mode = !(parameters.trigger & TRIGGER_UNPATCHED);
+  const bool burst_mode = !trigger_unpatched;
   const bool start_burst = parameters.trigger & TRIGGER_RISING_EDGE;
 
   fill(&out[0], &out[size], 0.0f);

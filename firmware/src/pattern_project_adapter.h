@@ -63,7 +63,7 @@ int fm1_project_adapter_save(const pfs_store *,uint32_t,const char *,const fm1_p
  * snapshot. Session, bank, live and workspace remain immutable to callers. */
 int fm1_project_adapter_save_initial(const pfs_store *,const fm1_project_adapter_ops *,fm1_project_adapter *);
 int fm1_project_adapter_load(const pfs_store *,uint32_t,char name[FM1_PROJECT_NAME_BYTES],const fm1_project_adapter_ops *,fm1_project_adapter *);
-/* Scratch must be aligned for the v16 session, exclusive and at least 3484
+/* Scratch must be aligned for the session (v17), exclusive and at least 3584
  * bytes; binding refuses overlap with firmware save/undo/load buffers. */
 int br_pattern_session_bind(void *,size_t);
 int br_pattern_session_snapshot(const uint8_t *,size_t,br_pattern_snapshot *);

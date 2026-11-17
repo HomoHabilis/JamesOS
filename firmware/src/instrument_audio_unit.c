@@ -5,7 +5,7 @@
 #include "instrument.h"
 
 br_part_t br_part[BR_PARTS];
-volatile uint32_t br_bpm = 120u, br_playing;
+volatile uint32_t br_bpm = 120u, br_swing, br_playing;
 volatile uint8_t br_midi_channels[7] = {1,2,3,4,5,6,7};
 volatile uint8_t br_midi_clock_enabled, br_midi_clock_active;
 volatile uint32_t br_midi_clock_bpm;
@@ -20,7 +20,9 @@ volatile uint32_t br_punch_effect, br_punch_loop_len;
 br_arp_keys_t br_arp_keys[BR_SYNTH_PARTS];
 volatile br_arp_rec_t br_arp_rec[BR_ARP_REC_SLOTS];
 volatile uint32_t br_arp_rec_write, br_arp_rec_read;
-br_master_t br_master = {0, {64, 0, 0, 0, 0, BR_HEAT_BIT, 0}, BR_SELECT_MASTER_FILTER, BR_COMP_DEFAULTS};
+br_master_t br_master = BR_MASTER_DEFAULTS;
+br_part_pending_t br_part_pending[BR_PARTS] = {BR_PART_PENDING_DEFAULTS, BR_PART_PENDING_DEFAULTS, BR_PART_PENDING_DEFAULTS, BR_PART_PENDING_DEFAULTS};
+uint8_t br_leveler_on;
 br_compressor_config_t br_source_compressor = BR_COMP_DEFAULTS;
 uint32_t br_source_compressor_revision = 0xffffffffu;
 #if defined(__ELF__) && !defined(DINGHY_HOST) && !defined(DINGHY_WEB)

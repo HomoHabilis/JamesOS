@@ -23,10 +23,11 @@
 static int32_t abuf[2u * HALF_WORDS];
 static uint32_t audio_block_commits;
 static volatile uint8_t in_audio;
-typedef struct { uint32_t last_ticks, worst_ticks, overruns, blocks, window_sum, window_count; } metrics_t;
+typedef struct { uint32_t last_ticks, worst_ticks, overruns, blocks, window_max, load_q6, overruns_boot; } metrics_t;
+#define FM1_AUDIO_LOAD_SHIFT 6u
 static volatile metrics_t fm1_audio_metrics;
 static volatile uint32_t fm1_audio_late_drops, fm1_audio_late_resync_skips;
-static volatile uint32_t fm1_audio_late_contained_faults;
+static volatile uint32_t fm1_audio_late_contained_faults, fm1_audio_late_contained_last_ticks;
 static volatile uint32_t fm1_audio_late_over_one_half, fm1_audio_late_over_two_halves;
 static volatile uint32_t fm1_audio_late_resync_active, fm1_audio_late_resync_baseline;
 static volatile uint32_t fm1_audio_cpu1_join_tick, fm1_audio_cpu1_join_valid;
@@ -72,6 +73,7 @@ static void fm1_audio_tail_metrics_reset(void) {}
 static void br_audio_source_job_timing_reset(void) {}
 static void br_audio_late_drop_reset(void)
 { assert(irq_depth); engine_drop_count = 0u; ++engine_reset_count; }
+static void br_engine_note_clock(uint32_t tick) { (void)tick; }   /* played-note timing: not under test */
 
 static void platform_audio_block_done(int32_t *out, uint32_t frames)
 {
@@ -104,15 +106,7 @@ static uint32_t app_audio(int32_t *out, uint32_t frames)
 
 static void test_reset_metrics(void)
 {
-#if FM1_DEVELOPMENT_DIAGNOSTICS
-    fm1_audio_metrics_reset();
-#else
-    /* Isolate test scenarios without adding a reset path to the firmware. */
-    fm1_audio_late_drops = fm1_audio_late_contained_faults = 0u;
-    fm1_audio_late_over_one_half = fm1_audio_late_over_two_halves = 0u;
-    fm1_audio_late_resync_skips = 0u;
-    { uint32_t irq = irq_save(); br_audio_late_drop_reset(); irq_restore(irq); }
-#endif
+    fm1_audio_metrics_reset();   /* 0x61: every build level */
 }
 
 static void assert_canary(uint32_t half, uint32_t shift, uint32_t add)
@@ -138,14 +132,13 @@ int main(void)
     assert_canary(0u, 0u, 0u);
     for (uint32_t i = HALF_WORDS; i < 2u * HALF_WORDS; ++i) assert(abuf[i] == 999);
     assert(app_calls == 1u && commit_count == 0u && uac_tap_count == 0u);
-    assert(fm1_audio_late_drops == FM1_DEVELOPMENT_DIAGNOSTICS && fm1_audio_late_resync_active == 1u);
-    assert(fm1_audio_late_over_one_half == FM1_DEVELOPMENT_DIAGNOSTICS && fm1_audio_late_over_two_halves == 0u);
+    assert(fm1_audio_late_drops == 1u && fm1_audio_late_resync_active == 1u);
+    assert(fm1_audio_late_over_one_half == 1u && fm1_audio_late_over_two_halves == 0u);
     assert(fm1_audio_late_resync_baseline == 1u && ack_count == 1u);
-    assert(fm1_audio_metrics.window_sum == 150u && fm1_audio_metrics.window_count == 1u);
-#if FM1_DEVELOPMENT_DIAGNOSTICS
+    assert(fm1_audio_metrics.window_max == 150u && fm1_audio_metrics.load_q6 == 150u);
     assert(fm1_audio_metrics.last_ticks == 150u && fm1_audio_metrics.worst_ticks == 150u);
     assert(fm1_audio_metrics.overruns == 1u && fm1_audio_metrics.blocks == 1u);
-#endif
+    assert(fm1_audio_metrics.overruns_boot == 1u);
     assert(deadline_sets == 1u && deadline_clears == 1u && in_audio == 0u);
     assert(irq_seals == 0u && trace_seals == 0u && drum_seals == 0u);
     assert(fm1_audio_tail_last_half_duration == 77u && fm1_audio_tail_max_half_duration == 88u);
@@ -158,7 +151,7 @@ int main(void)
     toggle_half_on_ack = 0u;
     pending = FM1_AUDIO_HALF;
     fm1_alnk0_irq();
-    assert(fm1_audio_late_resync_skips == FM1_DEVELOPMENT_DIAGNOSTICS && fm1_audio_late_resync_active == 1u);
+    assert(fm1_audio_late_resync_skips == 1u && fm1_audio_late_resync_active == 1u);
     assert(app_calls == 1u && commit_count == 0u && ack_count == 2u);
     assert_canary(0u, 0u, 0u);
 
@@ -180,9 +173,8 @@ int main(void)
     assert(fm1_audio_late_resync_active == 0u && app_calls == 2u);
     assert(commit_count == 1u && uac_tap_count == 1u && ack_count == 3u);
     assert_canary(0u, 7u, 1u);
-#if FM1_DEVELOPMENT_DIAGNOSTICS
     assert(fm1_audio_metrics.last_ticks == 40u && fm1_audio_metrics.blocks == 1u);
-#endif
+    assert(fm1_audio_metrics.overruns_boot == 1u && !fm1_audio_metrics.overruns);
 
     /* Committed normal output keeps the successful-half profiling behavior. */
     pending = FM1_AUDIO_HALF;
@@ -224,16 +216,14 @@ int main(void)
     app_ticks = 250u;
     fm1_alnk0_irq();
     assert_canary(0u, 0u, 0u);
-    assert(fm1_audio_late_drops == FM1_DEVELOPMENT_DIAGNOSTICS);
-#if FM1_DEVELOPMENT_DIAGNOSTICS
+    assert(fm1_audio_late_drops == 1u);
     assert(fm1_audio_metrics.last_ticks == 250u);
-#endif
-    assert(fm1_audio_late_over_one_half == FM1_DEVELOPMENT_DIAGNOSTICS && fm1_audio_late_over_two_halves == FM1_DEVELOPMENT_DIAGNOSTICS);
+    assert(fm1_audio_late_over_one_half == 1u && fm1_audio_late_over_two_halves == 1u);
     assert(fm1_audio_late_resync_active == 1u && fm1_audio_late_resync_baseline == 0u);
     assert(commit_count == 1u && uac_tap_count == 1u);
     pending = FM1_AUDIO_HALF;
     fm1_alnk0_irq();
-    assert(fm1_audio_late_resync_active == 1u && fm1_audio_late_resync_skips == FM1_DEVELOPMENT_DIAGNOSTICS);
+    assert(fm1_audio_late_resync_active == 1u && fm1_audio_late_resync_skips == 1u);
     assert_canary(0u, 0u, 0u);
     pending = FM1_AUDIO_HALF;
     free_half = 1u;
@@ -241,7 +231,7 @@ int main(void)
     app_ticks = 10u;
     fm1_alnk0_irq();
     assert(fm1_audio_late_resync_active == 0u);
-    assert(fm1_audio_late_over_two_halves == FM1_DEVELOPMENT_DIAGNOSTICS);
+    assert(fm1_audio_late_over_two_halves == 1u);
     assert_canary(1u, 7u, 1u);
 
     /* A contained, latched fault may also arrive after rollover. Keep its
@@ -260,11 +250,10 @@ int main(void)
     assert(contained_latched && !fault && app_calls == calls_before + 1u);
     assert_canary(0u, 0u, 0u);
     assert(commit_count == commits_before && uac_tap_count == taps_before);
-    assert(fm1_audio_late_contained_faults == FM1_DEVELOPMENT_DIAGNOSTICS && fm1_audio_late_drops == 0u);
+    assert(fm1_audio_late_contained_faults == 1u && fm1_audio_late_drops == 0u);
+    assert(fm1_audio_late_contained_last_ticks == 250u);   /* 0xB2 word 21 */
     assert(!fm1_audio_late_over_one_half && !fm1_audio_late_over_two_halves);
-#if FM1_DEVELOPMENT_DIAGNOSTICS
     assert(fm1_audio_metrics.last_ticks == 250u && fm1_audio_metrics.overruns == 1u);
-#endif
     assert(ack_count == acks_before + 1u && fm1_audio_late_resync_active == 1u);
     assert(fm1_audio_late_resync_baseline == 1u);
 #if FM1_DEVELOPMENT_DIAGNOSTICS
@@ -282,7 +271,7 @@ int main(void)
     toggle_half_on_ack = 0u;
     fm1_alnk0_irq();
     assert(app_calls == calls_before + 1u && ack_count == acks_before + 2u);
-    assert(fm1_audio_late_resync_skips == FM1_DEVELOPMENT_DIAGNOSTICS && contained_latched == 1u);
+    assert(fm1_audio_late_resync_skips == 1u && contained_latched == 1u);
     assert_canary(0u, 0u, 0u);
 
     /* A new uncontained ownership fault takes priority over contained status. */

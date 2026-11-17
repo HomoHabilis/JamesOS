@@ -2,6 +2,16 @@
 /* Bounded private MIDI test protocol; all work runs in the main loop.
  * Session upload changes RAM only. It never saves or writes flash. */
 #include "instrument_math.h"
+#if defined(FM1_PATTERN_DELETE_SIZING) && FM1_PATTERN_DELETE_SIZING
+#include "project_delete_gate.h"
+/* Sizing only: retain code without exposing any delete or review command. */
+static int (*volatile br_size_delete)(fm1_fixed_runtime *,uint32_t,const char *,const uint8_t *,int)=fm1_fixed_runtime_delete_experiment;
+static int (*volatile br_size_inspect)(fm1_fixed_runtime *,uint32_t,uint8_t *)=fm1_fixed_runtime_inspect_unreadable_experiment;
+static int (*volatile br_size_clear)(fm1_fixed_runtime *,uint32_t,const uint8_t *)=fm1_fixed_runtime_clear_unreadable_experiment;
+static int (*volatile br_size_prepare)(pdg_gate *,const pdg_review *,uint32_t)=pdg_prepare;
+static int (*volatile br_size_commit)(pdg_gate *,const pdg_review *,uint32_t,int (*)(void *,const pdg_review *),void *,int *)=pdg_commit;
+static int (*volatile br_size_cancel)(pdg_gate *,const uint8_t *)=pdg_cancel;
+#endif
 #include "midi_clock_diag.h"
 #include "instrument_pipeline_policy.h"
 #include "instrument_failure_job_profile.h"
@@ -13,6 +23,9 @@
 #include "../braids/braids_interp_math.h"
 #include "../hal/fm1_cpu1_snapshot.h"
 #include "../hal/fm1_cpu1_stack_march.h"
+#ifndef FM1_AUDIO_METRICS_WORDS
+#define FM1_AUDIO_METRICS_WORDS 10u    /* 0x60 reply words (platform.c fm1_audio_metrics_snapshot) */
+#endif
 #if defined(DINGHY_HOST) || defined(DINGHY_WEB)
 #if !defined(BR_DIAGNOSTIC_TEST)
 static uint32_t br_diagnostic_host_ticks;
@@ -38,7 +51,77 @@ static br_session_t br_diagnostic_session;
 #endif
 static uint32_t br_diagnostic_chunks[BR_DIAGNOSTIC_CHUNK_WORDS];
 static uint32_t br_diagnostic_upload_length;
+#if defined(FM1_DEVICE) && defined(FM1_PATTERN_DEVICE_CANDIDATE) && FM1_PATTERN_DEVICE_CANDIDATE && defined(FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY) && FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY
+static uint32_t br_import_nonce, br_import_length, br_import_slot, br_import_state, br_import_last_ms;
+static int br_import_result;
+static char br_import_name[PS_NAME_BYTES];
+static uint8_t br_import_digest[32];
+static uint32_t br_export_nonce, br_export_slot, br_export_length, br_export_last_ms, br_export_closed_nonce;
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+static unsigned br_export_raw;
+#endif
+static char br_export_name[PS_NAME_BYTES];
+static uint8_t br_export_digest[32];
+typedef char br_export_buffer_fits[(sizeof(br_diagnostic_session)>=PPS_MAX_PAYLOAD)?1:-1];
+#include "pattern_sha256.h"
+#endif
 static uint32_t br_diagnostic_snapshot_valid;
+#if defined(FM1_DEVICE) && defined(FM1_PATTERN_DELETE_PROTOCOL_EXPERIMENT) && FM1_PATTERN_DELETE_PROTOCOL_EXPERIMENT
+#if !defined(FM1_PATTERN_DELETE_EXPERIMENT) || !FM1_PATTERN_DELETE_EXPERIMENT || !defined(FM1_PATTERN_DEVICE_CANDIDATE) || !FM1_PATTERN_DEVICE_CANDIDATE
+#error "Delete protocol requires a guarded device candidate"
+#endif
+#include "project_delete_protocol.h"
+static pdg_gate br_project_delete_gate;
+static int br_delete_review(void *ctx,uint8_t slot,uint8_t kind,uint8_t name[PDG_NAME],uint8_t digest[PDG_DIGEST]) {
+ fm1_pattern_sha256 sha;uint32_t length=0;int rc;(void)ctx;
+ if(br_import_state||br_export_nonce||br_diagnostic_upload_length||br_playing||!br_engine_quiet()||!br_fx_quiet())return FM1_PROJECT_BUSY;
+ if(kind==PDG_UNAVAILABLE)return fm1_fixed_runtime_inspect_unreadable_experiment(&br_ps_target_fixed_runtime,slot,digest);
+ if(kind==PDG_RAW) {
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+  uint8_t before[PDG_DIGEST];
+  rc=fm1_fixed_runtime_inspect_unreadable_experiment(&br_ps_target_fixed_runtime,slot,before);
+  if(rc!=PFS_OK)return rc;
+  br_diagnostic_snapshot_valid=0;memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks);
+  rc=fm1_fixed_runtime_export_raw(&br_ps_target_fixed_runtime,slot,br_diagnostic_session.b,PPS_MAX_PAYLOAD,&length,(char *)name);
+  if(rc!=PFS_OK)return rc;
+  /* Pair fingerprint is rechecked atomically at commit, and rejects a
+   * loadable survivor. No generic unavailable clear is inferred here. */
+  rc=fm1_fixed_runtime_inspect_unreadable_experiment(&br_ps_target_fixed_runtime,slot,digest);
+  return rc==PFS_OK && memcmp(before,digest,PDG_DIGEST)?PFS_INVALID:rc;
+#else
+  return PFS_INVALID;
+#endif
+ }
+ br_diagnostic_snapshot_valid=0;memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks);
+ rc=fm1_fixed_runtime_export(&br_ps_target_fixed_runtime,slot,br_diagnostic_session.b,PPS_MAX_PAYLOAD,&length,(char *)name);
+ if(rc!=PFS_OK)return rc;
+ if(fm1_pattern_sha256_init(&sha)||fm1_pattern_sha256_update(&sha,br_diagnostic_session.b,length)||fm1_pattern_sha256_final(&sha,digest))return PFS_INVALID;
+ return PFS_OK;
+}
+static int br_delete_perform(void *ctx,const pdg_review *r) {
+ int rc;(void)ctx;
+ if(br_import_state||br_export_nonce||br_diagnostic_upload_length||br_playing||!br_engine_quiet()||!br_fx_quiet())return FM1_PROJECT_BUSY;
+ if(r->kind==PDG_RAW) {
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+  uint32_t length=0; char name[PS_NAME_BYTES];
+  br_diagnostic_snapshot_valid=0;memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks);
+  rc=fm1_fixed_runtime_export_raw(&br_ps_target_fixed_runtime,r->slot,br_diagnostic_session.b,PPS_MAX_PAYLOAD,&length,name);
+  if(rc!=PFS_OK)return rc;
+  if(memcmp(name,r->name,PS_NAME_BYTES))return PFS_INVALID;
+  es_storage_feedback("DELETING...");
+  rc=fm1_fixed_runtime_clear_unreadable_experiment(&br_ps_target_fixed_runtime,r->slot,r->digest);
+  es_directory[r->slot].state=0;br_ui.redraw=1;return rc;
+#else
+  return PFS_INVALID;
+#endif
+ }
+ es_storage_feedback("DELETING...");
+ rc=r->kind==PDG_UNAVAILABLE?fm1_fixed_runtime_clear_unreadable_experiment(&br_ps_target_fixed_runtime,r->slot,r->digest):
+    fm1_fixed_runtime_delete_experiment(&br_ps_target_fixed_runtime,r->slot,(const char *)r->name,r->digest,r->kind==PDG_RETRY);
+ es_directory[r->slot].state=0;br_ui.redraw=1;return rc;
+}
+static const pdp_ops br_project_delete_ops={0,br_delete_review,br_delete_perform};
+#endif
 #if FM1_DEVELOPMENT_DIAGNOSTICS
 static volatile uint32_t br_diagnostic_armed;
 #define br_diagnostic_disarm() (br_diagnostic_armed = 0u)
@@ -431,6 +514,160 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
      * state that the still-running worker may own. */
     if (br_engine_pipeline_uncontained_fault_get() &&
         !br_pipeline_fault_command_allowed(cmd)) return 0;
+#if defined(FM1_DEVICE) && defined(FM1_PATTERN_DEVICE_CANDIDATE) && FM1_PATTERN_DEVICE_CANDIDATE && defined(FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY) && FM1_PATTERN_RUNTIME_TARGET_LINK_ONLY
+    if (br_import_state!=0u && (uint32_t)(fm1_ms-br_import_last_ms)>=120000u) { br_import_state=0; br_import_nonce=0; br_import_length=0; memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks); }
+    if (br_export_nonce && (uint32_t)(fm1_ms-br_export_last_ms)>=120000u) { br_export_nonce=0; br_export_length=0; }
+    /* Project list v1: six status/name entries per bounded page. PRESENT
+     * means CRC-checked, not semantically validated or guaranteed loadable. */
+#if defined(FM1_PATTERN_DELETE_PROTOCOL_EXPERIMENT) && FM1_PATTERN_DELETE_PROTOCOL_EXPERIMENT
+    if(cmd==0xe0u&&!n){reply[0]='P';reply[1]='D';reply[2]='L';reply[3]=1u;*reply_n=4u;return 1;}
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+    if(cmd==0xe5u&&!n){reply[0]='P';reply[1]='D';reply[2]='R';reply[3]=1u;*reply_n=4u;return 1;}
+#endif
+    if(cmd>=PDP_REVIEW&&cmd<=PDP_CANCEL){unsigned out=0;int handled=pdp_dispatch(&br_project_delete_gate,&br_project_delete_ops,(uint8_t)cmd,body,n,fm1_ms,reply,&out);*reply_n=out;return handled;}
+#endif
+    if (cmd==0xdfu) {
+        fm1_project_list_entry entries[FM1_PROJECT_LIST_PAGE]; int result;
+        if(!n){reply[0]='P';reply[1]='L';reply[2]='S';reply[3]=1u;*reply_n=4u;return 1;}
+        if(!body||n!=1u||(body[0]!=0u&&body[0]!=6u))return 0;
+        memset(reply,0,2u+FM1_PROJECT_LIST_PAGE*(1u+PS_NAME_BYTES));reply[0]=body[0];
+        if(br_import_state||br_export_nonce) result=FM1_PROJECT_BUSY;
+        else result=fm1_fixed_runtime_list(&br_ps_target_fixed_runtime,body[0],entries);
+        reply[1]=result==PFS_OK?0u:result==FM1_PROJECT_BUSY?1u:2u;
+        if(result==PFS_OK)for(i=0;i<FM1_PROJECT_LIST_PAGE;i++){
+            reply[2u+i*(1u+PS_NAME_BYTES)]=entries[i].state;
+            memcpy(reply+3u+i*(1u+PS_NAME_BYTES),entries[i].name,PS_NAME_BYTES);
+        }
+        *reply_n=2u+FM1_PROJECT_LIST_PAGE*(1u+PS_NAME_BYTES);return 1;
+    }
+#if defined(FM1_PATTERN_DELETE_SIZING) && FM1_PATTERN_DELETE_SIZING
+    if(cmd==0xdbu && !n && (!br_size_delete||!br_size_inspect||!br_size_clear||!br_size_prepare||!br_size_commit||!br_size_cancel))return 0;
+#endif
+    if (cmd==0xdbu && !n) { reply[0]='P';reply[1]='E';reply[2]='X';reply[3]=1u;*reply_n=4u;return 1; }
+    if (br_export_nonce && ((cmd>=0xd6u && cmd<=0xdau) || cmd==0x63u || cmd==0x64u || cmd==0x65u)) return 0;
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+    if(cmd==0xe4u && !n) { reply[0]='P';reply[1]='R';reply[2]='X';reply[3]=1u;*reply_n=4u;return 1; }
+    if ((cmd>=0xdcu && cmd<=0xdeu) || cmd==0xe4u) {
+#else
+    if (cmd>=0xdcu && cmd<=0xdeu) {
+#endif
+        uint32_t nonce,off,count;
+        if(!body || n<4u) return 0;
+        nonce=(uint32_t)body[0]|(uint32_t)body[1]<<8|(uint32_t)body[2]<<16|(uint32_t)body[3]<<24;
+        if(!nonce) return 0;
+        if(cmd==0xdcu
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+           || cmd==0xe4u
+#endif
+        ) {
+            int result;
+            if(n!=5u || body[4]>=12u || br_import_state || br_diagnostic_upload_length) return 0;
+            if(br_export_nonce) {
+                if(nonce!=br_export_nonce || body[4]!=br_export_slot) return 0;
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+                if((cmd==0xe4u)!=(br_export_raw!=0))return 0;
+#endif
+                result=PFS_OK;
+            } else {
+                fm1_pattern_sha256 sha;
+                br_diagnostic_snapshot_valid=0; br_diagnostic_upload_length=0;
+                memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks);
+#if defined(FM1_PATTERN_RAW_EXPORT_EXPERIMENT) && FM1_PATTERN_RAW_EXPORT_EXPERIMENT
+                br_export_raw=(cmd==0xe4u);
+                result=br_export_raw?fm1_fixed_runtime_export_raw(&br_ps_target_fixed_runtime,body[4],br_diagnostic_session.b,PPS_MAX_PAYLOAD,&br_export_length,br_export_name):
+#else
+                result=
+#endif
+                    fm1_fixed_runtime_export(&br_ps_target_fixed_runtime,body[4],br_diagnostic_session.b,PPS_MAX_PAYLOAD,&br_export_length,br_export_name);
+                if(result==PFS_OK && (fm1_pattern_sha256_init(&sha) || fm1_pattern_sha256_update(&sha,br_diagnostic_session.b,br_export_length) || fm1_pattern_sha256_final(&sha,br_export_digest))) result=PFS_INVALID;
+                if(result==PFS_OK) { br_export_nonce=nonce; br_export_slot=body[4]; br_export_closed_nonce=0; }
+            }
+            br_diagnostic_word(reply,nonce);br_diagnostic_word(reply+4u,(uint32_t)result);*reply_n=8u;
+            if(result==PFS_OK) { br_export_last_ms=fm1_ms;reply[8]=(uint8_t)br_export_length;reply[9]=(uint8_t)(br_export_length>>8);memcpy(reply+10u,br_export_name,PS_NAME_BYTES);memcpy(reply+23u,br_export_digest,32u);*reply_n=55u; }
+            return 1;
+        }
+        if(cmd==0xdeu && n==4u && !br_export_nonce && nonce==br_export_closed_nonce) { memcpy(reply,body,4u);*reply_n=4u;return 1; }
+        if(!br_export_nonce || nonce!=br_export_nonce) return 0;
+        if(cmd==0xddu) {
+            if(n!=6u) return 0;
+            off=(uint32_t)body[4]|(uint32_t)body[5]<<8;
+            if(off%32u || off>=br_export_length) return 0;
+            count=br_export_length-off; if(count>32u)count=32u;
+            memcpy(reply,body,6u);memcpy(reply+6u,br_diagnostic_session.b+off,count);*reply_n=6u+count;br_export_last_ms=fm1_ms;return 1;
+        }
+        if(n!=4u) return 0;
+        br_export_closed_nonce=nonce; br_export_nonce=0; br_export_length=0;memcpy(reply,body,4u);*reply_n=4u;return 1;
+    }
+    if (br_import_state && (uint32_t)(fm1_ms-br_import_last_ms)>=120000u) { br_import_state=0; br_import_nonce=0; br_import_length=0; memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks); }
+    if (br_import_state && (cmd==0x63u || cmd==0x64u || cmd==0x65u)) return 0;
+    if (cmd>=0xd6u && cmd<=0xdau) {
+        uint32_t nonce, off, count, chunk, chunks;
+        if(!body || n<4u) return 0;
+        nonce=(uint32_t)body[0]|(uint32_t)body[1]<<8|(uint32_t)body[2]<<16|(uint32_t)body[3]<<24;
+        if(!nonce) return 0;
+        if(cmd==0xd6u) {
+            uint32_t len; unsigned j;
+            if(n!=20u || body[4]>=12u) return 0;
+            len=(uint32_t)body[5]|(uint32_t)body[6]<<8;
+            if(!len || len>PPS_MAX_PAYLOAD) return 0;
+            for(j=0;j<PS_NAME_BYTES && body[7u+j];j++) if(body[7u+j]<32u || body[7u+j]>126u) return 0;
+            if(!j || j==PS_NAME_BYTES) return 0;
+            for(;j<PS_NAME_BYTES;j++) if(body[7u+j]) return 0;
+            if(br_import_state) {
+                if(nonce!=br_import_nonce || body[4]!=br_import_slot || len!=br_import_length || memcmp(body+7u,br_import_name,PS_NAME_BYTES)) return 0;
+            } else {
+                br_import_nonce=nonce;br_import_slot=body[4];br_import_length=len;br_import_state=1u;br_import_result=0;
+                memcpy(br_import_name,body+7u,PS_NAME_BYTES);
+                br_diagnostic_snapshot_valid=0;br_diagnostic_upload_length=0;
+                memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks);
+            }
+            br_import_last_ms=fm1_ms;memcpy(reply,body,7u);*reply_n=7u;return 1;
+        }
+        if(!br_import_state || nonce!=br_import_nonce) return 0;
+        br_import_last_ms=fm1_ms;
+        if(cmd==0xd7u) {
+            if(n<7u || n>38u || br_import_state!=1u) return 0;
+            off=(uint32_t)body[4]|(uint32_t)body[5]<<8; count=n-6u;
+            if(off%32u || off>=br_import_length || count!=(br_import_length-off<32u?br_import_length-off:32u)) return 0;
+            chunk=off/32u;
+            if(br_diagnostic_chunks[chunk/32u] & (1u<<(chunk%32u))) {
+                if(memcmp(br_diagnostic_session.b+off,body+6u,count)) return 0;
+            } else { memcpy(br_diagnostic_session.b+off,body+6u,count); br_diagnostic_chunks[chunk/32u]|=1u<<(chunk%32u); }
+            memcpy(reply,body,6u);*reply_n=6u;return 1;
+        }
+        if(cmd==0xd8u) {
+            if(n!=36u) return 0;
+            if(br_import_state==1u) {
+                chunks=(br_import_length+31u)/32u;
+                for(chunk=0;chunk<chunks;chunk++) if(!(br_diagnostic_chunks[chunk/32u]&(1u<<(chunk%32u)))) return 0;
+                { fm1_pattern_sha256 sha; uint8_t digest[32];
+                  if(fm1_pattern_sha256_init(&sha) || fm1_pattern_sha256_update(&sha,br_diagnostic_session.b,br_import_length) || fm1_pattern_sha256_final(&sha,digest) || memcmp(digest,body+4u,32u)) br_import_result=PFS_INVALID;
+                  else br_import_result=fm1_fixed_runtime_import(&br_ps_target_fixed_runtime,br_import_slot,br_import_name,br_diagnostic_session.b,br_import_length);
+                  memcpy(br_import_digest,body+4u,32u);
+                }
+                if(br_import_result==PFS_OK) {
+                    /* Rescan only the changed named slot; the live project and
+                     * all other cached directory entries remain untouched. */
+                    es_directory[br_import_slot].state=0;
+                    br_ui.redraw=1;
+                }
+                br_import_state=br_import_result==PFS_OK?2u:3u;
+            }
+            if(memcmp(br_import_digest,body+4u,32u)) return 0;
+            br_diagnostic_word(reply,nonce);br_diagnostic_word(reply+4u,(uint32_t)br_import_result);*reply_n=8u;return 1;
+        }
+        if(n!=4u) return 0;
+        if(cmd==0xd9u) { br_diagnostic_word(reply,nonce);reply[4]=(uint8_t)br_import_state;br_diagnostic_word(reply+5u,(uint32_t)br_import_result);*reply_n=9u;return 1; }
+        br_import_state=0; br_import_nonce=0; br_import_length=0; memset(br_diagnostic_chunks,0,sizeof br_diagnostic_chunks);
+        br_diagnostic_word(reply,nonce);*reply_n=4u;return 1;
+    }
+#endif
+#if BR_UI_TIMING_DIAG
+    {   /* 0xB5..0xB8: UI timing diagnostic (ui_timing_diag.c), diagnostic builds only */
+        int uit = br_uit_command(cmd, body, n, reply, reply_n);
+        if (uit >= 0) return uit;
+    }
+#endif
 #if defined(FM1_PATTERN_PROVISION_EXPERIMENT) && FM1_PATTERN_PROVISION_EXPERIMENT
     if (cmd==0xd0u || cmd==0xd1u || cmd==0xd2u || cmd==0xd3u || cmd==0xd4u) {
         size_t provision_reply=0u;
@@ -457,12 +694,17 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         return 1;
     }
 #endif
-#if FM1_DEVELOPMENT_DIAGNOSTICS
+    /* Audio load counters, every build level (distribution too). Read-only copies of fixed
+     * RAM counters, plus 0x61, which only zeroes counters: neither takes an address or a
+     * length from the host and neither reaches flash. Reply of 0x60: ten little-endian words,
+     * last, worst, overruns, halves, UAC under/overruns, adjust up/down (as before; the UAC words
+     * are zero in distribution builds, which do not keep them), then the
+     * average half (ticks, exponential over 64 halves) and the overruns since boot. */
     if (cmd == 0x60u && !n) {
-        uint32_t metrics[8];
+        uint32_t metrics[FM1_AUDIO_METRICS_WORDS];
         fm1_audio_metrics_snapshot(metrics);
-        for (i = 0; i < 8u; ++i) br_diagnostic_word(reply + 4u * i, metrics[i]);
-        *reply_n = 32u;
+        for (i = 0; i < FM1_AUDIO_METRICS_WORDS; ++i) br_diagnostic_word(reply + 4u * i, metrics[i]);
+        *reply_n = 4u * FM1_AUDIO_METRICS_WORDS;
     } else if (cmd == 0x61u && n == 4u &&
                body[0] == 'B' && body[1] == 'R' && body[2] == 1u && !body[3]) {
         fm1_audio_metrics_reset();
@@ -471,9 +713,7 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         for (i = 0; i < 4u; ++i) br_diagnostic_profile[i] = br_diagnostic_detail[i] = 0;
 #endif
         reply[0] = 1u; *reply_n = 1u;
-    } else
-#endif
-    if (cmd == 0x62u && !n) {
+    } else if (cmd == 0x62u && !n) {
         reply[0] = 'B'; reply[1] = 'R'; reply[2] = 1u; reply[3] = 0;
         br_diagnostic_word(reply + 4u, sizeof(br_session_t));
         br_diagnostic_word(reply + 8u, FS);
@@ -492,35 +732,25 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         reply[3] = (br_legacy_migration_pending ? 1u : 0u) |
                    (br_invalid_session_pending ? 2u : 0u);
         *reply_n = 4u;
+#if defined(FM1_DEVICE)
+    } else if (cmd == 0xA1u && !n) {
+        /* Flash busy-wait counters (hal/fm1_flash.h fl_stats), every build level.
+         * Read-only RAM copies, no flash access: 'B' 'R' 1 0, then words: late
+         * operations, longest erase (us), longest page program (us), part resets,
+         * JEDEC ID as last read at boot. */
+        reply[0] = 'B'; reply[1] = 'R'; reply[2] = 1u; reply[3] = 0u;
+        br_diagnostic_word(reply + 4u, fl_stats.late);
+        br_diagnostic_word(reply + 8u, fl_stats.erase_max_us);
+        br_diagnostic_word(reply + 12u, fl_stats.prog_max_us);
+        br_diagnostic_word(reply + 16u, fl_stats.resets);
+        br_diagnostic_word(reply + 20u, fl_stats.jedec);
+        *reply_n = 24u;
+#endif
     } else if (cmd == 0x68u && !n) {
-#if defined(FM1_PATTERN_V16_ONLY) && FM1_PATTERN_V16_ONLY
-        /* This build never creates a legacy migration record. */
+        /* Legacy raw export: no build adopts an old record any more. */
         reply[0] = 'B'; reply[1] = 'R'; reply[2] = 1u; reply[3] = 0u;
         br_diagnostic_word(reply + 4u, 0u); br_diagnostic_word(reply + 8u, 0u);
         *reply_n = 12u;
-#else
-        uint32_t length = 0u, version = 0u;
-        uint32_t available = br_session_legacy_raw_info(&length, &version);
-        reply[0] = 'B'; reply[1] = 'R'; reply[2] = 1u; reply[3] = (uint8_t)available;
-        br_diagnostic_word(reply + 4u, available ? length : 0u);
-        br_diagnostic_word(reply + 8u, available ? version : 0u);
-        *reply_n = 12u;
-#endif
-    } else if (cmd == 0x68u && n == 3u) {
-#if defined(FM1_PATTERN_V16_ONLY) && FM1_PATTERN_V16_ONLY
-        return 0;
-#else
-        uint32_t offset = (uint32_t)body[0] | (uint32_t)body[1] << 8;
-        uint32_t count = body[2], length = 0u, version = 0u;
-        uint32_t expected;
-        if (!br_session_legacy_raw_info(&length, &version) ||
-            offset % 32u || offset >= length) return 0;
-        (void)version;
-        expected = length - offset < 32u ? length - offset : 32u;
-        if (count != expected || !br_session_legacy_raw_chunk(offset, count,
-                                                               reply, 32u)) return 0;
-        *reply_n = count;
-#endif
     } else if (cmd == 0x63u && n == 3u) {
         uint32_t offset = (uint32_t)body[0] | (uint32_t)body[1] << 8;
         uint32_t count = body[2];
@@ -647,19 +877,16 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         uint32_t offset = (uint32_t)body[0] | (uint32_t)body[1] << 8;
         uint32_t count = n - 2u;
         if (!offset) {
-            uint32_t version;
             if (count < 8u) return 0;
             memset(&br_diagnostic_session, 0, sizeof br_diagnostic_session);
             memset(br_diagnostic_chunks, 0, sizeof br_diagnostic_chunks);
             br_diagnostic_snapshot_valid = 0u;
             br_diagnostic_upload_length = 0u;
             memcpy((uint8_t *)&br_diagnostic_session, body + 2u, count);
-            if (br_diagnostic_session.v3.magic != BR_SESSION_MAGIC) return 0;
-            version = br_diagnostic_session.v3.version;
-            if (version == 10u) br_diagnostic_upload_length = sizeof(br_session_v10_t);
-            else if (version == 11u || version == 12u || version == 13u) br_diagnostic_upload_length = BR_SESSION_V13_SIZE;
-            else if (version == 14u || version == 15u || version == 16u) br_diagnostic_upload_length = sizeof(br_session_t);
-            else return 0;
+            /* JSES versions 17 and 18 are accepted. */
+            if (memcmp(br_diagnostic_session.b, "JSES", 4) ||
+                (br_diagnostic_session.b[4] != BR_V17_VERSION && br_diagnostic_session.b[4] != BR_V17_LEGACY_VERSION) || br_diagnostic_session.b[5]) return 0;
+            br_diagnostic_upload_length = sizeof(br_session_t);
         }
         if (!br_diagnostic_upload_length || offset % 32u ||
             offset >= br_diagnostic_upload_length ||
@@ -671,24 +898,12 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         reply[0] = body[0]; reply[1] = body[1]; *reply_n = 2u;
     } else if (cmd == 0x65u && n == 4u &&
                body[0] == 'B' && body[1] == 'R' && body[2] == 1u && !body[3]) {
-        uint32_t chunk, chunks, version;
+        uint32_t chunk, chunks;
         if (!br_diagnostic_upload_length) return 0;
         chunks = (br_diagnostic_upload_length + 31u) / 32u;
         for (chunk = 0u; chunk < chunks; ++chunk)
             if (!(br_diagnostic_chunks[chunk / 32u] & (1u << (chunk % 32u)))) return 0;
-        version = br_diagnostic_session.v3.version;
-#if defined(FM1_PATTERN_V16_ONLY) && FM1_PATTERN_V16_ONLY
-        if (version != 16u || !br_session_v16_valid(&br_diagnostic_session)) return 0;
-#else
-        if ((version == 10u && !br_session_v10_valid(&br_diagnostic_session.v10)) ||
-            (version == 11u && !br_session_v11_valid(&br_diagnostic_session)) ||
-            (version == 12u && !br_session_v12_valid(&br_diagnostic_session)) ||
-            (version == 13u && !br_session_v13_valid(&br_diagnostic_session)) ||
-            (version == 14u && !br_session_v14_valid(&br_diagnostic_session)) ||
-            (version == 15u && !br_session_v15_valid(&br_diagnostic_session)) ||
-            (version == 16u && !br_session_v16_valid(&br_diagnostic_session)) ||
-            (version != 10u && version != 11u && version != 12u && version != 13u && version != 14u && version != 15u && version != 16u)) return 0;
-#endif
+        if (!br_session_valid(&br_diagnostic_session)) return 0;
 #if defined(BR_DIAGNOSTIC_TEST) && defined(BR_SPLIT_AUDIO)
         /* Inject the ALNK fault after the command-entry check but before the
          * masked transaction claim. The claim must observe and reject it. */
@@ -706,12 +921,7 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         uint32_t old_muted = br_diagnostic_muted;
         br_diagnostic_muted = 1u;
         RING_PUBLISH();
-#if defined(FM1_PATTERN_V16_ONLY) && FM1_PATTERN_V16_ONLY
         if (!br_restore(&br_diagnostic_session)) {
-#else
-        if (!(version == 10u ? br_restore_v10(&br_diagnostic_session.v10) :
-                               br_restore(&br_diagnostic_session))) {
-#endif
             br_diagnostic_muted = old_muted;
             br_quiescent_transaction_end();
             return 0;
@@ -720,6 +930,9 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         /* Under the same stopped transaction the preflight makes reset
          * deterministic: Pattern 1 becomes the restored four-track take. */
         if(!br_ps_host_reset()) return 0; /* keep quarantine/mute on invariant failure */
+#if BR_ARR_UI
+        br_chain.count = br_chain.held = br_chain.single_pending = 0u; ++br_chain.revision;
+#endif
         br_ps_external_restore_completed=1u;
 #if (defined(FM1_DEVICE) || defined(DINGHY_DEVICE_SAVE_TEST)) && !defined(DINGHY_EMULATOR_SAVE)
         es.current=-1;
@@ -735,17 +948,7 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
             br_fx_warm_controls_quiescent();
         /* Accepted uploads can complete legacy migration, but a generic
          * upload cannot authorize overwriting an invalid settings record. */
-        if (!br_invalid_session_pending) {
-#if !defined(FM1_PATTERN_V16_ONLY) || !FM1_PATTERN_V16_ONLY
-            if (version == 10u)
-                br_session_explicit_v10_upload_accepted(&br_diagnostic_session.v10);
-            else
-#endif
-            {
-                br_legacy_migration_pending = 0u;
-                br_legacy_raw_length = br_legacy_raw_version = 0u;
-            }
-        }
+        if (!br_invalid_session_pending) br_legacy_migration_pending = 0u;
         br_half_timing_reset();
         br_diagnostic_disarm();
         br_diagnostic_abort = 0;
@@ -1631,11 +1834,23 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
             br_diagnostic_word(reply + 4u * i, words[i]);
         *reply_n = BR_CLOCK_DIAG_WORDS * 4u;
 #endif
-#if FM1_DEVELOPMENT_DIAGNOSTICS
-    } else if (cmd == 0xb2u && !n) {
+#if defined(BR_SPLIT_AUDIO) && defined(BR_ADAPTIVE_POLY) && BR_ADAPTIVE_POLY && defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+    } else if (cmd == 0xbau && !n) {   /* read-only polyphony capacity and active voices */
+        uint32_t words[4], irq = br_foreground_irq_save();
+        br_poly_capacity_snapshot(words);
+        br_foreground_irq_restore(irq);
+        for (i = 0u; i < 4u; ++i) br_diagnostic_word(reply + 4u * i, words[i]);
+        *reply_n = 16u;
+#endif
+    } else if (cmd == 0xb2u && !n) {   /* late drops: read-only, every build level */
         /* Schema 3 preserves the schema-2 words and appends contained-fault
-         * and partial-drop counts. Exclude audio while reading both owners. */
-        uint32_t words[17] = {3u}, engine[9];
+         * and partial-drop counts. Schema 4 appends worker-fault words: 17 flags
+         * (bit 0 worker fault, 1 uncontained, 2 contained = held in reset, 3 CPU0
+         * renders alone, 4 restore/transaction gate, 5 project fence held, 6 muted),
+         * 18/19 first/last fault site (instrument.h BR_AUDIO_FAULT_*), 20 the
+         * master-stream wait budget at the last stream fault (bit 31: CPU1 gave up),
+         * 21 ticks of the last contained-fault half. Exclude audio while reading. */
+        uint32_t words[22] = {4u}, engine[9];
         uint32_t irq = br_foreground_irq_save();
         br_audio_late_drop_snapshot(engine);
         for (i = 0u; i < 6u; ++i) words[1u + i] = engine[i];
@@ -1649,12 +1864,27 @@ static int fm1_app_command(uint32_t cmd, const uint8_t *body, uint32_t n,
         words[13] = fm1_audio_late_over_one_half;
         words[14] = fm1_audio_late_over_two_halves;
         words[15] = fm1_audio_late_contained_faults;
+        words[17] = (fm1_cpu1_worker_fault != 0u) |
+            (fm1_cpu1_worker_uncontained_fault_get() != 0u) << 1 |
+            (fm1_cpu1_worker_contained() != 0u) << 2 | (uint32_t)(br_cpu1_lost != 0u) << 3 |
+            (br_diagnostic_restore_in_progress != 0u) << 4 |
+#if defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT
+            (fm1_cpu1_worker_project_fence_held() != 0u) << 5 |
+#endif
+            (br_diagnostic_muted != 0u) << 6;
+#if defined(BR_CPU1_AUDIO)
+        words[18] = br_audio_fault_site[0];
+        words[19] = br_audio_fault_site[1];
+        words[20] = br_audio_fault_site[2];
+#endif
+        words[21] = fm1_audio_late_contained_last_ticks;
 #endif
         words[16] = engine[8];
         br_foreground_irq_restore(irq);
-        for (i = 0u; i < 17u; ++i)
+        for (i = 0u; i < 22u; ++i)
             br_diagnostic_word(reply + 4u * i, words[i]);
-        *reply_n = 68u;
+        *reply_n = 88u;
+#if FM1_DEVELOPMENT_DIAGNOSTICS
     } else if (cmd == 0xafu || cmd == 0xb0u) {
 #if defined(FM1_DEVICE)
         return fm1_vendor360_diag_command(cmd,body,n,reply,reply_n);

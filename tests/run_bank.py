@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import subprocess
+import host_target                      # product selection: BR_HOST_TARGET / --target
 
 ROOT = Path(__file__).resolve().parents[1]
 FLAGS = [
@@ -15,13 +16,18 @@ FLAGS = [
     '-DFM1_PLAITS_SRC_FLOAT_PHASE_FRACTION=0', '-DFM1_PLAITS_PHASE_LUT=0',
     '-DBR_FX_RATE_SIGNED_441_RECIP=0', '-DBR_FX_TAPE_WOW_DELTA_LUT=0',
     '-DBR_AUDIO_FOREGROUND_FIXED8_PLAN=0', '-Ifirmware/src', '-Ifirmware/gen',
-]
+] + host_target.product_flags()          # the selected product and polyphony (host_target)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--reuse-dsp', action='store_true',
                     help='Use existing host objects only when their C++ sources/headers are unchanged')
+    ap.add_argument('--target', choices=host_target.TARGETS,
+                    help='product to build for (default: $BR_HOST_TARGET, else fm1)')
     args = ap.parse_args()
+    if args.target and args.target != host_target.target():
+        FLAGS[:] = [f for f in FLAGS if f not in host_target.product_flags()]
+        FLAGS.extend(host_target.activate(args.target))
     out = ROOT / 'build/bank-test'
     out.mkdir(parents=True, exist_ok=True)
     with (out / 'compile.log').open('w') as log:

@@ -58,6 +58,11 @@ void HiHatEngine::Render(
     size_t size,
     bool* already_enveloped) {
   const float f0 = EngineNoteToFrequency(parameters);
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool sustain = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool sustain = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
 
   const float tone = parameters.timbre;
   const float decay = parameters.morph;
@@ -103,7 +108,7 @@ void HiHatEngine::Render(
       fm1_drum_profile_begin(FM1_DRUM_PROFILE_MAIN, static_cast<uint32_t>(size));
 #endif
   hi_hat_1_.Render(
-      parameters.trigger & TRIGGER_UNPATCHED,
+      sustain,
       parameters.trigger & TRIGGER_RISING_EDGE,
       parameters.accent,
       f0,
@@ -122,7 +127,7 @@ void HiHatEngine::Render(
 #endif
   
   hi_hat_2_.Render(
-      parameters.trigger & TRIGGER_UNPATCHED,
+      sustain,
       parameters.trigger & TRIGGER_RISING_EDGE,
       parameters.accent,
       f0,

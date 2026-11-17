@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Origin: SLOOP (isod89), built on Felucca (Leo Kuroshita, Hügelton Instruments), by way of Dinghy (zvenson);
+ * modified for JamesOS. GPL-3.0-only. See docs/legal/THIRD-PARTY-NOTICES.md. */
 /* Warm-reset guard, retained in RAM only. Never writes the bootloader/flash.
  * This cannot rescue an image that fails before reaching the application. */
 #ifndef FELUCCA_BOOTGUARD_H
