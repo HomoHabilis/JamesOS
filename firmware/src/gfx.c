@@ -14,6 +14,7 @@ static uint16_t cv_px[CV_MAX] __attribute__((section(".pool")));
 #endif
 static uint32_t cv_w, cv_h;
 static int32_t cv_oy;            /* y offset for graph drawing */
+static int32_t cv_ox;            /* the graph x of canvas column 0 (a part of a wider picture); 0 otherwise */
 
 #define RGB(r, g, b) ((uint16_t)((((r) >> 3) << 11) | (((g) >> 2) << 5) | ((b) >> 3)))
 #define C_BLACK 0x0000u
@@ -50,11 +51,23 @@ static void palette_set(uint32_t i)
 static inline uint16_t swap16(uint32_t c) { return (uint16_t)(((c >> 8) & 0xFFu) | ((c & 0xFFu) << 8)); }
 
 static uint16_t cv_background;
+/* Sliced drawing (instrument_ui.c br_draw_pass_with): the last cv_held rows of the canvas, bound for screen
+ * (cv_held_x, cv_held_y + cv_h - cv_held), are still to be sent; a later pass sends them. */
+static uint16_t cv_held, cv_held_x, cv_held_y;
+static void cv_send_held(uint32_t rows)       /* the next `rows` held rows (all when more are asked) */
+{
+    uint32_t r0 = cv_h - cv_held;
+    if (rows > cv_held) rows = cv_held;
+    if (!rows) return;
+    lcd_blit(cv_held_x, cv_held_y + r0, cv_w, rows, cv_px + r0 * cv_w);
+    cv_held = (uint16_t)(cv_held - rows);
+}
 static void cv_begin(uint32_t w, uint32_t h, uint16_t bg)
 {
     uint32_t i, n;
     if (w * h > CV_MAX)
         h = CV_MAX / w;
+    cv_send_held(CV_MAX);           /* a drawing outside the sliced passes: finish the held rows first */
     lcd_sync();                     /* the last blit may still read cv_px */
     cv_w = w;
     cv_h = h;
@@ -75,16 +88,16 @@ static void cv_blit_from(uint32_t x, uint32_t y, uint32_t r0)
 
 static inline void cv_pset(int32_t x, int32_t y, uint16_t c)
 {
-    y += cv_oy;
+    y += cv_oy; x -= cv_ox;
     if ((uint32_t)x < cv_w && (uint32_t)y < cv_h)
         cv_px[(uint32_t)y * cv_w + (uint32_t)x] = swap16(c);
 }
 
 static void cv_rect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c)
 {
-    int32_t x1 = x + w, y1 = y + h + cv_oy, i;
+    int32_t x1 = x + w - cv_ox, y1 = y + h + cv_oy, i;
     uint16_t sc = swap16(c);
-    y += cv_oy;                             /* clipped once, then filled row by row */
+    y += cv_oy; x -= cv_ox;                 /* clipped once, then filled row by row */
     if (x < 0)
         x = 0;
     if (y < 0)
@@ -151,3 +164,5 @@ static void draw_text_box(uint32_t x, uint32_t y, uint32_t w, uint32_t scale, co
     cv_blit(x, y);
     lcd_sync();                     /* one-shots (boot, crash, UBOOT, update) finish here */
 }
+
+#include "gfx_hd.h"

@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="fm1-partial-frame-") as temp:
                     "-ffunction-sections", "-fdata-sections", *profile, *includes,
                     str(root / "tests/test_partial_frame_reconstruction.c"),
                     "-x", "none", *map(str, objects), linker, "-o", str(binary)], check=True)
-    for kit in (48, 49, 50, 76):  # BRAIDS, 808, 909, and Plaits kits
+    for kit in (48, 76):  # Braids and Plaits kits
         for lane in (0, 3):
             for pattern in (0, 1):  # pending kit finalizer, or pending synths
                 args = [str(binary), str(kit), str(lane), str(pattern)]

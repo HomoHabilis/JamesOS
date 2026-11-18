@@ -3,6 +3,7 @@
 #define BR_INSTRUMENT_DRUMS_H
 
 #include <stdint.h>
+#include "br_shared_inline.h"
 #include "instrument.h"
 
 /* Opaque, four-byte-aligned storage for four monophonic logical lanes. */
@@ -62,7 +63,7 @@ uint32_t br_drum_lane_scheduler_state_ex(const void *state,
 
 /* Standard GM aliases map to the four logical roles. The selected A/B voice
  * is controlled by br_sound_t::drum_voice_mask, never by the MIDI alias. */
-static inline uint32_t br_drum_lane(uint32_t note)
+BR_SHARED_INLINE uint32_t br_drum_lane(uint32_t note)
 {
     uint32_t i, best = 0u, distance = 0xFFFFFFFFu;
     static const uint8_t canonical[BR_DRUM_LANES] = {36u, 38u, 46u, 49u};
@@ -79,7 +80,7 @@ static inline uint32_t br_drum_lane(uint32_t note)
     return best;
 }
 
-static inline uint32_t br_drum_lane_note(uint32_t lane)
+BR_SHARED_INLINE uint32_t br_drum_lane_note(uint32_t lane)
 {
     static const uint8_t canonical[BR_DRUM_LANES] = {36u, 38u, 46u, 49u};
     return canonical[lane < BR_DRUM_LANES ? lane : 0u];

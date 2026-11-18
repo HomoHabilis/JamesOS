@@ -159,6 +159,39 @@ void Voice::Render(
     size_t size) {
   // Trigger, LPG, internal envelope.
 
+  // Patching is fixed by the only caller in this firmware (plaits_config.h);
+  // constants let the compiler drop the unreachable paths.
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_patched = true;
+#else
+  const bool trigger_patched = modulations.trigger_patched;
+#endif
+#if FM1_PLAITS_CAPI_FIXED_CV_PATCHING
+  const bool frequency_patched = false;
+  const bool timbre_patched = false;
+  const bool morph_patched = false;
+  const bool level_patched = true;
+#else
+  const bool frequency_patched = modulations.frequency_patched;
+  const bool timbre_patched = modulations.timbre_patched;
+  const bool morph_patched = modulations.morph_patched;
+  const bool level_patched = modulations.level_patched;
+#endif
+#if FM1_PLAITS_CAPI_FIXED_PATCH
+  const float frequency_modulation_amount = 0.0f;
+  const float timbre_modulation_amount = 0.0f;
+  const float morph_modulation_amount = 0.0f;
+#else
+  const float frequency_modulation_amount = patch.frequency_modulation_amount;
+  const float timbre_modulation_amount = patch.timbre_modulation_amount;
+  const float morph_modulation_amount = patch.morph_modulation_amount;
+#endif
+#if FM1_PLAITS_CAPI_FIXED_PATCH
+  const float decay = 0.5f;
+#else
+  const float decay = patch.decay;
+#endif
+
 #if PLAITS_USE_RENDER_CHUNK24
   /* The control envelopes update once per Voice::Render call. In 24-frame
    * mode, preserve their time constants by scaling to the actual call size.
@@ -198,7 +231,7 @@ void Voice::Render(
   if (!previous_trigger_state) {
     if (trigger_value > 0.3f) {
       trigger_state_ = true;
-      if (!modulations.level_patched) {
+      if (!level_patched) {
         lpg_envelope_.Trigger();
       }
       decay_envelope_.Trigger();
@@ -209,7 +242,7 @@ void Voice::Render(
       trigger_state_ = false;
     }
   }
-  if (!modulations.trigger_patched) {
+  if (!trigger_patched) {
     engine_cv_ = modulations.engine;
   }
 
@@ -238,7 +271,7 @@ void Voice::Render(
   previous_note_ = modulations.note;
   const PostProcessingSettings& pp_s = e->post_processing_settings;
 
-  if (modulations.trigger_patched) {
+  if (trigger_patched) {
     p.trigger = (rising_edge ? TRIGGER_RISING_EDGE : TRIGGER_LOW) | \
       (trigger_state_ ? TRIGGER_HIGH : TRIGGER_LOW);
   } else {
@@ -246,7 +279,7 @@ void Voice::Render(
   }
   
   const float short_decay = (200.0f * control_step_frames) / kSampleRate *
-      SemitonesToRatio(-96.0f * patch.decay);
+      SemitonesToRatio(-96.0f * decay);
   float decay_envelope_for_controls;
   float decay_envelope_squared_for_pitch;
 #if PLAITS_USE_RENDER_CHUNK24
@@ -257,7 +290,7 @@ void Voice::Render(
      * values for timbre/morph and mean-square for pitch for this 24-frame
      * Modal render. */
     const float half_decay = (200.0f * kBlockSize) / kSampleRate *
-        SemitonesToRatio(-96.0f * patch.decay);
+        SemitonesToRatio(-96.0f * decay);
     const float half_step = half_decay * 2.0f;
     decay_envelope_.Process(half_step);
     const float first_half_value = decay_envelope_.value();
@@ -283,9 +316,9 @@ void Voice::Render(
 
   float compressed_level = 1.3f * modulations.level / (0.3f + __builtin_fabsf(modulations.level));
   CONSTRAIN(compressed_level, 0.0f, 1.0f);
-  p.accent = modulations.level_patched ? compressed_level : 0.8f;
+  p.accent = level_patched ? compressed_level : 0.8f;
 
-  bool use_internal_envelope = modulations.trigger_patched;
+  bool use_internal_envelope = trigger_patched;
 
   // Actual synthesis parameters.
   
@@ -298,17 +331,17 @@ void Voice::Render(
     internal_envelope_amplitude = 2.0f - p.harmonics * 6.0f;
     CONSTRAIN(internal_envelope_amplitude, 0.0f, 1.0f);
     static_cast<SpeechEngine*>(e)->set_prosody_amount(
-        !modulations.trigger_patched || modulations.frequency_patched ?
-            0.0f : patch.frequency_modulation_amount);
+        !trigger_patched || frequency_patched ?
+            0.0f : frequency_modulation_amount);
     static_cast<SpeechEngine*>(e)->set_speed( 
-        !modulations.trigger_patched || modulations.morph_patched ?
-            0.0f : patch.morph_modulation_amount);
+        !trigger_patched || morph_patched ?
+            0.0f : morph_modulation_amount);
   } else if (engine_index == 7) {
-    if (modulations.trigger_patched && !modulations.timbre_patched) {
+    if (trigger_patched && !timbre_patched) {
       // Disable internal envelope on TIMBRE, and enable the envelope generator
       // built into the chiptune engine.
       internal_envelope_amplitude_timbre = 0.0f;
-      static_cast<ChiptuneEngine*>(e)->set_envelope_shape(patch.timbre_modulation_amount);
+      static_cast<ChiptuneEngine*>(e)->set_envelope_shape(timbre_modulation_amount);
     } else {
       static_cast<ChiptuneEngine*>(e)->set_envelope_shape(ChiptuneEngine::NO_ENVELOPE);
     }
@@ -316,8 +349,8 @@ void Voice::Render(
   
   p.note = ApplyModulations(
       patch.note + note,
-      patch.frequency_modulation_amount,
-      modulations.frequency_patched,
+      frequency_modulation_amount,
+      frequency_patched,
       modulations.frequency,
       use_internal_envelope,
       internal_envelope_amplitude * \
@@ -328,8 +361,8 @@ void Voice::Render(
 
   p.timbre = ApplyModulations(
       patch.timbre,
-      patch.timbre_modulation_amount,
-      modulations.timbre_patched,
+      timbre_modulation_amount,
+      timbre_patched,
       modulations.timbre,
       use_internal_envelope,
       internal_envelope_amplitude_timbre * decay_envelope_for_controls,
@@ -339,8 +372,8 @@ void Voice::Render(
 
   p.morph = ApplyModulations(
       patch.morph,
-      patch.morph_modulation_amount,
-      modulations.morph_patched,
+      morph_modulation_amount,
+      morph_patched,
       modulations.morph,
       use_internal_envelope,
       internal_envelope_amplitude * decay_envelope_for_controls,
@@ -352,15 +385,15 @@ void Voice::Render(
   e->Render(p, out_buffer_, aux_buffer_, size, &already_enveloped);
   
   bool lpg_bypass = already_enveloped || \
-      (!modulations.level_patched && !modulations.trigger_patched);
+      (!level_patched && !trigger_patched);
   
   // Compute LPG parameters.
   if (!lpg_bypass) {
     const float hf = patch.lpg_colour;
     const float decay_tail = (20.0f * control_step_frames) / kSampleRate *
-        SemitonesToRatio(-72.0f * patch.decay + 12.0f * hf) - short_decay;
+        SemitonesToRatio(-72.0f * decay + 12.0f * hf) - short_decay;
     
-    if (modulations.level_patched) {
+    if (level_patched) {
       lpg_envelope_.ProcessLP(compressed_level, short_decay, decay_tail, hf);
     } else {
       const float attack = NoteToFrequency(p.note) * control_step_frames * 2.0f;

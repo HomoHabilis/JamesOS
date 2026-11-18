@@ -98,6 +98,8 @@ const TEXT = {
   viaStock: "This FM-1 runs another community firmware. Return it to the official V15 first (below), then press Install: ",
   unknown: "This FM-1 reports a firmware this page does not know. Nothing was written: ",
   error: "Error: ",
+  oldProjects: "This FM-1 runs JamesOS 1.0a. This build is based on JamesOS 1.0b, which lists 1.0a projects as OLD FORMAT and does not load them until they are converted with the JamesOS browser Editor. Save your work into named slots and keep a backup first. Install now?",
+  cancelled: "Cancelled. Nothing was written.",
   denied: "MIDI (SysEx) access was not allowed. Allow MIDI in the site settings and press the button again.",
   notfound: "FM-1 not found. Check the USB cable (a data cable), close other apps that use MIDI, and try again.",
   model: "The connected device is not an FM-1.",
@@ -190,12 +192,17 @@ $("go").addEventListener("click", async () => {
       if (await up.resume(images[which], step, { product: meta[which].product })) finished(which);
       else say("stopped");
     } else {
-      const dev = await up.find((id) => !/^ota-/i.test(id.model));
-      if (!dev) { say("notfound", up.seen()); lockAll(false); return; }
+      /* an FM-1 first: another device (an SMK-37 Pro on JamesOS-K) can answer on a similar port */
+      const dev = await up.find((id) => !/^ota-/i.test(id.model) && id.model === "FM-1");
+      if (!dev) {
+        const other = await up.find((id) => !/^ota-/i.test(id.model));
+        if (other) { other.link.close(); say("model"); } else say("notfound", up.seen());
+        lockAll(false); return;
+      }
       dev.link.close();
-      if (dev.id.model !== "FM-1") { say("model"); lockAll(false); return; }
       const which = packageFor(dev.id.text);
       if (!which) { say({ felucca: "viaStock", "official-other": "viaV15" }[firmwareKind(dev.id.text)] || "unknown", dev.id.text); lockAll(false); return; }
+      if (oldProjectFormat(dev.id.text) && !confirm(TEXT.oldProjects)) { say("cancelled"); lockAll(false); return; }
       reads = totalReads(images[which].length);
       await up.install(images[which], meta[which].product, step);
       finished(which);

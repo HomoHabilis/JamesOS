@@ -60,7 +60,11 @@ void BassDrumEngine::Render(
   const float drive = max(parameters.harmonics * 2.0f - 1.0f, 0.0f) * \
       max(1.0f - 16.0f * f0, 0.0f);
   
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool sustain = false;  // Unreachable here; see plaits_config.h.
+#else
   const bool sustain = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
 #if FM1_PLAITS_KIT_LOCAL_RNG
   uint32_t local_random_state = Random::state();
 #endif
@@ -138,7 +142,11 @@ void BassDrumEngine::RenderKitRate2(
   const float self_fm_amount = max(min(parameters.harmonics * 4.0f - 1.0f, 1.0f), 0.0f);
   const float drive = max(parameters.harmonics * 2.0f - 1.0f, 0.0f) *
       max(1.0f - 16.0f * f0, 0.0f);
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool sustain = false;  // Unreachable here; see plaits_config.h.
+#else
   const bool sustain = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
 #if FM1_PLAITS_KIT_LOCAL_RNG
   uint32_t local_random_state = Random::state();
 #else

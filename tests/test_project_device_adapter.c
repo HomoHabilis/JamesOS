@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #define FL_IN(o,n,l,h) ((uint32_t)(o)>=(l) && (uint32_t)(o)<=(h) && (uint32_t)(n)<=(h)-(uint32_t)(o))
-typedef struct { uint8_t data[3484]; } br_session_t;
+typedef struct { uint8_t data[3584]; } br_session_t;   /* session v17 size */
 static br_session_t br_pending_save,br_loaded,current;
 static uint8_t flash[0x100000], flash_ok=1;
 static int br_playing, quiet=1, fxquiet=1, blocked, tx, park, failpark, failresume;
@@ -16,11 +16,7 @@ static void br_quiescent_transaction_end(void) { assert(tx);tx=0; }
 static int br_engine_pipeline_uncontained_fault_get(void) { return 0; }
 static int br_capture(br_session_t *s) { assert(tx);*s=current;return 1; }
 static int br_restore(const br_session_t *s) { assert(tx);current=*s;return 1; }
-static int br_session_v12_valid(const br_session_t *s) { return s->data[0]==0x42; }
-static int br_session_v13_valid(const br_session_t *s) { return s->data[0]==0x43; }
-static int br_session_v14_valid(const br_session_t *s) { return s->data[0]==0x44; }
-static int br_session_v15_valid(const br_session_t *s) { return s->data[0]==0x44; }
-static int br_session_v16_valid(const br_session_t *s) { return s->data[0]==0x45; }
+static int br_session_valid(const br_session_t *s) { return s->data[0]>=0x42 && s->data[0]<=0x45; }
 static int flash_worker_park(void) { if(failpark)return -1;assert(!park);park=1;return 0; }
 static int flash_worker_resume(void) { assert(park);park=0;return failresume?-1:0; }
 static int st_read(uint32_t off,void *dst,uint32_t n) { assert(tx); memcpy(dst,flash+off,n);return 0; }

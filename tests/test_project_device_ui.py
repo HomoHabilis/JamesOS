@@ -96,10 +96,12 @@ with tempfile.TemporaryDirectory(prefix='fm1-device-ui-') as tmp:
     command('h 13 1');state=button(9);state=command('h 13 0')
     assert state['saveStage']==0 and state['recording']==0 and state['saveCurrent']==0, state
     assert command('z')['saveCurrent']==0 and snapshot()==quick
-    # INIT and reboot restore the initialized, unassigned working state.
+    # INIT works with REC armed and restores the armed state afterwards.
+    command('h 13 1'); assert command('h 13 0')['recording']==1
     button(9);command('t 20');command('e 2 3');button(9);command('e 2 1')
     state=button(9)
-    assert state['saveStage']==0 and state['saveCurrent']==-1, state
+    assert state['saveStage']==0 and state['saveCurrent']==-1 and state['recording']==1, state
+    command('h 13 1'); assert command('h 13 0')['recording']==0
     initialized=snapshot();assert initialized!=original
     assert command('z')['saveCurrent']==-1 and snapshot()==initialized
     # An unassigned current project must not be saved over the pending load

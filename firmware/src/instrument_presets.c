@@ -15,12 +15,13 @@ static const char *const br_names[BR_PRESET_COUNT] = {
     "80S KIT", "90S KIT", "RESERVED"
 #if BR_ENABLE_PLAITS
     ,
-    "PL ANALOG VCF", "PL PHASE DIST", "PL FM BASS", "PL FM KEYS",
-    "PL FM PAD", "PL WAVE TERRAIN", "PL STRING MACH", "PL CHIPTUNE",
-    "PL VIRTUAL AN", "PL WAVESHAPE", "PL FM", "PL GRAIN",
-    "PL HARMONIC", "PL WAVETABLE", "PL CHORD", "PL SPEECH",
-    "PL SWARM", "PL NOISE", "PL PARTICLE", "PL STRING",
-    "PL MODAL", "PL KICK", "PL SNARE", "PL HI HAT", "PL PLAITS KIT"
+    "PL ANALOG VCF", "PL PHASE DIST", "PL FM BANK 1", "PL FM BANK 2",
+    "PL FM BANK 3", "PL TERRAIN", "PL STRING MACH", "PL CHIP CHORD",
+    "PL DUAL WAVE", "PL WAVEFOLDER", "PL 2 OP FM", "PL FORMANT",
+    "PL HARMONIC", "PL WAVETABLE", "PL CHORDS", "PL SPEECH",
+    "PL GRAIN CLOUD", "PL FILTER NOISE", "PL PARTICLES", "PL STRING",
+    "PL MODAL", "PL KICK", "PL SNARE", "PL HI HAT",
+    "PL PLAITS KIT"
 #endif
 };
 
@@ -53,9 +54,9 @@ static const uint8_t br_plaits_factory[BR_PLAITS_MODEL_COUNT][3] = {
     {48, 76, 64}, {64, 64, 64}, {12, 76, 64}, {12, 76, 64},
     {12, 76, 64}, {32, 64, 64}, {48, 64, 64}, {64, 64, 64},
     {32, 64, 64}, {64, 76, 64}, {48, 64, 64}, {64, 64, 64},
-    {64, 76, 64}, {32, 64, 64}, {48, 64, 64}, {64, 64, 64},
-    {32, 76, 100}, {64, 76, 64}, {64, 76, 64}, {48, 76, 76},
-    {64, 76, 76}, {64, 76, 76}, {64, 76, 76}, {64, 76, 76}
+    {64, 76, 64}, {32, 64, 64}, {48, 64, 64}, {32, 64, 64},
+    {32, 64, 127}, {32, 64, 48}, {32, 64, 64}, {48, 76, 76},
+    {64, 76, 76}, {24, 48, 64}, {80, 64, 52}, {80, 100, 24},
 };
 
 BR_AUDIO_API const char *br_preset_name(uint32_t preset)
@@ -68,35 +69,40 @@ BR_AUDIO_API void br_preset_sound(uint32_t preset, br_sound_t *sound)
     const br_factory_t *f;
     if (!sound) return;
     if (preset >= BR_PRESET_COUNT) preset = 0;
+    sound->voice_mode = 0u;
     sound->preset = preset;
     sound->tune = 0;
     sound->level = 127;
     sound->filter = 64;
     sound->filter_resonance = 0u;
     sound->filter_keytrack = 0u;
-    sound->timbre_mod = sound->fm_mod = sound->morph_mod = 64u;
+    sound->filter_env_depth = 0;
+    sound->timbre_mod = sound->fm_mod = sound->morph_mod = 64u;   /* neutral modulation scale */
+    sound->harmonics_mod = 0u;
+    sound->portamento = sound->glide_mode = sound->amp_mode = sound->lpg_gate = 0u;
     sound->pan = 64;
     sound->drum_snap = 64;
     sound->drum_voice_mask = 0; sound->drum_key_lane = 0;
     sound->plaits_harmonics = 64; sound->plaits_aux = 64;
-    sound->drive = sound->delay = sound->reverb = sound->space = 0;
+    sound->drive = sound->delay = sound->reverb = 0;
     sound->mute = 0;
     sound->gate = BR_GATE_OPEN;
     if (br_is_plaits(preset)) {
         uint32_t model = preset - BR_FIRST_PLAITS;
+        sound->plaits_aux = 0; /* Plaits OUT, for hardware comparison. */
         sound->plaits_harmonics = br_plaits_factory[model][0];
         sound->timbre = br_plaits_factory[model][1];
         sound->color = br_plaits_factory[model][2];
-        sound->attack = 0; sound->decay = 64;
-        sound->sustain = 127; sound->release = 40;
+        sound->attack = 5; sound->decay = 89;
+        sound->sustain = 127; sound->release = 75;
         return;
     }
     if (br_is_kit(preset)) {
         sound->timbre = sound->color = 64;
         /* The amplitude envelope and each hit's final gate are independent. */
-        sound->attack = 0;
+        sound->attack = 5;
         sound->decay = preset == BR_KIT_808 || preset == BR_KIT_909 ? 127u : 64u;
-        sound->sustain = 127; sound->release = 64;
+        sound->sustain = 127; sound->release = 89;
         return;
     }
     f = &br_factory[preset];

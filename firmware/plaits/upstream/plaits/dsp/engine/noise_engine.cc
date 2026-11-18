@@ -60,10 +60,15 @@ void NoiseEngine::Render(
     float* aux,
     size_t size,
     bool* already_enveloped) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_unpatched = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool trigger_unpatched = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
   const float f0 = NoteToFrequency(parameters.note);
   const float f1 = NoteToFrequency(
       parameters.note + parameters.harmonics * 48.0f - 24.0f);
-  const float clock_lowest_note = parameters.trigger & TRIGGER_UNPATCHED
+  const float clock_lowest_note = trigger_unpatched
       ? 0.0f
       : -24.0f;
   const float clock_f = NoteToFrequency(

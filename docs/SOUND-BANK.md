@@ -1,0 +1,9 @@
+# Plaits sound bank
+
+The synth-track SEL browser contains 128 factory sounds. Slots 1–32 are Favorites; the rest are grouped as bass (33–41), acid and distorted bass (42–52), French house and disco (53–61), leads (62–73), keys and mallets (74–87), pads and strings (88–98), arps and plucks (99–113), and organs, hits and textures (114–128). The short names fit the hardware screen; full names and parameter values are in `assets/presets/bank.json`.
+
+A sound stores a Plaits model, its three macro controls, OUT/AUX mix, the track filter and amplitude envelope, effect sends, and an optional LFO and modulation envelope. Browsing temporarily applies those values; leaving without loading restores them, including the previous drive send. Loading keeps the selected sound. The track's level, pan, tuning, gate and patch routes are preserved. Effect engine settings are shared separately, so drive, delay and reverb character depend on the current effect configuration. Existing saved projects continue to store their sound settings, not an index into this bank; the factory bank does not rewrite projects.
+
+The built-in six-operator FM patch selection is controlled by Harmonics; the electric piano starts with the first patch in the keyboard bank. Plaits chord models generate their own intervals from a single note. Pulse Keys and other sequence sounds still need notes from the sequencer or arpeggiator. The Chip Chord model's own clock behavior and the LPG-like pluck should be verified on hardware. The orchestral hit and talkbox sounds are synthesized interpretations.
+
+Regenerate `firmware/src/instrument_bank_data.inc` after editing the JSON with `python3 tools/gen_bank.py`. Run `python3 tests/run_bank.py` to check all entries through the host audio path and exercise the sound browser and session round trip. Host audio checks establish that patches produce sound; they do not replace listening, level balancing, or timing checks on the instrument.

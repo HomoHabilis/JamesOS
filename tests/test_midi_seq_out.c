@@ -41,7 +41,7 @@ static void setup(void)
     br_playing = 0u; br_midi_clock_out = br_midi_clock_enabled = 0u;
     for (uint32_t i = 0u; i < 7u; ++i) br_midi_channel_set(i, (uint8_t)(i + 1u));
     br_load_preset(0u, BR_FIRST_PLAITS);
-    br_part[0].length = 4u; br_part[0].division = 1u; br_part[0].swing = 0u;
+    br_part[0].length = 4u; br_part[0].division = 1u; br_swing = 0u;
     for (uint32_t i = 0u; i < 4u; ++i) {
         br_part[0].step[i] = BR_NOTE_STEP(60u + i, 100u);
         br_seq_synth_velocity[0][i] = 255u;
@@ -141,36 +141,42 @@ int main(void)
     br_midi_clock_out = 1u; br_midi_clock_enabled = 1u; render(8u); assert(!out_n);
     br_midi_clock_enabled = 0u;
 
-    /* The setting: OFF, RECEIVE, SEND, mutually exclusive and saved with the project. */
+    /* CLOCK OUT on MIDI 1 and CLOCK SOURCE on TEMPO: never both on, saved with the project. */
     {
         br_session_t s;
         br_app_init(); fm1_ms = 5000u; br_midi_clock_out = br_midi_clock_enabled = 0u;
         br_ui.page = BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX] = 7u;
-        { br_control_t c = br_control(3u); assert(!strcmp(c.label, "MIDI CLOCK") && !strcmp(c.text, "OFF") && c.high == 2); }
-        br_control_turn(3u, 1); assert(br_midi_clock_enabled == 1u && !br_midi_clock_out);
-        br_control_turn(3u, 1); assert(!br_midi_clock_enabled && br_midi_clock_out == 1u);
+        { br_control_t c = br_control(3u); assert(!strcmp(c.label, "CLOCK OUT") && !strcmp(c.text, "OFF") && c.high == 1); }
+        br_control_turn(3u, 1); assert(br_midi_clock_out == 1u && !br_midi_clock_enabled);
         { br_control_t c = br_control(3u); assert(!strcmp(c.text, "SEND")); }
-        assert(br_capture(&s) && br_session_v16_valid(&s));
+        assert(br_capture(&s) && br_session_valid(&s));
         br_midi_clock_out = 0u; assert(br_restore(&s) && br_midi_clock_out == 1u && !br_midi_clock_enabled);
-        br_midi_clock_enabled = 1u; assert(!br_capture(&s));    /* never both */
+        br_ui.screen[BR_PAGE_MIX] = 2u; fm1_ms += 1000u;
+        { br_control_t c = br_control(2u); assert(!strcmp(c.label, "CLOCK SOURCE")); }
+        br_control_turn(2u, 1); assert(br_midi_clock_enabled == 1u && !br_midi_clock_out);
+        br_ui.screen[BR_PAGE_MIX] = 7u; fm1_ms += 1000u;
+        br_control_turn(3u, 1); assert(br_midi_clock_out == 1u && !br_midi_clock_enabled);
+        br_midi_clock_enabled = 1u;                               /* both set by hand: the save keeps RECEIVE */
+        assert(br_capture(&s)); br_midi_clock_out = 0u; br_midi_clock_enabled = 0u;
+        assert(br_restore(&s) && br_midi_clock_enabled == 1u && !br_midi_clock_out);
         br_midi_clock_enabled = 0u; br_midi_clock_out = 0u;
         assert(br_capture(&s) && br_restore(&s) && !br_midi_clock_out);
     }
-    /* USB AUDIO: MASTER or FULL on the third MIDI settings page, saved with the project. */
+    /* USB AUDIO: MASTER or FULL on the fourth setup page (TEMPO, MIDI 1, MIDI 2, USB AUDIO), saved with the project. */
     {
         br_session_t s;
         br_app_init(); fm1_ms = 9000u; fm1_usb_audio_full = 0u;
         br_ui.page = BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX] = 8u;
-        br_select_screen(1); assert(br_ui.screen[BR_PAGE_MIX] == 9u && br_screen_count() == 3u);
+        br_select_screen(1); assert(br_ui.screen[BR_PAGE_MIX] == 9u);
         { br_control_t c = br_control(0u); assert(!strcmp(c.label, "USB AUDIO") && !strcmp(c.text, "MASTER") && c.high == 1); }
         { br_control_t c = br_control(1u); assert(!c.label[0]); }
         br_control_turn(1u, 1); assert(!fm1_usb_audio_full);           /* the empty knobs do nothing */
         br_control_turn(0u, 1); assert(fm1_usb_audio_full == 1u);
         { br_control_t c = br_control(0u); assert(!strcmp(c.text, "FULL")); }
-        assert(br_capture(&s) && br_session_v16_valid(&s));
+        assert(br_capture(&s) && br_session_valid(&s));
         fm1_usb_audio_full = 0u; assert(br_restore(&s) && fm1_usb_audio_full == 1u);
         br_control_turn(0u, -1); assert(!fm1_usb_audio_full);
-        br_select_screen(1); assert(br_ui.screen[BR_PAGE_MIX] == 7u);
+        br_select_screen(1); assert(br_ui.screen[BR_PAGE_MIX] == 2u);
         br_select_screen(-1); assert(br_ui.screen[BR_PAGE_MIX] == 9u);
     }
     puts("MIDI sequencer, arp, drum, clock and transport output passed");

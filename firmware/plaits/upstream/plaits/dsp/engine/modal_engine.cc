@@ -52,6 +52,11 @@ void ModalEngine::Render(
     float* aux,
     size_t size,
     bool* already_enveloped) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_unpatched = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool trigger_unpatched = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
 #if BR_AUDIO_FAILURE_JOB_MODEL_SUBSTAGE_PROFILE_DIAG
   br_audio_model_substage_trace_t* profile =
       br_audio_model_substage_current_trace();
@@ -109,7 +114,7 @@ void ModalEngine::Render(
 #endif
   
   voice_.Render(
-      parameters.trigger & TRIGGER_UNPATCHED,
+      trigger_unpatched,
       parameters.trigger & TRIGGER_RISING_EDGE,
       parameters.accent,
 #if BR_AUDIO_FAILURE_JOB_MODEL_SUBSTAGE_PROFILE_DIAG

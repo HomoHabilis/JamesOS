@@ -107,6 +107,9 @@ void braids_perc_choke(void *s) { (void)s; unexpected(); }
 uint8_t braids_perc_active(const void *s) { (void)s; return 0u; }
 void braids_perc_init(void *s,uint32_t seed) { (void)s;(void)seed;unexpected(); }
 uint32_t plaits_quiet(const void *s) { (void)s; return quiet_plaits; }
+#if BR_MODEL_MOD_EXPERIMENT
+uint32_t plaits_compact_state_bytes(uint32_t model) { (void)model; unexpected(); return 0u; }
+#endif
 uint32_t plaits_kit_quiet_mask(const void *s,uint32_t m)
 { (void)s;(void)m; return 0u; }
 void plaits_render(void *s,uint32_t m,int32_t p,uint16_t t,uint16_t a,uint16_t h,uint16_t x,int16_t *o,uint32_t n)

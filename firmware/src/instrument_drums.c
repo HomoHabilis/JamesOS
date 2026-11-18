@@ -158,7 +158,7 @@ static int32_t br_drum_voice_note_offset(uint32_t voice_id)
            voice_id == BR_DRUM_TOM ? -12 : 0;
 }
 
-static int32_t br_drum_clamp_pitch_delta(int32_t pitch_delta)
+BR_COLD_SIZE static int32_t br_drum_clamp_pitch_delta(int32_t pitch_delta)
 {
     if (pitch_delta < -24) return -24;
     if (pitch_delta > 24) return 24;
@@ -256,12 +256,12 @@ __attribute__((minsize, noinline)) void br_drum_init(void *memory, uint32_t seed
     }
 }
 
-void br_drum_choke(void *memory, uint32_t lane)
+BR_COLD_SIZE void br_drum_choke(void *memory, uint32_t lane)
 {
     br_drum_choke_mask(memory, lane, BR_DRUM_ALL_MASK);
 }
 
-void br_drum_choke_mask(void *memory, uint32_t lane, uint32_t lane_mask)
+BR_COLD_SIZE void br_drum_choke_mask(void *memory, uint32_t lane, uint32_t lane_mask)
 {
     br_drum_state_t *s = (br_drum_state_t *)memory;
     br_drum_voice_t *v;
@@ -295,7 +295,7 @@ void br_drum_note_on_voice_mask(void *memory, uint32_t note, uint32_t velocity,
                                      voice_id, 0);
 }
 
-void br_drum_note_on_voice_pitch_mask(void *memory, uint32_t note,
+BR_COLD_SIZE void br_drum_note_on_voice_pitch_mask(void *memory, uint32_t note,
                                      uint32_t velocity, uint32_t lane_mask,
                                      uint32_t voice_id, int32_t pitch_delta)
 {
@@ -536,7 +536,7 @@ void br_drum_all_off(void *memory)
     br_drum_all_off_mask(memory, BR_DRUM_ALL_MASK);
 }
 
-void br_drum_all_off_mask(void *memory, uint32_t lane_mask)
+BR_COLD_SIZE void br_drum_all_off_mask(void *memory, uint32_t lane_mask)
 {
     br_drum_state_t *s = (br_drum_state_t *)memory;
     uint32_t lane;

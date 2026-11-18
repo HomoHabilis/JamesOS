@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import subprocess
+import host_target
 
 ROOT = Path(__file__).resolve().parents[1]
 FLAGS = [
@@ -15,7 +16,7 @@ FLAGS = [
     '-DFM1_PLAITS_SRC_FLOAT_PHASE_FRACTION=0', '-DFM1_PLAITS_PHASE_LUT=0',
     '-DBR_FX_RATE_SIGNED_441_RECIP=0', '-DBR_FX_TAPE_WOW_DELTA_LUT=0',
     '-DBR_AUDIO_FOREGROUND_FIXED8_PLAN=0', '-Ifirmware/src', '-Ifirmware/gen',
-]
+] + host_target.product_flags()
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)

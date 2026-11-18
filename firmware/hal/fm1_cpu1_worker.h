@@ -156,7 +156,12 @@ int fm1_cpu1_worker_project_fence_release(void);
 int fm1_cpu1_worker_project_authorize_resume(void);
 uint32_t fm1_cpu1_worker_project_resume(uint32_t timeout_ticks);
 uint32_t fm1_cpu1_worker_project_fence_held(void);
+/* 1: fenced, and C1 verified parked or contained (held in reset). */
+uint32_t fm1_cpu1_worker_project_parked(void);
 #endif
+/* 1: a worker fault was contained (C1 confirmed and still held in reset).
+ * CPU0 then renders alone; nothing of C1's may run until a reboot. */
+uint32_t fm1_cpu1_worker_contained(void);
 uint32_t fm1_cpu1_worker_wait_ready(uint32_t timeout_ticks);
 uint32_t fm1_cpu1_worker_submit_smoke(uint32_t *sequence_out);
 #if defined(BR_CPU1_AUDIO) && BR_CPU1_AUDIO

@@ -14,7 +14,17 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
-from run_screen_transitions import FLAGS
+FLAGS = [   # the host app flags (as in run_drive.py, without its product defines: host_cc adds those)
+    '-std=c11', '-O2', '-fwrapv', '-Wno-unused-function',
+    '-DFM1_NATIVE_OUTPUT_32K=0', '-DFM1_NATIVE_OUTPUT_48K=0',
+    '-DBR_AUDIO_INTERNAL_BLOCK160=0', '-DBR_AUDIO_INTERNAL_BLOCK256=1',
+    '-DPLAITS_INTERNAL_SAMPLE_RATE=44100', '-DFM1_PLAITS_SOURCE_RATE_32K=0',
+    '-DFM1_PLAITS_SOURCE_RATE_44100=1', '-DFM1_PLAITS_SOURCE_RATE_38400=0',
+    '-DFM1_PLAITS_SOURCE_RATE_48000=0', '-DFM1_PLAITS_SRC_LAGRANGE4=0',
+    '-DFM1_PLAITS_SRC_FLOAT_PHASE_FRACTION=0', '-DFM1_PLAITS_PHASE_LUT=0',
+    '-DBR_FX_RATE_SIGNED_441_RECIP=0', '-DBR_FX_TAPE_WOW_DELTA_LUT=0',
+    '-DBR_AUDIO_FOREGROUND_FIXED8_PLAN=0', '-Ifirmware/src', '-Ifirmware/gen',
+]
 
 TRACE = r'''
 static uint32_t font_audit_count, font_collision_count;
@@ -29,6 +39,10 @@ static void font_audit(int32_t x, int32_t y, const char *text, int scale) {
         font_collision_count++;
         if(!font_audit_silent) printf("COLLISION header x=%d end=%d title=%s\n",x,x+w,text);
     }
+    /* A part of a wider picture (cv_ox: card boxes; the header's and strip's 48-px chunks; the ENV page's
+     * 60-px parts, every 120-px half) clips by design; so does text wholly beyond the canvas's right edge. */
+    if(cv_ox || (cv_w==48 && (cv_h==24 || cv_h==8)) || cv_w==120 || (cv_w==60 && br_ui.page==BR_PAGE_ENV)) return;
+    if(x>=(int32_t)cv_w) return;   /* wholly right of this part: another part draws it */
     if(x>=0 && x+w<=(int32_t)cv_w) return;
     char key[160]; snprintf(key,sizeof key,"canvas=%u x=%d width=%d scale=%d text=%.80s",cv_w,x,w,scale,text);
     for(uint32_t i=0;i<font_audit_count && i<1024u;i++)if(!strcmp(font_audit_seen[i],key))return;
@@ -77,7 +91,7 @@ def main():
         replacements={
           '        line[n] = 0;\n        br_widget_text(center': '        line[n] = 0;\n        font_audit_param_row(center,y,line);\n        br_widget_text(center',
           '    int32_t y = br_param_rows(value, center, value_y, C_WHITE);': '    font_param_prev=-1;\n    int32_t y = br_param_rows(value, center, value_y, C_WHITE);',
-          '        br_draw_route_badges(30, badge_y, route_badges, br_ui.part, BR_BACKGROUND);': '        font_audit_badge(label_y,badge_y,route_badges);\n        br_draw_route_badges(30, badge_y, route_badges, br_ui.part, BR_BACKGROUND);',
+          '        br_draw_route_badges(30 + (badge_y + (int32_t)br_badge_count(route_badges) * 10 > 126 ? (br_cc.k == 1u ? -8 : br_cc.k == 2u ? 8 : 0) : 0), badge_y, route_badges, br_ui.part, BR_BACKGROUND);': '        font_audit_badge(label_y,badge_y,route_badges);\n        br_draw_route_badges(30 + (badge_y + (int32_t)br_badge_count(route_badges) * 10 > 126 ? (br_cc.k == 1u ? -8 : br_cc.k == 2u ? 8 : 0) : 0), badge_y, route_badges, br_ui.part, BR_BACKGROUND);',
           'static void br_header_draw_title(const char *name)\n{': 'static void br_header_draw_title(const char *name)\n{\n    font_header=1;',
           '\n}\nstatic void br_track_badge(int32_t x': '\n    font_header=0;\n}\nstatic void br_track_badge(int32_t x',
         }

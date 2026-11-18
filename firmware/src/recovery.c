@@ -1,7 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* Origin: SLOOP (isod89), built on Felucca (Leo Kuroshita, Hügelton Instruments), by way of Dinghy (zvenson);
+ * modified for JamesOS. GPL-3.0-only. See docs/legal/THIRD-PARTY-NOTICES.md. */
 /* Application-level recovery, not a second firmware bank. The intact app's
  * startup, RAM flash driver and USB stack are still required. TIMER5, audio,
- * settings, samples, projects, editor and normal UI are never started here. */
+ * settings, samples, projects, editor and normal UI are never started here.
+ * SMK-37 Pro: the flash chip is identified (ota_flash_ok) in fm1_cstart before rescue entry,
+ * not here. */
+#include "../product.h"
 static uint32_t recovery_last, recovery_fraction, recovery_usb_last;
 
 static void recovery_poll(void)
@@ -35,7 +40,11 @@ static void recovery_step(void)
     ota_service();
     if (usb.ota_req) {
         usb.ota_req = 0;
+#if BR_PRODUCT_SMK37
+        if (ota_flash_ok) ota_session();         /* same validated updater as normal mode */
+#else
         if (flash_ok) ota_session();         /* same validated updater as normal mode */
+#endif
     }
 }
 
@@ -56,6 +65,7 @@ static void recovery_main(void)
     bootguard.pending = 2;                   /* WDT/exception here falls back to ROM */
     recovery_last = recovery_usb_last = fm1_ticks();
     recovery_fraction = fm1_ms = 0;
+#if BR_PRODUCT_FM1
     /* No persist_boot or OTA cleanup: no flash write just for entering rescue. */
     if (flash_worker_park() == 0) {
         flash_ok = fl_jedec_known(FL_FAR(fl_jedec_ram)());
@@ -63,12 +73,17 @@ static void recovery_main(void)
     } else {
         flash_ok = 0u;
     }
+#endif
     lcd_init();
     lcd_fill(0, 0, 240, 240, C_BLACK);
     draw_text_box(0, 64, 240, 2u, APP_NAME " USB RESCUE", C_WHITE, 1);
     draw_text_box(0, 96, 240, 2u, "CONNECT USB", C_WHITE, 1);
+#if BR_PRODUCT_SMK37
+    draw_text_box(0, 124, 240, 2u, ota_flash_ok ? "OPEN THE INSTALLER" : "UNKNOWN FLASH", C_WHITE, 1);
+#else
     draw_text_box(0, 124, 240, 2u,
                   flash_ok ? "OPEN THE INSTALLER" : "UNKNOWN FLASH", C_WHITE, 1);
+#endif
     draw_text_box(0, 164, 240, 2u, "AUDIO OFF", C_WHITE, 1);
     lcd_sync();
     usb_start();

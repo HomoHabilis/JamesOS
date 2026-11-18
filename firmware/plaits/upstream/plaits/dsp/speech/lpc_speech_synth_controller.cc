@@ -233,6 +233,11 @@ void LPCSpeechSynthController::Render(
     float* excitation,
     float* output,
     size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  // Out of line (only caller: SpeechEngine); free running means an unpatched
+  // trigger, which this firmware never produces (plaits_config.h).
+  free_running = false;
+#endif
   const float rate_ratio = SemitonesToRatio((formant_shift - 0.5f) * 36.0f);
   const float rate = rate_ratio / 6.0f;
   

@@ -1,9 +1,25 @@
 # Private working records and generated output
 /archive/
 /build/
-__pycache__/
-*.py[cod]
-.DS_Store
+build/
+*.log
 .env
 .env.*
-*.log
+
+# Firmware packages made by builds. This fork does not track releases/: GitHub releases
+# carry the packages, and web/base_package.py --releases fetches upstream's test fixtures.
+*.fwsc
+
+# Flash dumps, device captures and recordings (private: calibration, keys, user data)
+*.bin
+*.wav
+*.aif
+*.aiff
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+._*

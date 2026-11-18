@@ -30,6 +30,7 @@
 #define PLAITS_DSP_FM_VOICE_H_
 
 #include "stmlib/stmlib.h"
+#include "plaits_config.h"
 
 #include "plaits/dsp/fm/algorithms.h"
 #include "plaits/dsp/fm/dx_units.h"
@@ -161,6 +162,13 @@ class Voice {
       const Parameters& parameters,
       float* buffers[4],
       size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+    // SixOpEngine (the only user) sets sustain only for an unpatched trigger,
+    // which this firmware never produces (plaits_config.h).
+    const bool sustain = false;
+#else
+    const bool sustain = parameters.sustain;
+#endif
     if (Setup()) {
       // This prevents a CPU overrun, since there is not enough CPU to perform
       // both a patch setup and a full render in the time alloted for
@@ -179,7 +187,7 @@ class Voice {
     const float envelope_sample = gate_duration * parameters.envelope_control;
     
     // Apply LFO and pitch envelope modulations.
-    const float pitch_envelope = parameters.sustain
+    const float pitch_envelope = sustain
         ? pitch_envelope_.RenderAtSample(envelope_sample, gate_duration)
         : pitch_envelope_.Render(
               parameters.gate,
@@ -194,7 +202,7 @@ class Voice {
     // is received, or constantly when we are in free-running mode.
     const bool note_on = parameters.gate && !gate_;
     gate_ = parameters.gate;
-    if (note_on || parameters.sustain) {
+    if (note_on || sustain) {
       normalized_velocity_ = NormalizeVelocity(parameters.velocity);
       note_ = parameters.note;
       scaling_dirty_ = true;
@@ -228,7 +236,7 @@ class Voice {
       f[i] = ratios_[i] * (ratios_[i] < 0.0f ? -one_hz_ : f0);
 
       const float rate_scaling = operator_scaling_[i].rate;
-      float level = parameters.sustain
+      float level = sustain
           ? operator_envelope_[i].RenderAtSample(envelope_sample, gate_duration)
           : operator_envelope_[i].Render(
                 parameters.gate,

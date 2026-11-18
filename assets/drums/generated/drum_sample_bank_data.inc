@@ -7757,32 +7757,32 @@ static const uint8_t br_drum_ima4_909_tom[6468] = {
 const br_drum_sample_desc_t br_drum_sample_bank[2][BR_DRUM_VOICE_COUNT] = {
     /* 0: 808 */
     {
-        { br_drum_ima4_808_kck1, 20286u, 10560u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* KCK1 */
-        { br_drum_ima4_808_kck2, 13230u, 6864u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* KCK2 */
-        { br_drum_ima4_808_snar, 8820u, 4620u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* SNAR */
-        { br_drum_ima4_808_clap, 9702u, 5016u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* CLAP */
-        { br_drum_ima4_808_open, 10584u, 5544u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* OPEN */
-        { br_drum_ima4_808_clos, 3087u, 1716u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* CLOS */
-        { br_drum_ima4_808_cymb, 22050u, 11484u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* CYMB */
-        { br_drum_ima4_808_perc, 5292u, 2772u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* PERC */
-        { br_drum_ima4_808_kck3, 9702u, 5016u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* KCK3 */
-        { br_drum_ima4_808_rim, 3087u, 1716u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* RIM */
-        { br_drum_ima4_808_clos, 3087u, 1716u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* PEDL */
-        { br_drum_ima4_808_tom, 12348u, 6468u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* TOM */
+        { 0 }, /* unavailable: KCK1 */
+        { 0 }, /* unavailable: KCK2 */
+        { 0 }, /* unavailable: SNAR */
+        { 0 }, /* unavailable: CLAP */
+        { 0 }, /* unavailable: OPEN */
+        { 0 }, /* unavailable: CLOS */
+        { 0 }, /* unavailable: CYMB */
+        { 0 }, /* unavailable: PERC */
+        { 0 }, /* unavailable: KCK3 */
+        { 0 }, /* unavailable: RIM */
+        { 0 }, /* unavailable: PEDL */
+        { 0 }, /* unavailable: TOM */
     },
     /* 1: 909 */
     {
-        { br_drum_ima4_909_kck1, 15876u, 8316u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* KCK1 */
-        { br_drum_ima4_909_kck2, 15876u, 8316u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* KCK2 */
-        { br_drum_ima4_909_snar, 9702u, 5016u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* SNAR */
-        { br_drum_ima4_909_clap, 11466u, 5940u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* CLAP */
-        { br_drum_ima4_909_open, 11466u, 5940u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* OPEN */
-        { br_drum_ima4_909_clos, 2646u, 1452u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* CLOS */
-        { br_drum_ima4_909_cymb, 24255u, 12540u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* CYMB */
-        { br_drum_ima4_909_perc, 3969u, 2112u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* PERC */
-        { br_drum_ima4_909_kck3, 9702u, 5016u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* KCK3 */
-        { br_drum_ima4_909_perc, 3969u, 2112u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* RIM */
-        { br_drum_ima4_909_clos, 2646u, 1452u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* PEDL */
-        { br_drum_ima4_909_tom, 12348u, 6468u, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* TOM */
+        { 0 }, /* unavailable: KCK1 */
+        { 0 }, /* unavailable: KCK2 */
+        { 0 }, /* unavailable: SNAR */
+        { 0 }, /* unavailable: CLAP */
+        { 0 }, /* unavailable: OPEN */
+        { 0 }, /* unavailable: CLOS */
+        { 0 }, /* unavailable: CYMB */
+        { 0 }, /* unavailable: PERC */
+        { 0 }, /* unavailable: KCK3 */
+        { 0 }, /* unavailable: RIM */
+        { 0 }, /* unavailable: PEDL */
+        { 0 }, /* unavailable: TOM */
     },
 };

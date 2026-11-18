@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile and exercise the actual platform wrapper and IRQ with fake I/O."""
 from pathlib import Path
+import host_target
 import subprocess
 import tempfile
 import argparse
@@ -10,7 +11,7 @@ parser.add_argument('--diagnostics', choices=('development', 'distribution'), de
 args = parser.parse_args()
 
 root = Path(__file__).resolve().parents[1]
-source = (root / "firmware/src/platform.c").read_text()
+source = host_target.select_product((root / "firmware/src/platform.c").read_text())  # the selected product's lines (BR_HOST_TARGET)
 
 
 def function(signature):
@@ -32,7 +33,6 @@ signatures = (
 with tempfile.TemporaryDirectory(prefix="fm1-drop-platform-") as temp:
     directory = Path(temp)
     parts = [function(s) for s in signatures]
-    parts[1] = '#if FM1_DEVELOPMENT_DIAGNOSTICS\n' + parts[1] + '\n#endif'
     (directory / "audio_drop_extracted.inc").write_text("\n\n".join(parts) + "\n")
     for optimization in ("-O0", "-O2"):
         executable = directory / ("audio_drop_platform_" + optimization[1:])

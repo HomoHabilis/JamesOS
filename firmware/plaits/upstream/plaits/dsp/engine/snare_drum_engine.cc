@@ -53,6 +53,14 @@ void SnareDrumEngine::Render(
     size_t size,
     bool* already_enveloped) {
   const float f0 = EngineNoteToFrequency(parameters);
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  /* Sustain (unpatched trigger) is unreachable in this firmware (see
+   * plaits_config.h); a constant keeps both snares' RenderImpl<true, ...>
+   * copies from being emitted. */
+  const bool sustain = false;
+#else
+  const bool sustain = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
 #if FM1_PLAITS_KIT_LOCAL_RNG
   uint32_t local_random_state = Random::state();
 #endif
@@ -62,7 +70,7 @@ void SnareDrumEngine::Render(
       fm1_drum_profile_begin(FM1_DRUM_PROFILE_MAIN, static_cast<uint32_t>(size));
 #endif
   analog_snare_drum_.Render(
-      parameters.trigger & TRIGGER_UNPATCHED,
+      sustain,
       parameters.trigger & TRIGGER_RISING_EDGE,
       parameters.accent,
       f0,
@@ -82,7 +90,7 @@ void SnareDrumEngine::Render(
 #endif
   
   synthetic_snare_drum_.Render(
-      parameters.trigger & TRIGGER_UNPATCHED,
+      sustain,
       parameters.trigger & TRIGGER_RISING_EDGE,
       parameters.accent,
       f0,

@@ -10,6 +10,10 @@
 #include <stdint.h>
 #include <limits.h>
 #include "midi_clock_math.h"
+/* BR_COLD_SIZE: see instrument_audio.c; empty when this header is used on its own. */
+#ifndef BR_COLD_SIZE
+#define BR_COLD_SIZE
+#endif
 
 #define FM1_MCT_QUEUE_CAPACITY 32u
 #define FM1_MCT_AMBIGUOUS 1u
@@ -29,7 +33,7 @@ typedef struct {
     uint8_t have_input, have_clock, overflow;
 } fm1_mct_queue_t;
 
-static int fm1_mct_anchor_init(fm1_mct_anchor_t *a, uint32_t timer_hz,
+BR_COLD_SIZE static int fm1_mct_anchor_init(fm1_mct_anchor_t *a, uint32_t timer_hz,
     uint32_t sample_hz, uint32_t half_frames, uint32_t jitter_ticks,
     uint32_t edge_tick, uint64_t edge_frame, uint8_t half)
 {
@@ -54,7 +58,7 @@ static int fm1_mct_anchor_init(fm1_mct_anchor_t *a, uint32_t timer_hz,
  * A discontinuity or error beyond 3J plus the slew limit invalidates the anchor.
  * Skew exceeding J/8 ticks per half eventually invalidates it; max_distance
  * should bound extrapolation error between an event and the latest anchor. */
-static int fm1_mct_edge(fm1_mct_anchor_t *a, uint32_t observed_tick, uint8_t half)
+BR_COLD_SIZE static int fm1_mct_edge(fm1_mct_anchor_t *a, uint32_t observed_tick, uint8_t half)
 {
     uint32_t advance, remainder, expected;
     int32_t error, correction, max_slew;
@@ -93,7 +97,7 @@ static int fm1_mct_edge(fm1_mct_anchor_t *a, uint32_t observed_tick, uint8_t hal
  * max_distance limits ambiguous modular differences and stale queued events.
  * Rounds toward the later modeled frame. Physical accuracy also depends on
  * measured anchor, ISR-latency and drift uncertainty. */
-static int fm1_mct_map(const fm1_mct_anchor_t *a, uint32_t tick,
+BR_COLD_SIZE static int fm1_mct_map(const fm1_mct_anchor_t *a, uint32_t tick,
                        uint32_t max_distance, uint64_t *frame)
 {
     int32_t dt; int64_t num, frames;

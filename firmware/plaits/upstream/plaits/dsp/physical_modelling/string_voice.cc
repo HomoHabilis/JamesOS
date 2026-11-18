@@ -34,6 +34,7 @@
 #include "stmlib/utils/random.h"
 
 #include "plaits/dsp/noise/dust.h"
+#include "plaits/dsp/dsp.h"  // plaits_config.h
 
 namespace plaits {
 
@@ -62,6 +63,11 @@ void StringVoice::Render(
     float* out,
     float* aux,
     size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  // Out of line, so the engine's constant does not reach here; drop the
+  // unreachable sustain (unpatched trigger) exciter (plaits_config.h).
+  sustain = false;
+#endif
   const float density = brightness * brightness;
 
   brightness += 0.25f * accent * (1.0f - brightness);

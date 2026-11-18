@@ -241,6 +241,19 @@ void fm1_cpu1_worker_init_early(void)
     FM1_CPU1_WORKER_BARRIER();
 }
 
+/* 1 only when a worker fault was contained: C1's reset was confirmed when it
+ * was aborted (state ABORTED, never set otherwise) and the hardware still
+ * reports it held. C1 then executes nothing and owns no memory, so CPU0 may
+ * render alone and project transactions need no park. No sticky side effect:
+ * an audio-IRQ caller may observe a foreground abort half-way. */
+uint32_t fm1_cpu1_worker_contained(void)
+{
+    FM1_CPU1_WORKER_BARRIER();
+    return fm1_cpu1_worker_fault && !fm1_cpu1_worker_uncontained_fault &&
+           fm1_cpu1_worker_mailbox.state == FM1_CPU1_WORKER_ABORTED &&
+           fm1_cpu1_worker_hw_reset_held();
+}
+
 #if defined(FM1_PATTERN_TARGET_EXPERIMENT) && FM1_PATTERN_TARGET_EXPERIMENT
 /* Never wait while IRQs are masked. Pending or running work is BUSY; caller
  * retries only after the normal audio/worker paths have retired it. */
@@ -249,8 +262,16 @@ int fm1_cpu1_worker_project_fence_acquire(void)
     uint32_t irq = fm1_cpu1_worker_irq_save();
     int result = 1;
     FM1_CPU1_WORKER_BARRIER();
-    if (fm1_cpu1_worker_fault || fm1_cpu1_worker_uncontained_fault) result = -1;
-    else if (!worker_project_fence && fm1_cpu1_worker_mailbox.cpu_id == 1u &&
+    if (fm1_cpu1_worker_fault || fm1_cpu1_worker_uncontained_fault) {
+        result = -1;
+        /* A held C1 cannot submit, run or read: the fence is trivially safe. */
+        if (fm1_cpu1_worker_contained()) {
+            worker_project_resume_authorized = 0u;
+            worker_project_fence = 1u;
+            FM1_CPU1_WORKER_BARRIER();
+            result = 0;
+        }
+    } else if (!worker_project_fence && fm1_cpu1_worker_mailbox.cpu_id == 1u &&
              fm1_cpu1_worker_mailbox.state == FM1_CPU1_WORKER_READY &&
              !fm1_cpu1_worker_mailbox.park_request && !fm1_cpu1_worker_mailbox.park_ack &&
              fm1_cpu1_worker_mailbox.request_seq == fm1_cpu1_worker_mailbox.done_seq) {
@@ -275,11 +296,12 @@ int fm1_cpu1_worker_project_fence_release(void)
     int result = -1;
     FM1_CPU1_WORKER_BARRIER();
     if (worker_project_fence && worker_project_resume_authorized &&
-        !fm1_cpu1_worker_fault && !fm1_cpu1_worker_uncontained_fault &&
+        (fm1_cpu1_worker_contained() ||
+        (!fm1_cpu1_worker_fault && !fm1_cpu1_worker_uncontained_fault &&
         fm1_cpu1_worker_mailbox.cpu_id == 1u &&
         fm1_cpu1_worker_mailbox.state == FM1_CPU1_WORKER_READY &&
         !fm1_cpu1_worker_mailbox.park_request && !fm1_cpu1_worker_mailbox.park_ack &&
-        fm1_cpu1_worker_mailbox.request_seq == fm1_cpu1_worker_mailbox.done_seq) {
+        fm1_cpu1_worker_mailbox.request_seq == fm1_cpu1_worker_mailbox.done_seq))) {
         worker_project_resume_authorized = 0u;
         worker_project_fence = 0u; FM1_CPU1_WORKER_BARRIER(); result = 0;
     }
@@ -288,6 +310,18 @@ int fm1_cpu1_worker_project_fence_release(void)
 }
 uint32_t fm1_cpu1_worker_project_fence_held(void)
 { FM1_CPU1_WORKER_BARRIER(); return worker_project_fence; }
+/* 1: fenced, and C1 is either verified parked (drained) or contained in reset. */
+uint32_t fm1_cpu1_worker_project_parked(void)
+{
+    FM1_CPU1_WORKER_BARRIER();
+    if (!worker_project_fence) return 0u;
+    if (fm1_cpu1_worker_contained()) return 1u;
+    return !fm1_cpu1_worker_fault && !fm1_cpu1_worker_uncontained_fault &&
+        fm1_cpu1_worker_mailbox.cpu_id == 1u &&
+        fm1_cpu1_worker_mailbox.state == FM1_CPU1_WORKER_PARKED &&
+        fm1_cpu1_worker_mailbox.park_request && fm1_cpu1_worker_mailbox.park_ack &&
+        fm1_cpu1_worker_mailbox.request_seq == fm1_cpu1_worker_mailbox.done_seq;
+}
 #endif
 
 uint32_t fm1_cpu1_worker_available(void)
@@ -509,6 +543,7 @@ void fm1_cpu1_worker_note_terminal_timeout(uint32_t sequence)
 
 uint32_t fm1_cpu1_worker_park(uint32_t timeout_ticks)
 {
+    if (fm1_cpu1_worker_contained()) return FM1_CPU1_WORKER_OK;   /* held: nothing runs */
     if (fm1_cpu1_worker_mailbox.cpu_id != 1u) return FM1_CPU1_WORKER_NOT_READY;
     if (!timeout_ticks || timeout_ticks > FM1_CPU1_WORKER_TIMEOUT_TICKS)
         return FM1_CPU1_WORKER_TIMEOUT;
@@ -557,24 +592,15 @@ uint32_t fm1_cpu1_worker_resume(uint32_t timeout_ticks)
  * This records ordering; it cannot independently verify caller-owned loans. */
 int fm1_cpu1_worker_project_authorize_resume(void)
 {
-    FM1_CPU1_WORKER_BARRIER();
-    if (!worker_project_fence || fm1_cpu1_worker_fault || fm1_cpu1_worker_uncontained_fault ||
-        fm1_cpu1_worker_mailbox.cpu_id != 1u ||
-        fm1_cpu1_worker_mailbox.state != FM1_CPU1_WORKER_PARKED ||
-        !fm1_cpu1_worker_mailbox.park_request || !fm1_cpu1_worker_mailbox.park_ack ||
-        fm1_cpu1_worker_mailbox.request_seq != fm1_cpu1_worker_mailbox.done_seq) return -1;
+    if (!fm1_cpu1_worker_project_parked()) return -1;
     worker_project_resume_authorized = 1u;
     FM1_CPU1_WORKER_BARRIER(); return 0;
 }
 uint32_t fm1_cpu1_worker_project_resume(uint32_t timeout_ticks)
 {
-    FM1_CPU1_WORKER_BARRIER();
-    if (!worker_project_resume_authorized || !worker_project_fence || fm1_cpu1_worker_fault || fm1_cpu1_worker_uncontained_fault ||
-        fm1_cpu1_worker_mailbox.cpu_id != 1u ||
-        fm1_cpu1_worker_mailbox.state != FM1_CPU1_WORKER_PARKED ||
-        !fm1_cpu1_worker_mailbox.park_request || !fm1_cpu1_worker_mailbox.park_ack ||
-        fm1_cpu1_worker_mailbox.request_seq != fm1_cpu1_worker_mailbox.done_seq)
+    if (!worker_project_resume_authorized || !fm1_cpu1_worker_project_parked())
         return FM1_CPU1_WORKER_NOT_READY;
+    if (fm1_cpu1_worker_contained()) return FM1_CPU1_WORKER_OK;   /* stays held */
     return worker_resume_impl(timeout_ticks);
 }
 #endif

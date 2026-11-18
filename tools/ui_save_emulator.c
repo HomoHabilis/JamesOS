@@ -11,6 +11,12 @@ static struct {
     char name[13], error[32], notice[32];
     br_session_t factory;
 } es = {.current = -1};
+/* The slot directory the shared SAVE UI (instrument_project_ui.c) reads, as in
+ * instrument_project_device_ui.c. State 3 there is a slot holding incompatible or
+ * damaged data ("USED DATA", overwritten only after a confirmation). The emulator
+ * never lists such a slot: a file that does not validate is no project (es_latest()
+ * returns 0), so every state stays 0 and only the "other slot" confirmation applies. */
+static struct { uint8_t state, old; char name[13]; } es_directory[ES_SLOTS];   /* old: never set here */
 static uint32_t es_crc(const void *v, size_t n) {
     const uint8_t *p = (const uint8_t *)v; uint32_t h = 2166136261u;
     while (n--) { h ^= *p++; h *= 16777619u; } return h;
@@ -39,7 +45,7 @@ static int es_read(int slot, int copy, es_record *r) {
     FILE *f=fopen(path,"rb"); if (!f) return 0;
     int ok=fread(r,1,sizeof *r,f)==sizeof *r && fgetc(f)==EOF; fclose(f);
     return ok && r->magic==ES_MAGIC && r->slot==(uint32_t)slot && r->name[12]==0 &&
-        r->crc==es_crc(r,offsetof(es_record,crc)) && (br_session_v12_valid(&r->session) || br_session_v13_valid(&r->session) || br_session_v14_valid(&r->session) || br_session_v15_valid(&r->session) || br_session_v16_valid(&r->session));
+        r->crc==es_crc(r,offsetof(es_record,crc)) && br_session_valid(&r->session);
 }
 static int es_latest(int slot, es_record *out, int *copy) {
     es_record a,b; int va=es_read(slot,0,&a),vb=es_read(slot,1,&b);

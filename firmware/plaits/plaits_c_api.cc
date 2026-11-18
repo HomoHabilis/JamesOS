@@ -170,12 +170,21 @@ static inline uint32_t QuietFramesFor(uint32_t model) {
 }
 
 struct PlaitsState {
+#if BR_POLY_SUPPORT
+  explicit PlaitsState(uint32_t seed, void *arena, uint32_t arena_bytes)
+      : allocator(arena, arena_bytes), random_state(seed ? seed : 1u),
+        model(0), pitch_q7(69 * 128), timbre_q15(0),
+        morph_q15(0), harmonics_q15(0), velocity(127), gate(0),
+        fifo_count(0), phase_q16(0), quiet_frames(kQuietFrames),
+        last_rendered_gate(0), retrigger_low_pending(0), arena_capacity(arena_bytes) {
+#else
   explicit PlaitsState(uint32_t seed)
       : allocator(arena, sizeof(arena)), random_state(seed ? seed : 1u),
         model(0), pitch_q7(69 * 128), timbre_q15(0),
         morph_q15(0), harmonics_q15(0), velocity(127), gate(0),
         fifo_count(0), phase_q16(0), quiet_frames(kQuietFrames),
         last_rendered_gate(0), retrigger_low_pending(0) {
+#endif
 #if FM1_PLAITS_CACHE_FLOAT_CONTROLS
     note = 69.0f;
     timbre = morph = harmonics = 0.0f;
@@ -189,7 +198,9 @@ struct PlaitsState {
 
   plaits::Voice voice;
   stmlib::BufferAllocator allocator;
+#if !BR_POLY_SUPPORT
   uint8_t arena[16384];
+#endif
   plaits::Voice::Frame fifo[kFifoFrames];
 #if FM1_PLAITS_SRC_LAGRANGE4 && !FM1_PLAITS_NATIVE_RATE
   /* Last two consumed source frames, for a one-source-frame-delayed cubic
@@ -213,9 +224,24 @@ struct PlaitsState {
   uint32_t fifo_count;
   uint32_t phase_q16;
   uint32_t quiet_frames;
+#if BR_POLY_SUPPORT
+  uint8_t last_rendered_gate;
+  uint8_t retrigger_low_pending;
+  uint16_t arena_capacity;
+#else
   uint32_t last_rendered_gate;
   uint32_t retrigger_low_pending;
+#endif
 };
+
+#if BR_POLY_SUPPORT
+static const uint32_t kFullArenaBytes = 16384u;
+static const uint32_t kCompactArenaBytes = 8192u;
+static uint32_t ArenaBytesForModel(uint32_t model) {
+  return model == 15u || model == 18u || model == 19u ? kFullArenaBytes : kCompactArenaBytes;
+}
+static size_t StateHeaderBytes() { return (sizeof(PlaitsState) + 7u) & ~size_t(7u); }
+#endif
 
 #if FM1_PLAITS_SRC_LAGRANGE4
 static inline float lagrange4_one_frame(float p0, float p1, float p2,
@@ -243,8 +269,17 @@ inline uint32_t RenderFramesForModel(uint32_t model) {
 #endif
 }
 
+#if BR_POLY_SUPPORT
+static_assert(((sizeof(PlaitsState) + 7u) & ~size_t(7u)) + 16384u <= PLAITS_STATE_BYTES,
+              "increase PLAITS_STATE_BYTES for the Plaits reference state");
+#if defined(FM1_DEVICE) && defined(FM1_PATTERN_DEVICE_CANDIDATE) && FM1_PATTERN_DEVICE_CANDIDATE
+static_assert(6u * (((sizeof(PlaitsState) + 7u) & ~size_t(7u)) + 8192u) <= 4u * PLAITS_STATE_BYTES,
+              "six compact voices do not fit the four existing DSP slots");
+#endif
+#else
 static_assert(sizeof(PlaitsState) <= PLAITS_STATE_BYTES,
               "increase PLAITS_STATE_BYTES for the Plaits reference state");
+#endif
 static_assert((PLAITS_STATE_BYTES & 7u) == 0u,
               "Plaits state cap must preserve native eight-byte alignment");
 static_assert(alignof(PlaitsState) <= 8u,
@@ -575,15 +610,39 @@ void PLAITS_STATE_ABI_SYMBOL(void) {}
 
 __attribute__((minsize, noinline)) void plaits_state_init(void* state, uint32_t seed) {
   if (!state) return;
-  memset(state, 0, sizeof(PlaitsState));
-  new (state) PlaitsState(seed);
+#if BR_POLY_SUPPORT
+  size_t header = StateHeaderBytes();
+  memset(state, 0, header + kFullArenaBytes);
+  new (state) PlaitsState(seed, static_cast<uint8_t*>(state) + header, kFullArenaBytes);
 }
 
-void plaits_prepare_model(void* state, uint32_t model) {
+uint32_t plaits_compact_state_bytes(uint32_t model) {
+  if (model >= PLAITS_MODEL_COUNT) return 0u;
+  return static_cast<uint32_t>(StateHeaderBytes()) + ArenaBytesForModel(model);
+}
+
+BR_POLY_COLD int plaits_compact_state_init(void* state, uint32_t bytes, uint32_t model, uint32_t seed) {
+  const uint32_t need = plaits_compact_state_bytes(model);
+  if (!state || !need || bytes < need || (reinterpret_cast<uintptr_t>(state) & 7u)) return 0;
+  const uint32_t arena_bytes = ArenaBytesForModel(model);
+  const size_t header = StateHeaderBytes();
+  memset(state, 0, need);
+  new (state) PlaitsState(seed, static_cast<uint8_t*>(state) + header, arena_bytes);
+  return 1;
+#else
+  memset(state, 0, sizeof(PlaitsState));
+  new (state) PlaitsState(seed);
+#endif
+}
+
+BR_POLY_COLD void plaits_prepare_model(void* state, uint32_t model) {
 #if FM1_PLAITS_PREWARM_MODEL
   if (!state) return;
   if (model >= PLAITS_MODEL_COUNT) model = PLAITS_MODEL_COUNT - 1u;
   PlaitsState* s = static_cast<PlaitsState*>(state);
+#if BR_POLY_SUPPORT
+  if (ArenaBytesForModel(model) > s->arena_capacity) return;
+#endif
   const uint32_t previous_rng = stmlib::Random::state();
   stmlib::Random::Seed(s->random_state);
   s->voice.PrepareEngine(static_cast<int>(model));
@@ -595,11 +654,14 @@ void plaits_prepare_model(void* state, uint32_t model) {
 #endif
 }
 
-void plaits_note_on(void* state, uint32_t model, int32_t pitch_q7,
+BR_POLY_COLD void plaits_note_on(void* state, uint32_t model, int32_t pitch_q7,
                     uint16_t timbre_q15, uint16_t morph_q15,
                     uint16_t harmonics_q15, uint32_t velocity_0_127) {
   if (!state) return;
   PlaitsState* s = static_cast<PlaitsState*>(state);
+#if BR_POLY_SUPPORT
+  if (ArenaBytesForModel(model) > s->arena_capacity) return;
+#endif
   UpdateControls(s, model, pitch_q7, timbre_q15, morph_q15, harmonics_q15);
   if (s->last_rendered_gate) s->retrigger_low_pending = 1u;
   s->gate = 1u;
@@ -659,6 +721,12 @@ void plaits_render(void* state, uint32_t model, int32_t pitch_q7,
                    uint16_t harmonics_q15, uint16_t aux_mix_q15,
                    int16_t* out, uint32_t n) {
   if (!state || !out) return;
+#if BR_POLY_SUPPORT
+  if (ArenaBytesForModel(model) > static_cast<PlaitsState*>(state)->arena_capacity) {
+    memset(out, 0, n * sizeof(*out));
+    return;
+  }
+#endif
   /* Keep each source render within the adapter's bounded FIFO window while
    * honoring a larger caller block. Splitting here makes a 64-frame request
    * exactly equivalent to two existing 32-frame calls. */

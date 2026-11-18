@@ -27,11 +27,27 @@
  *   ldr_flash_known()     the flash chip is the 1 MiB part SLOOP's storage expects (else nothing is
  *                         written: the update records go and the old firmware starts again)
  *   ldr_progress(done, total)
- * plus the ota.c hooks (frames, time, idle). */
+ * plus the ota.c hooks (frames, time, idle).
+ *
+ * SMK-37 Pro (BR_PRODUCT_SMK37), as built in the JamesOS-K tree: the app area is
+ * [0x4000, 0x9D000) (hal/smk37/smk37_flash_map.h); update records are looked for only in the
+ * staging window [0xBB000, 0xC0000) (the sector step SMK37_FLASH_SECTOR is the same 0x1000u);
+ * flash.bin must lie inside the package and be exactly 0x9D000 B, so there is no CRC pass over
+ * bytes past the app area; with an unknown flash chip the records stay ("leave the update
+ * record intact") and loader.c does not reset: the loader stays. */
+#include "../product.h"
+#if BR_PRODUCT_SMK37
+#include "smk37/smk37_flash_map.h"
+#define LDR_APP_LO SMK37_APP_LO
+#define LDR_APP_HI SMK37_APP_HI
+#define LDR_REC_LO SMK37_OTA_LO                 /* update records: the staging window only */
+#define LDR_REC_HI SMK37_OTA_HI
+#else
 #define LDR_APP_LO 0x4000u
 #define LDR_APP_HI 0x93000u
 #define LDR_REC_LO 0x93000u                     /* update records live above the app ... */
 #define LDR_REC_HI 0xFC000u                     /* ... and below Felucca's globals */
+#endif
 
 static int ldr_fread(uint32_t off, void *p, uint32_t n);
 static int ldr_erase(uint32_t off);
@@ -86,7 +102,8 @@ static int ldr_chip_key(uint32_t *key)
 
 #define LDR_EBADPKG (-12)                       /* flash.bin as served does not match the package's CRC16 */
 #define LDR_ENOFIN (-13)                        /* no "success" from the host */
-#define LDR_EFLASH (-14)                        /* another flash chip: nothing written, the records dropped */
+#define LDR_EFLASH (-14)                        /* another flash chip: nothing written, the records dropped
+                                                 * (SMK-37 Pro: the records stay) */
 
 /* the update records (RAM, and flash: a 4K boundary - 256) go: the SPL boots the app */
 static void ldr_records_drop(void)
@@ -105,13 +122,24 @@ static void ldr_records_drop(void)
 static int ldr_pass(void)
 {
     static uint8_t hdr[0x400], sec[0x1000], cur[0x1000];
+#if BR_PRODUCT_SMK37
+    uint32_t i, k, fl_off, fl_size, ota_off, ota_len, key, s, total, want, crc = 0, done = 0;
+#else
     uint32_t i, k, fl_off, fl_size, ota_off, ota_len, key, s, n, want, crc = 0, done = 0;
+#endif
     int rc;
     /* 1. UFW header + entry list (ota.c) */
     if ((rc = ota_ufw(hdr, &fl_off, &fl_size, &ota_off, &ota_len, &want)) != 0)
         return rc;
+#if BR_PRODUCT_SMK37
+    total = ota_rd32(hdr + 4);
+    if (fl_off < sizeof hdr || fl_off > total || fl_size > total - fl_off ||
+        fl_size != SMK37_APP_HI)
+        return -3;
+#else
     if (!fl_off || fl_size < LDR_APP_HI)
         return -3;
+#endif
     /* 2. the package's app area must decrypt with this chip's key */
     if ((rc = ldr_chip_key(&key)) != 0)
         return -40 + rc;
@@ -120,10 +148,15 @@ static int ldr_pass(void)
     ldr_sfc(sec, 32, 0, key);
     if (ota_crc16(sec + 2, 30, 0) != ota_rd16(sec))
         return -6;                                       /* package for another chip key */
+#if BR_PRODUCT_SMK37
+    if (!ldr_flash_known())
+        return LDR_EFLASH;
+#else
     if (!ldr_flash_known()) {                            /* SLOOP would run without its storage and could not */
         ldr_records_drop();                              /* be updated again: keep the firmware there is */
         return LDR_EFLASH;
     }
+#endif
     /* the head of flash.bin is never written, but it is part of the package's CRC */
     for (s = 0; s < LDR_APP_LO; s += 512u) {
         if (ota_read(fl_off + s, sec, 512))
@@ -157,12 +190,14 @@ static int ldr_pass(void)
         done += 0x1000u;
         ldr_progress(done, LDR_APP_HI - LDR_APP_LO);
     }
+#if BR_PRODUCT_FM1
     for (s = LDR_APP_HI; s < fl_size; s += n) {          /* (a flash.bin longer than the app area) */
         n = fl_size - s < 512u ? fl_size - s : 512u;
         if (ota_read(fl_off + s, sec, n))
             return -7;
         crc = ota_crc16(sec, n, crc);
     }
+#endif
     /* 4. finish: the whole package arrived as it was built, the host confirms, the record goes,
      *    the SPL boots the app */
     if (crc != want)

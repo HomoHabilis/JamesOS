@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logicalImage, productOf, validateStockPackage, loadStockPackage, STOCK_V15_SIZE, STOCK_V15_URL } from "./fm1pkg.js";
 import { Updater, pack7, unpack7, FM1_PORT, OUR_LOADER } from "./fm1ota.js";
-import { firmwareKind, packageFor, packageForLoader, totalReads } from "./installer.js";
+import { firmwareKind, oldProjectFormat, packageFor, packageForLoader, totalReads } from "./installer.js";
 
 let failed = 0;
 const ok = (cond, what) => { console.log(`${what.padEnd(72)} ${cond ? "ok" : "FAIL"}`); if (!cond) failed++; };
@@ -163,7 +163,11 @@ const APP = "FM-1_9262150", BASE = "FM-1_9262108", APP_LOADER = "ota-FM-1_904";
 /* ------------------------------------------------------------- the route (installer.js) --- */
 ok(firmwareKind("FM-1_015") === "official" && firmwareKind("FM-1_9262108") === "jamesos" && firmwareKind(APP) === "jamesos" &&
    firmwareKind("FM-1_927") === "felucca" && firmwareKind("FM-1_900") === "felucca" && firmwareKind("FM-2_015") === "other" &&
-   firmwareKind("FM-1_92621080") === "other" && firmwareKind("FM-1_016") === "official-other", "installer.js: official, JamesOS, SLOOP / Felucca and unknown identities");
+   firmwareKind("FM-1_92621080") === "other" && firmwareKind("FM-1_016") === "official-other" &&
+   firmwareKind("FM-1_9673083") === "jamesos" && firmwareKind("FM-1_9263001") === "jamesos" && firmwareKind("FM-1_967308") === "other",
+   "installer.js: official, JamesOS (this fork, upstream 1.0a and 1.0b), SLOOP / Felucca and unknown identities");
+ok(oldProjectFormat("FM-1_9262108") && oldProjectFormat("FM-1_9262150") && !oldProjectFormat("FM-1_9262151") &&
+   !oldProjectFormat("FM-1_9673083") && !oldProjectFormat("FM-1_015"), "installer.js: 1.0a builds (old project format) are told apart");
 ok(packageFor("FM-1_015") === "base" && packageFor(BASE) === "app" && packageFor(APP) === "app" &&
    packageFor("FM-1_927") === null && packageFor("FM-1_016") === null && packageFor("FM-1_1234") === null,
   "installer.js: official gets the base, JamesOS the update, anything else nothing");

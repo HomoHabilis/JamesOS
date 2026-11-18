@@ -35,6 +35,7 @@
 
 #include "plaits/dsp/oscillator/sine_oscillator.h"
 #include "plaits/dsp/oscillator/oscillator.h"
+#include "plaits/dsp/dsp.h"  // plaits_config.h
 #include "plaits/resources.h"
 
 namespace plaits {
@@ -121,14 +122,24 @@ void SAMSpeechSynth::Render(
     frequency = 0.0625f;
   }
   
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  // SpeechEngine passes consonant = (trigger == TRIGGER_RISING_EDGE), which
+  // is never true here: Voice::Render sets TRIGGER_HIGH with every rising
+  // edge (plaits_config.h). Init zeroes consonant_samples_ and only a
+  // consonant raises it.
+  (void)consonant;
+  const size_t consonant_samples = 0;
+#else
   if (consonant) {
     consonant_samples_ = kSampleRate * 0.05f;
     int r = (vowel + 3.0f * frequency + 7.0f * formant_shift) * 8.0f;
     consonant_index_ = (r % kSAMNumConsonants);
   }
   consonant_samples_ -= min(consonant_samples_, size);
+  const size_t consonant_samples = consonant_samples_;
+#endif
   
-  float phoneme = consonant_samples_
+  float phoneme = consonant_samples
       ? (consonant_index_ + kSAMNumVowels)
       : vowel * (kSAMNumVowels - 1.0001f);
 

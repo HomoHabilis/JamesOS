@@ -39,6 +39,21 @@
 #include "plaits/dsp/dsp.h"
 #include "plaits/dsp/oscillator/sine_oscillator.h"
 
+/* Device-only placement of the call-free kick render loop in RAM code. Its
+ * callers stay in XIP flash, beyond direct-call range of RAM, so Render()
+ * reaches the RAM copy through a volatile member-function pointer (as
+ * ResonatorSvf reaches its paired kernel). The method body is unchanged. */
+#ifndef FM1_PLAITS_KICK_RAM
+#define FM1_PLAITS_KICK_RAM 1
+#endif
+#if FM1_PLAITS_KICK_RAM && defined(FM1_DEVICE)
+#define FM1_PLAITS_KICK_RAM_ACTIVE 1
+#define FM1_PLAITS_KICK_RAM_CODE \
+  __attribute__((section(".ram_audio.plaits_drums"), noinline))
+#else
+#define FM1_PLAITS_KICK_RAM_ACTIVE 0
+#endif
+
 namespace plaits {
 
 class AnalogBassDrum {
@@ -74,6 +89,10 @@ class AnalogBassDrum {
     }
   }
   
+#if FM1_PLAITS_KICK_RAM_ACTIVE
+  typedef void (AnalogBassDrum::*RenderRamFn)(
+      bool, bool, float, float, float, float, float, float, float*, size_t);
+
   void Render(
       bool sustain,
       bool trigger,
@@ -85,6 +104,50 @@ class AnalogBassDrum {
       float self_fm_amount,
       float* out,
       size_t size) {
+    RenderRamFn volatile render = &AnalogBassDrum::RenderRam;
+    const RenderRamFn render_fn = render;
+    (this->*render_fn)(sustain, trigger, accent, f0, tone, decay,
+                       attack_fm_amount, self_fm_amount, out, size);
+  }
+
+  // The vendor compiler does not inline ordinary inline helpers into a
+  // function placed in another section, so the original method body is kept
+  // as an always_inline member (its helpers inline there first, as before).
+  FM1_PLAITS_KICK_RAM_CODE void RenderRam(
+      bool sustain,
+      bool trigger,
+      float accent,
+      float f0,
+      float tone,
+      float decay,
+      float attack_fm_amount,
+      float self_fm_amount,
+      float* out,
+      size_t size) {
+    RenderBody(sustain, trigger, accent, f0, tone, decay,
+               attack_fm_amount, self_fm_amount, out, size);
+  }
+
+  __attribute__((always_inline)) inline void RenderBody(
+#else
+  void Render(
+#endif
+      bool sustain,
+      bool trigger,
+      float accent,
+      float f0,
+      float tone,
+      float decay,
+      float attack_fm_amount,
+      float self_fm_amount,
+      float* out,
+      size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+    // The RAM loop takes sustain at run time through a member-function
+    // pointer, so the engine's constant does not reach it; drop the
+    // unreachable sustain path here (plaits_config.h).
+    sustain = false;
+#endif
     const int kTriggerPulseDuration = 1.0e-3f * kSampleRate;
     const int kFMPulseDuration = 6.0e-3f * kSampleRate;
     const float kPulseDecayTime = 0.2e-3f * kSampleRate;

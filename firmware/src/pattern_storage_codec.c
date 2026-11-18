@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "pattern_storage_codec.h"
+#include "pattern_codec_pass.h"
+#include "pattern_overlap.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -22,14 +24,12 @@ static void put32(uint8_t *p, uint32_t n) {
 static uint32_t crc_byte(uint32_t c, uint8_t b) {
     unsigned i; c^=b; for(i=0;i<8;i++) c=(c>>1)^(0xedb88320u & (0u-(c&1u))); return c;
 }
-static int overlap(const void *a, size_t an, const void *b, size_t bn) {
+#if FM1_PATTERN_OVERLAP_SHARED
+int fm1_mem_overlap(const void *a, size_t an, const void *b, size_t bn) {
     uintptr_t x=(uintptr_t)a, y=(uintptr_t)b;
-    if(!an || !bn) return 0;
-    return x<=y ? y-x<an : x-y<bn;
+    return an && bn && (x<=y ? y-x<an : x-y<bn);
 }
-static uint32_t hash3(const uint8_t *p) {
-    return ((uint32_t)p[0]*251u+(uint32_t)p[1]*31u+p[2]) & (HASH_SIZE-1u);
-}
+#endif
 static void emit(uint8_t *out, size_t start, size_t cap, size_t *o, uint8_t b) { if(out && *o>=start && *o-start<cap) out[*o-start]=b; ++*o; }
 static void literals(uint8_t *out, size_t start, size_t cap, size_t *o, const uint8_t *lit, size_t *count) {
     size_t j; if(!*count) return;
@@ -37,55 +37,67 @@ static void literals(uint8_t *out, size_t start, size_t cap, size_t *o, const ui
     for(j=0;j<*count;j++) emit(out,start,cap,o,lit[j]);
     *count=0;
 }
-static size_t pass(const uint8_t *in, size_t n, uint8_t *out, size_t start, size_t cap) {
+/* The one V3 encoder pass, shared by the in-memory encoders below and the
+ * bounded-source encoder (pattern_codec_source.c). Output bytes outside
+ * [start, start+cap) are counted but not written. A source read error sets
+ * in->error; the output is then disposable. */
+#define IN(x) (in->mem ? in->mem[(x)] : in->get(in,(uint32_t)(x)))
+size_t fm1_codec_encode_pass(fm1_codec_bytes *in, size_t n, uint8_t *out, size_t start, size_t cap) {
     uint32_t table[HASH_SIZE], crc=~0u;
     uint8_t lit[64]; size_t i=0, o=HEADER, count=0, j;
     memset(table,0xff,sizeof table);
     while(i<n) {
         size_t repeat=1, match=0, distance=0, run;
-        uint8_t kind;
-        while(repeat<64u && repeat<n-i && in[i+repeat]==in[i]) ++repeat;
+        uint8_t kind, v=IN(i);
+        while(repeat<64u && repeat<n-i && IN(i+repeat)==v) ++repeat;
         if(n-i>=3u) {
-            uint32_t prior=table[hash3(in+i)];
+            uint32_t prior=table[((uint32_t)IN(i)*251u+(uint32_t)IN(i+1u)*31u+IN(i+2u)) & (HASH_SIZE-1u)];
             if(prior!=UINT32_MAX && i>(size_t)prior && i-prior<=WINDOW) {
-                while(match<64u && match<n-i && in[prior+match]==in[i+match]) ++match;
+                while(match<64u && match<n-i && IN(prior+match)==IN(i+match)) ++match;
                 distance=i-prior;
             }
         }
-        if(in[i]==0 && repeat>=2u) { kind=1; run=repeat; }
+        if(v==0 && repeat>=2u) { kind=1; run=repeat; }
         else if(repeat>=3u && repeat>=match) { kind=2; run=repeat; }
         else if(match>=4u) { kind=3; run=match; }
         else { kind=0; run=1; }
+        if(in->error) return o;
         if(kind) {
             literals(out,start,cap,&o,lit,&count);
             emit(out,start,cap,&o,(uint8_t)((kind<<6)|(run-1u)));
-            if(kind==2) emit(out,start,cap,&o,in[i]);
+            if(kind==2) emit(out,start,cap,&o,v);
             if(kind==3) { emit(out,start,cap,&o,(uint8_t)distance); emit(out,start,cap,&o,(uint8_t)(distance>>8)); }
         } else {
-            lit[count++]=in[i];
+            lit[count++]=v;
             if(count==sizeof lit) literals(out,start,cap,&o,lit,&count);
         }
         for(j=0;j<run;j++) {
-            crc=crc_byte(crc,in[i+j]);
-            if(n-(i+j)>=3u) table[hash3(in+i+j)]=(uint32_t)(i+j);
+            crc=crc_byte(crc,IN(i+j));
+            if(n-(i+j)>=3u) table[((uint32_t)IN(i+j)*251u+(uint32_t)IN(i+j+1u)*31u+IN(i+j+2u)) & (HASH_SIZE-1u)]=(uint32_t)(i+j);
         }
+        if(in->error) return o;
         i+=run;
     }
     literals(out,start,cap,&o,lit,&count);
     if(out) { uint8_t h[HEADER]; size_t k; h[0]='P'; h[1]='S'; h[2]='C'; h[3]=3; put32(h+4,(uint32_t)n); put32(h+8,~crc); for(k=0;k<HEADER;k++)if(k>=start && k-start<cap)out[k-start]=h[k]; }
     return o;
 }
+#undef IN
+static size_t pass(const uint8_t *in, size_t n, uint8_t *out, size_t start, size_t cap) {
+    fm1_codec_bytes b = {in, 0, 0};
+    return fm1_codec_encode_pass(&b, n, out, start, cap);
+}
 int fm1_pattern_codec_encode(const uint8_t *in, size_t n, uint8_t *out, size_t cap, size_t *written) {
     size_t need;
     if(!written || (!in && n) || (!out && cap) || n>UINT32_MAX ||
-       n>(SIZE_MAX-HEADER)/2u || overlap(in,n,out,cap)) return FM1_CODEC_INVALID;
+       n>(SIZE_MAX-HEADER)/2u || fm1_mem_overlap(in,n,out,cap)) return FM1_CODEC_INVALID;
     need=pass(in,n,0,0,0); *written=need;
     if(cap<need) return FM1_CODEC_FULL;
     pass(in,n,out,0,cap); return FM1_CODEC_OK;
 }
 int fm1_pattern_codec_encode_slice(const uint8_t *in,size_t n,size_t offset,uint8_t *out,size_t count,size_t *written) {
     size_t need;
-    if(!written||(!in&&n)||(!out&&count)||n>UINT32_MAX||n>(SIZE_MAX-HEADER)/2u||overlap(in,n,out,count))return FM1_CODEC_INVALID;
+    if(!written||(!in&&n)||(!out&&count)||n>UINT32_MAX||n>(SIZE_MAX-HEADER)/2u||fm1_mem_overlap(in,n,out,count))return FM1_CODEC_INVALID;
     need=pass(in,n,0,0,0);*written=need;
     if(offset>need||count>need-offset)return FM1_CODEC_FULL;
     if(count)pass(in,n,out,offset,count);
@@ -133,7 +145,7 @@ static int decode_legacy_v2(const uint8_t *in, size_t n, uint8_t *out, size_t ex
 int fm1_pattern_codec_decode(const uint8_t *in, size_t n, uint8_t *out, size_t expected) {
     uint8_t window[WINDOW]; int version;
     if(!in || n<HEADER || (!out && expected) || expected>UINT32_MAX ||
-       overlap(in,n,out,expected) || in[0]!='P' || in[1]!='S' || in[2]!='C' ||
+       fm1_mem_overlap(in,n,out,expected) || in[0]!='P' || in[1]!='S' || in[2]!='C' ||
        (in[3]!=1 && in[3]!=2 && in[3]!=3) || get32(in+4)!=expected) return FM1_CODEC_INVALID;
     version=in[3];
     if(version==2) {

@@ -17,7 +17,7 @@ static void setup(void)
 {
     br_app_init(); fm1_ms = 1000u;
     br_load_preset(0u, BR_FIRST_PLAITS);
-    br_part[0].length = 4u; br_part[0].division = 1u; br_part[0].swing = 0u;
+    br_part[0].length = 4u; br_part[0].division = 1u; br_swing = 0u;
     for (uint32_t i = 0u; i < 4u; ++i) {
         br_part[0].step[i] = BR_NOTE_STEP(60u + i, 100u);
         br_seq_synth_velocity[0][i] = 255u;

@@ -117,6 +117,7 @@ static volatile struct {
     uint32_t buttons;            /* debounced: bit i = button i (0..13) */
     uint32_t pressed, released;  /* button edges since the last fm1_input_edges() */
     uint32_t notes_pressed;      /* note-key press edges since the last note snapshot/edge read */
+    uint32_t note_tick[27];      /* fm1_ticks() at each note key's last debounced change (played-note timing) */
     uint8_t raw[FM1_NCOL];       /* last frame, packed rows, 1 = closed */
     uint8_t cnt[FM1_NKEY];
     uint8_t enc_prev[FM1_NENC], enc_last[FM1_NENC];
@@ -130,6 +131,11 @@ static volatile struct {
     uint32_t pattern_activity;
 #endif
 } fm1_in;
+#if defined(BR_UI_TIMING_DIAG) && BR_UI_TIMING_DIAG
+/* UI timing diagnostic builds only (src/ui_timing_diag.c): buttons a remote command holds closed. The scan
+ * debounces them like contacts, so they reach fm1_in.buttons and the edges as a finger's press does. */
+static volatile uint32_t fm1_input_diag_held, fm1_input_diag_notes;   /* buttons; note keys (bit = key) */
+#endif
 static uint8_t fm1_led[FM1_NCOL];
 static uint8_t fm1_led_mid[FM1_NCOL];
 #ifndef FM1_GLOW_NS
@@ -318,6 +324,9 @@ static FM1_INPUT_SCANNER_RAM_ATTR void fm1__key(uint32_t id, uint32_t closed)
     volatile uint8_t *c = &fm1_in.cnt[id];
     uint32_t note = id >= 14u, bit = note ? 1u << (id - 14u) : 1u << id;
     uint32_t on = ((note ? fm1_in.notes : fm1_in.buttons) & bit) != 0u;
+#if defined(BR_UI_TIMING_DIAG) && BR_UI_TIMING_DIAG
+    closed |= note ? (fm1_input_diag_notes >> (id - 14u)) & 1u : (fm1_input_diag_held >> id) & 1u;
+#endif
     if (closed == on) {                            /* agrees with the state: start over */
         *c = 0;
         return;
@@ -332,6 +341,7 @@ static FM1_INPUT_SCANNER_RAM_ATTR void fm1__key(uint32_t id, uint32_t closed)
         if (!on)
             fm1_in.notes_pressed |= bit;
         fm1_in.notes ^= bit;
+        fm1_in.note_tick[id - 14u] = FM1_INPUT_TICKS();
     } else {
         fm1_in.buttons ^= bit;
         if (!on)
@@ -509,6 +519,24 @@ static int32_t fm1_enc_take(uint32_t e)
     return s;
 }
 
+#if defined(BR_UI_TIMING_DIAG) && BR_UI_TIMING_DIAG
+/* UI timing diagnostic builds only: detents added where the quadrature decoder puts them. */
+static void fm1_input_diag_turn(uint32_t e, int32_t n)
+{
+    uint32_t k = fm1__lock();
+    fm1_in.enc_steps[e] = (int16_t)(fm1_in.enc_steps[e] + n);
+    fm1__unlock(k);
+}
+static uint32_t fm1_input_diag_steps_waiting(void)
+{
+    uint32_t e;
+    for (e = 0; e < FM1_NENC; e++)
+        if (fm1_in.enc_steps[e])
+            return 1u;
+    return 0u;
+}
+#endif
+
 static uint32_t fm1_input_edges(uint32_t *released)
 {
     uint32_t k = fm1__lock();
@@ -541,6 +569,13 @@ static uint32_t fm1_input_note_snapshot(uint32_t *held)
     fm1_in.notes_pressed = 0;
     fm1__unlock(k);
     return pressed;
+}
+
+/* When note key k (0..26) last changed: its press or release time, for played-note timing. Read
+ * after the snapshot; a change in between only makes this a little later. */
+static uint32_t fm1_input_note_tick(uint32_t k)
+{
+    return k < 27u ? fm1_in.note_tick[k] : FM1_INPUT_TICKS();
 }
 
 /* Set one button/note LED to a uniform intensity, replacing its previous level. */

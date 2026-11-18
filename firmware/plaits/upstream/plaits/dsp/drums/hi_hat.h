@@ -42,6 +42,21 @@
 #include "plaits/dsp/dsp.h"
 #include "plaits/dsp/oscillator/oscillator.h"
 
+/* Device-only placement of the call-free 808 metallic-noise loop in RAM code.
+ * HiHat::Render stays in XIP flash, beyond direct-call range of RAM, so
+ * SquareNoise::Render reaches the RAM copy through a volatile member-function
+ * pointer (as ResonatorSvf reaches its paired kernel). Body unchanged. */
+#ifndef FM1_PLAITS_SQUARE_NOISE_RAM
+#define FM1_PLAITS_SQUARE_NOISE_RAM 1
+#endif
+#if FM1_PLAITS_SQUARE_NOISE_RAM && defined(FM1_DEVICE)
+#define FM1_PLAITS_SQUARE_NOISE_RAM_ACTIVE 1
+#define FM1_PLAITS_SQUARE_NOISE_RAM_CODE \
+  __attribute__((section(".ram_audio.plaits_drums"), noinline))
+#else
+#define FM1_PLAITS_SQUARE_NOISE_RAM_ACTIVE 0
+#endif
+
 namespace plaits {
 
 struct HiHatControlCoefficients {
@@ -60,7 +75,28 @@ class SquareNoise {
     std::fill(&phase_[0], &phase_[6], 0);
   }
     
+#if FM1_PLAITS_SQUARE_NOISE_RAM_ACTIVE
+  typedef void (SquareNoise::*RenderRamFn)(
+      float, float*, float*, float*, size_t);
+
   void Render(float f0, float* temp_1, float* temp_2, float* out, size_t size) {
+    RenderRamFn volatile render = &SquareNoise::RenderRam;
+    const RenderRamFn render_fn = render;
+    (this->*render_fn)(f0, temp_1, temp_2, out, size);
+  }
+
+  // Ordinary inline helpers do not inline into another section on this
+  // compiler; keep the original body as an always_inline member.
+  FM1_PLAITS_SQUARE_NOISE_RAM_CODE void RenderRam(
+      float f0, float* temp_1, float* temp_2, float* out, size_t size) {
+    RenderBody(f0, temp_1, temp_2, out, size);
+  }
+
+  __attribute__((always_inline)) inline void RenderBody(
+#else
+  void Render(
+#endif
+      float f0, float* temp_1, float* temp_2, float* out, size_t size) {
     const float ratios[6] = {
         // Nominal f0: 414 Hz
         1.0f, 1.304f, 1.466f, 1.787f, 1.932f, 2.536f
@@ -235,6 +271,11 @@ class HiHat {
       float* temp_2,
       float* out,
       size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+    // Not inlined into HiHatEngine::Render, so the engine's constant does
+    // not reach here; drop the unreachable sustain VCA (plaits_config.h).
+    sustain = false;
+#endif
     if (trigger) {
       envelope_ = (1.5f + 0.5f * (1.0f - decay)) * (0.3f + 0.7f * accent);
     }

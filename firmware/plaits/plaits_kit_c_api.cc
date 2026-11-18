@@ -35,6 +35,10 @@
 #ifndef BR_PLAITS_KIT_LOCAL_PHASE_CURSOR
 #define BR_PLAITS_KIT_LOCAL_PHASE_CURSOR 1
 #endif
+/* Register-resident FIFO count, age and last output in the 1:1 fast prefix. */
+#ifndef BR_PLAITS_KIT_PREFIX_LOCALS
+#define BR_PLAITS_KIT_PREFIX_LOCALS 1
+#endif
 #ifndef FM1_PLAITS_SOURCE_RATE_32K
 #define FM1_PLAITS_SOURCE_RATE_32K 1
 #endif
@@ -481,7 +485,7 @@ static void render_source(KitState *s, uint32_t lane, const br_sound_t *sound,
      64 preserves the prior kit voicing to within control quantization. */
   p.timbre = unit(sound->timbre);
   p.morph = unit(sound->color);
-  p.harmonics = unit(sound->decay) * 0.70f + unit(sound->drum_snap) * 0.30f +
+  p.harmonics = unit(sound->decay) * 0.70f + unit(64u) * 0.30f /* SNAP has no knob on the Plaits kit: its neutral value, not a hidden one */ +
       (unit(sound->plaits_harmonics) - unit(64u)) * 0.70f;
   if (p.harmonics < 0.0f) p.harmonics = 0.0f;
   if (p.harmonics > 1.0f) p.harmonics = 1.0f;
@@ -1151,6 +1155,49 @@ static uint32_t render_keyed_impl(void *state, const br_sound_t *sound,
             ? lifetime_frames - l->age : 0u;
         if (safe_prefix > n) safe_prefix = n;
       }
+#if BR_PLAITS_KIT_LOCAL_PHASE_CURSOR && BR_PLAITS_KIT_PREFIX_LOCALS && \
+    (FM1_PLAITS_SOURCE_RATE_44100 || FM1_PLAITS_KIT_NATIVE_RATE)
+      /* One source frame per output frame. Nothing in this loop changes the
+       * FIFO, so keep its count, the lane's age and last output in locals:
+       * the int32 output stores could otherwise alias the uint32 lane fields
+       * and force a reload/store of each of them on every frame. The values,
+       * their order and the committed lane state are those of the loop below. */
+      {
+        const float *fifo = l->fifo;
+        const uint32_t fifo_count = l->fifo_count;
+        int32_t *lane_key = key && lane == key_lane ? key : nullptr;
+        /* Frames with a FIFO sample, then frames past the FIFO end: the
+         * cursor stops there and each such frame is exactly 0.0f, which adds
+         * 0 to out/key, leaves peak unchanged and makes last_output 0. */
+        const uint32_t available = resample_index < fifo_count ?
+            fifo_count - resample_index : 0u;
+        const uint32_t sourced_end = safe_prefix - i < available ?
+            safe_prefix : i + available;
+        const float *src = fifo + resample_index;
+        int32_t last_output = l->last_output;
+        resample_index += sourced_end - i;
+        l->age += safe_prefix - i;
+        for (; i < sourced_end; ++i) {
+          const float value = *src++;
+          const float av = value < 0.0f ? -value : value;
+          if (av > peak) peak = av;
+#if BR_PLAITS_KIT_FLOAT_OUTPUT_SCALE
+          const int32_t sample = scale_float_output_by_lane_gain(value, output_scale);
+#else
+          int32_t sample = static_cast<int32_t>(value * 32767.0f);
+          sample = scale_sample_by_lane_gain(sample, lane_gain);
+#endif
+          out[i] += sample;
+          if (lane_key) lane_key[i] += sample;
+          last_output = sample;
+        }
+        if (i < safe_prefix) {
+          last_output = 0;
+          i = safe_prefix;
+        }
+        l->last_output = last_output;
+      }
+#else
       for (; i < safe_prefix; ++i) {
 #if BR_PLAITS_KIT_LOCAL_PHASE_CURSOR
         const float value = next_sample_cursor(l, &resample_index,
@@ -1176,6 +1223,7 @@ static uint32_t render_keyed_impl(void *state, const br_sound_t *sound,
         l->last_output = sample;
         ++l->age;
       }
+#endif
     }
 #else
     uint32_t i = 0u;

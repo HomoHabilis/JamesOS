@@ -85,14 +85,12 @@ static void configure(uint32_t kit, uint32_t key_lane)
         sound.pan = 64u;
         fx.delay_time = 45u;
         fx.delay_feedback = 35u;
-        fx.reverb_tone = 64u;
         br_part[p].sound = sound;
         br_part[p].mod = mod;
         br_part[p].fx = fx;
         br_part[p].revision = 2u;
         for (lane = 0u; lane < BR_DRUM_LANES; ++lane) {
             br_part[p].lane_level[lane] = 127u;
-            br_part[p].lane_gate[lane] = 128u;
         }
     }
     br_master.revision = 2u;

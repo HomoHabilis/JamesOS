@@ -14,10 +14,17 @@ runs:
       shell: bash
       run: |
         python3 tests/run_midi_seq_out.py
-        python3 tests/run_midi_channel_ui.py --reuse-dsp
+        python3 tests/run_global_shortcuts.py --reuse-dsp
+        CCC_OVERRIDE_OPTIONS='+-D_GNU_SOURCE' python3 tests/run_midi_channel_ui_hd.py
         python3 tests/run_midi_session_v16.py --reuse-dsp
         python3 tests/run_pattern_v16_only.py
         python3 tests/test_release_tag.py
+    - name: Package validator tests
+      shell: bash
+      run: |
+        python3 web/base_package.py --releases releases
+        python3 tests/run_validate_package_padding.py
+        python3 tests/run_vendor_boot_validation.py
     - name: Web installer tests
       shell: bash
       run: |

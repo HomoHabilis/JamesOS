@@ -81,8 +81,8 @@ static void configure(const fx_case_t *k)
                   br_part[0].fx.delay_feedback = k->b; br_part[0].sound.delay = k->send; break;
     case K_MOD:   br_part[0].fx.mod_engine = k->engine; br_part[0].fx.mod_rate = k->a;
                   br_part[0].fx.mod_depth = k->b; br_part[0].fx.mod_mix = k->send; break;
-    case K_REVERB: br_part[0].fx.reverb_engine = k->engine; br_part[0].fx.reverb_tone = k->a;
-                  br_part[0].sound.space = k->b; br_part[0].sound.reverb = k->send; break;
+    case K_REVERB: br_master.reverb_engine = k->engine; br_master.reverb_decay = k->a;
+                  br_master.reverb_size = k->b; br_part[0].sound.reverb = k->send; break;
     case K_HEAT:  br_master.revision++;
                   br_master.fx.heat_type = k->engine; br_master.fx.heat_amount = k->a; br_master.fx.filter = k->b;
                   RING_PUBLISH(); br_master.revision++; break;

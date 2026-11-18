@@ -23,6 +23,11 @@ SCANNER_RAM_SYMBOL_ALLOWLIST = (
     "fm1__keys", "fm1__frame",
 )
 SCANNER_REQUIRED_ROOTS = ("fm1_timer5_irq", "fm1_input_tick", "fm1__sr_word")
+SMK_SCANNER_ROOTS = ("fm1_timer5_irq", "fm1_input_tick")
+SMK_SCANNER_HELPERS = SMK_SCANNER_ROOTS + (
+    "fm1__frame", "smk_curve", "smk__key_event", "smk__keys", "smk__buttons",
+    "smk__encoders", "smk__leds", "smk__padq", "smk__pad", "smk__analog",
+)
 SCANNER_INLINE_LEAVES = (
     "fm1__pa_out_update", "fm1__ph_out_update",
     "fm1__led_pwm_priority_mask_at", "fm1_timer5_usb_phase_due",
@@ -260,7 +265,7 @@ def _disassembly_bodies(disassembly: str) -> dict[str, bool]:
 
 
 def audit_scanner(candidate: Path, require_original_gpio: bool = True,
-                  experimental_gpio_shift: bool = False) -> dict[str, Any]:
+                  experimental_gpio_shift: bool = False, *, smk37: bool = False) -> dict[str, Any]:
     """Check scanner roots and their decoded direct-call closure in RAM audio."""
     candidate = Path(candidate).resolve()
     errors: list[str] = []
@@ -269,15 +274,18 @@ def audit_scanner(candidate: Path, require_original_gpio: bool = True,
     lo, hi = bounds if bounds else (0, 0)
     gpio_trace, gpio_errors = gpio_trace_contract(
         candidate, experimental=experimental_gpio_shift)
-    errors.extend(gpio_errors)
+    if not smk37:
+        errors.extend(gpio_errors)
+    roots = SMK_SCANNER_ROOTS if smk37 else SCANNER_REQUIRED_ROOTS
+    helpers = SMK_SCANNER_HELPERS if smk37 else SCANNER_RAM_SYMBOL_ALLOWLIST
 
-    for name in SCANNER_REQUIRED_ROOTS:
+    for name in roots:
         symbol = symbols.get(name)
         if not symbol or not symbol[2]:
             errors.append(f"missing required scanner root: {name}")
 
     scanner_functions = {name for name, symbol in symbols.items()
-                         if symbol[2] and _belongs(name, SCANNER_RAM_SYMBOL_ALLOWLIST)}
+                         if symbol[2] and _belongs(name, helpers)}
     for name in sorted(scanner_functions):
         address, section, _ = symbols[name]
         if not bounds or section != ".ram_audio" or not lo <= address < hi:
@@ -307,7 +315,7 @@ def audit_scanner(candidate: Path, require_original_gpio: bool = True,
             edges.append({"from": current, "to": target[1].strip(), "address": address})
             if not bounds or not lo <= address < hi:
                 errors.append("scanner helper reaches outside copied RAM: " + line.strip())
-    for name in SCANNER_REQUIRED_ROOTS:
+    for name in roots:
         if name not in bodies:
             errors.append("required scanner disassembly body is missing: " + name)
         elif not bodies[name]:
@@ -316,7 +324,7 @@ def audit_scanner(candidate: Path, require_original_gpio: bool = True,
     for name, expected in (("FM1_TIMER5_RAM", 1), ("FM1_INPUT_SCANNER_RAM", 1)):
         if _macro(candidate, POLICY_PATH, name) != expected:
             errors.append(f"unexpected selector: {name} must be {expected}")
-    if require_original_gpio and not experimental_gpio_shift:
+    if not smk37 and require_original_gpio and not experimental_gpio_shift:
         for name in GPIO_INPUT_SELECTORS:
             if _macro(candidate, INPUT_PATH, name, 0) != 0:
                 errors.append(f"qualified scanner path requires {name}=0")
@@ -327,11 +335,13 @@ def audit_scanner(candidate: Path, require_original_gpio: bool = True,
         "artifact_sha256": hashes,
         "ram_audio_start": lo if bounds else None,
         "ram_audio_end": hi if bounds else None,
-        "required_roots": list(SCANNER_REQUIRED_ROOTS),
+        "required_roots": list(roots),
         "scanner_functions": {name: symbols[name][0] for name in sorted(scanner_functions)},
         "direct_edges": edges,
         "inline_leaf_allowlist": list(SCANNER_INLINE_LEAVES),
-        "original_gpio_required": require_original_gpio and not experimental_gpio_shift,
+        "original_gpio_required": not smk37 and require_original_gpio and not experimental_gpio_shift,
+        # The SMK-37 report names its target; FM-1 reports keep their original shape.
+        **({"target": "SMK-37 Pro"} if smk37 else {}),
         "experimental_gpio_shift": experimental_gpio_shift,
         "gpio_trace_contract": gpio_trace,
         "scope": "decoded scanner-helper edges only; Timer5 USB/journal callouts may remain XIP; not flash-off-safe",
@@ -412,7 +422,7 @@ def audit_vcf(candidate: Path) -> dict[str, Any]:
 def audit_candidate(candidate: Path, *, scanner: bool | None = None,
                     vcf: bool | None = None, require_original_gpio: bool = True,
                     runtime_profile: bool = False,
-                    experimental_gpio_shift: bool = False) -> dict[str, Any]:
+                    experimental_gpio_shift: bool = False, smk37: bool = False) -> dict[str, Any]:
     """Run selected linked checks and classify qualification vs profiling.
 
     By default selector values in the candidate sources choose which checks
@@ -473,7 +483,7 @@ def audit_candidate(candidate: Path, *, scanner: bool | None = None,
                 errors.append(f"qualified RAM placement requires {name}=0")
 
     scanner_report = audit_scanner(candidate, require_original_gpio,
-                                   experimental_gpio_shift) if scanner_selected else None
+                                   experimental_gpio_shift, smk37=smk37) if scanner_selected else None
     vcf_report = audit_vcf(candidate) if vcf_selected else None
     if scanner_report:
         errors.extend(scanner_report["errors"])
@@ -509,12 +519,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="require the original GPIO shift path (the default; retained for compatibility)")
     parser.add_argument("--runtime-profile", action="store_true",
                         help="classify explicitly instrumented output as diagnostic-only")
+    parser.add_argument("--target", choices=("fm1", "smk37"), default="fm1",
+                        help="product whose scanner roots and GPIO contract apply (default: fm1)")
     parser.add_argument("--output", type=Path,
                         help="report path (default: candidate/build/runtime-ram-audit.json)")
     args = parser.parse_args(argv)
     report = audit_candidate(args.candidate, scanner=args.scanner, vcf=args.vcf,
                              runtime_profile=args.runtime_profile,
-                             experimental_gpio_shift=args.experimental_gpio_shift)
+                             experimental_gpio_shift=args.experimental_gpio_shift,
+                             smk37=args.target == "smk37")
     output = args.output or (args.candidate / "build" / "runtime-ram-audit.json")
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)

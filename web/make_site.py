@@ -27,7 +27,7 @@ import validate_package  # noqa: E402
 import base_package  # noqa: E402
 
 BLOCKS, BLK, KEEP = 20, 0x30, 0x2F
-IDENTITY = re.compile(r"FM-1_9262\d{3}")
+IDENTITY = re.compile(r"FM-1_926\d{4}")
 
 
 def strip_module(src):

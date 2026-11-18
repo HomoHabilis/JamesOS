@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include "upstream/plaits_config.h"
+#include "../product.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +37,14 @@ extern "C" {
 void PLAITS_STATE_ABI_SYMBOL(void);
 
 void plaits_state_init(void *state, uint32_t seed);
+#if BR_POLY_SUPPORT
+/* Experimental compact voice storage. The buffer must be aligned to
+ * PLAITS_STATE_ALIGN and have at least plaits_compact_state_bytes(model)
+ * bytes. Changing to a model requiring a larger arena requires rebuilding
+ * the state; note_on and render safely reject such a change. */
+uint32_t plaits_compact_state_bytes(uint32_t model);
+int plaits_compact_state_init(void *state, uint32_t bytes, uint32_t model, uint32_t seed);
+#endif
 /* Optionally allocate and initialize the selected engine before the first
  * note render. The default build leaves this as a no-op. */
 void plaits_prepare_model(void *state, uint32_t model);

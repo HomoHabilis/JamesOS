@@ -45,7 +45,7 @@ int main(void) {
     assert(!br_ui.held_note[25u] && !br_live_count[0] && !br_punch_ks.shift);
     /* The drum mixer retains its inactive keyboard, including the Punch shift. */
     br_ui.part = BR_DRUM_PART; br_load_preset(BR_DRUM_PART, BR_KIT_PLAITS);
-    br_ui.page = BR_PAGE_ROUTE; br_ui.screen[BR_PAGE_ROUTE] = 0u;
+    br_ui.page = BR_PAGE_ROUTE; br_ui.screen[BR_PAGE_ROUTE] = 3u;   /* KIT LEVEL (EDIT), the drum mixer */
     down(25u); down(8u);
     assert(br_ui.page == BR_PAGE_ROUTE && !br_punch_ks.shift && br_punch_effect == BR_PUNCH_NONE);
     up(8u); up(25u); br_ui.part = 0u;
