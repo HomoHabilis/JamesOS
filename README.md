@@ -8,6 +8,10 @@ JamesOS is community firmware for the M-VAVE FM-1, built on Dinghy and the Feluc
 
 JamesOS is a Gjelly project by Aaron Grando (a.k.a. James Os).
 
+> **This fork** adds MIDI notes and clock out and a USB AUDIO setting for driving other gear; see [This fork](#this-fork-midi-output-and-usb-audio).
+>
+> **Install it from your browser:** [homohabilis.github.io/JamesOS](https://homohabilis.github.io/JamesOS/) (Chrome or Edge on a computer, Chrome on Android). Releases: [GitHub releases](https://github.com/HomoHabilis/JamesOS/releases).
+
 This repository builds two products from one source tree: JamesOS for the FM-1, the default, and JamesOS-K, a port for the M-VAVE SMK-37 Pro. The rest of this page describes JamesOS on the FM-1 unless a section says otherwise; see [Products](#products).
 
 <table>
@@ -76,7 +80,7 @@ These features pass the host tests (`python3 tests/run_midi_seq_out.py`, `python
 
 ## Web installer
 
-`web/` holds a browser installer after SLOOP's (Web MIDI: Chrome or Edge on a computer, Chrome on Android). The Release workflow publishes it with GitHub Pages (Settings → Pages → Source: GitHub Actions), so the page always installs the latest release. The page:
+The installer is at **[homohabilis.github.io/JamesOS](https://homohabilis.github.io/JamesOS/)**. `web/` holds its source, a browser installer after SLOOP's (Web MIDI: Chrome or Edge on a computer, Chrome on Android). The Release workflow publishes it with GitHub Pages (Settings → Pages → Source: GitHub Actions), so the page always installs the latest release. The page:
 
 - updates an FM-1 that runs JamesOS (this fork, upstream 1.0a or 1.0b) to this build, after a warning when it runs 1.0a, whose projects 1.0b lists as OLD FORMAT until they are converted with upstream's browser Editor;
 - installs the released build 2108 from-V15 package on an FM-1 that runs the official V15, then updates it in a second pass (upstream tested this 2108 to 1.0b upgrade);
