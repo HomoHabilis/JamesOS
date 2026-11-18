@@ -3548,10 +3548,8 @@ BR_COLD_SIZE static void br_seq_fire_timed(uint32_t p, uint32_t pos, uint32_t ev
                 prev_tied && br_seq_note[p] == note;
             if (br_seq_note[p] != 255u && !sustain && !slide)
                 br_release_note(p, br_seq_note[p]);
-            if (!sustain) {
-                br_start_note(p, note, velocity, slide);
-                br_midi_out_note_on(BR_MIDI_OUT_SEQ, p, note, velocity);
-            }
+            if (!sustain) br_start_note(p, note, velocity, slide);
+            if (!sustain) br_midi_out_note_on(BR_MIDI_OUT_SEQ, p, note, velocity);
 #if defined(BR_PATTERN_TRANSITION_TEST)
             if (!sustain) ++br_pattern_test_hits[p][0];
 #endif

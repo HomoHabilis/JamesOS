@@ -15,6 +15,7 @@ static uint32_t word_at(const uint8_t *p)
 
 #if defined(OVERRUN_PLATFORM)
 #include "audio_render_status.h"
+#include "../firmware/src/midi_out_schedule.h"
 
 #define FM1_DEVICE 1
 #define BR_SPLIT_AUDIO 1
@@ -50,6 +51,7 @@ static void fm1_audio_ack_aux(uint8_t p) { (void)p; }
 static uint32_t fm1_audio_free_half(void) { return free_half; }
 static void fm1_audio_ack_half(void) { pending = 0u; }
 static void uac_render_start(void) { }
+static fm1_midi_out_schedule_t br_midi_out_schedule;   /* the fork's timed MIDI out: not under test */
 static void br_engine_pipeline_source_deadline_set(uint32_t deadline) { (void)deadline; }
 static void br_engine_pipeline_source_deadline_clear(void) { }
 static void fm1_audio_tail_metrics_reset(void) { }

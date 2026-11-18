@@ -105,7 +105,7 @@ int main(void)
     /* Screens: FILTER, RESONANCE, ENV DEPTH; the fourth control is unused. */
     setup();
     br_ui.page = BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX] = 1u;
-    assert(br_screen_count() == 9u);   /* screen IDs 0-8; GLO shows six, then TEMPO / MIDI */
+    assert(br_screen_count() == 10u);  /* screen IDs 0-9; GLO shows six, then TEMPO / MIDI / USB AUDIO */
     assert(!strcmp(br_control(2u).label, "ENV DEPTH") && !br_control(3u).label[0]);
     br_control_turn(2u, -30); br_control_turn(3u, 55);
     assert(br_master.fx.env_depth == -30 && br_master.fx.smooth == 0u);

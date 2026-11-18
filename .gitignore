@@ -6,9 +6,9 @@ build/
 .env
 .env.*
 
-# Firmware packages made by builds; the published ones in releases/ stay tracked
+# Firmware packages made by builds. This fork does not track releases/: GitHub releases
+# carry the packages, and web/base_package.py --releases fetches upstream's test fixtures.
 *.fwsc
-!/releases/*.fwsc
 
 # Flash dumps, device captures and recordings (private: calibration, keys, user data)
 *.bin

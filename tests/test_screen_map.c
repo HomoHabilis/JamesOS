@@ -62,7 +62,7 @@ int main(void)
 #define GLO_PAN_AT 1u
 #define GLO_FILTER_AT 2u
 #endif
-    static const struct { uint32_t screen; const char *title; } setup[3] = {{2u, "TEMPO"}, {7u, MIDI1}, {8u, MIDI2}};
+    static const struct { uint32_t screen; const char *title; } setup[4] = {{2u, "TEMPO"}, {7u, MIDI1}, {8u, MIDI2}, {9u, "USB AUDIO"}};
     br_app_init(); host_after_intro(); fm1_ms = 3000u;
 
     /* GLO taps: the sound screens in order (six on the FM-1, five from PAN on the SMK-37), then around again. */
@@ -75,17 +75,17 @@ int main(void)
     expect(BR_PAGE_MIX, 3u, "GLOBAL / PAN", GLO_N, GLO_PAN_AT);
     up(BTN_GLO); expect(BR_PAGE_MIX, 1u, "GLOBAL / FILTER", GLO_N, GLO_FILTER_AT);
     down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN);
-    expect(BR_PAGE_MIX, 2u, "TEMPO", 3u, 0u);
+    expect(BR_PAGE_MIX, 2u, "TEMPO", 4u, 0u);
     /* TEMPO has BPM, SWING, CLOCK SOURCE and MONITOR. */
     assert(!strcmp(br_control(0u).label, "BPM") && !strcmp(br_control(1u).label, "SWING") &&
            !strcmp(br_control(2u).label, "CLOCK SOURCE") && !strcmp(br_control(3u).label, "MONITOR"));
     /* Taps cycle inside the second group. */
-    for (uint32_t i = 1u; i < 7u; ++i) {
-        tap(BTN_GLO); expect(BR_PAGE_MIX, setup[i % 3u].screen, setup[i % 3u].title, 3u, i % 3u);
+    for (uint32_t i = 1u; i < 9u; ++i) {
+        tap(BTN_GLO); expect(BR_PAGE_MIX, setup[i % 4u].screen, setup[i % 4u].title, 4u, i % 4u);
     }
     /* Long GLO continues the active group rather than switching groups. */
-    tap(BTN_GLO); expect(BR_PAGE_MIX, 7u, MIDI1, 3u, 1u);
-    hold(BTN_GLO, 520u); expect(BR_PAGE_MIX, 8u, MIDI2, 3u, 2u);
+    tap(BTN_GLO); expect(BR_PAGE_MIX, 7u, MIDI1, 4u, 1u);
+    hold(BTN_GLO, 520u); expect(BR_PAGE_MIX, 8u, MIDI2, 4u, 2u);
     /* Coming from another page (a long press, or a tap after HOME), GLO opens its first screen. */
     tap(BTN_ENV); hold(BTN_GLO, 700u);
 #if BR_PRODUCT_SMK37
@@ -106,11 +106,11 @@ int main(void)
     expect(BR_PAGE_MIX, 1u, "GLOBAL / FILTER", GLO_N, GLO_FILTER_AT);
     /* OCT- + GLO opens TEMPO; GLO then reaches MIDI 1. */
     tap(BTN_HOME); down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN);
-    expect(BR_PAGE_MIX, 2u, "TEMPO", 3u, 0u);
+    expect(BR_PAGE_MIX, 2u, "TEMPO", 4u, 0u);
     tap(BTN_GLO);
-    expect(BR_PAGE_MIX, 7u, MIDI1, 3u, 1u);
+    expect(BR_PAGE_MIX, 7u, MIDI1, 4u, 1u);
     /* Turning ALGORITHM on a second-group screen keeps the screen. */
-    host_encoder[ENC_ALGORITHM] += 1; tick(); expect(BR_PAGE_MIX, 7u, MIDI1, 3u, 1u);
+    host_encoder[ENC_ALGORITHM] += 1; tick(); expect(BR_PAGE_MIX, 7u, MIDI1, 4u, 1u);
     host_encoder[ENC_ALGORITHM] -= 1; tick();
     /* ENV: one name per control. HOME filter knob 3 (ENV DEPTH) is the filter's own
      * depth from the mod envelope: it edits filter_env_depth whatever the envelope's
@@ -209,7 +209,7 @@ int main(void)
     assert(br_ui.page == BR_PAGE_MIX && br_ui.screen[BR_PAGE_MIX] == 0u && !strcmp(br_header_title(), "MIXER"));
     tap(BTN_GLO); expect(BR_PAGE_MIX, 3u, "GLOBAL / PAN", 5u, 0u);
     tap(BTN_GLO); expect(BR_PAGE_MIX, 1u, "GLOBAL / FILTER", 5u, 1u);
-    down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN); expect(BR_PAGE_MIX, 2u, "TEMPO", 3u, 0u);
+    down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN); expect(BR_PAGE_MIX, 2u, "TEMPO", 4u, 0u);
     down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN); expect(BR_PAGE_MIX, 3u, "GLOBAL / PAN", 5u, 0u);
     tap(BTN_HOME);
 #endif
@@ -264,7 +264,7 @@ int main(void)
                 assert(br_control_widget(2u, &c) == BR_WIDGET_SNAP);
             }
         }
-        br_ui.part = 0u; down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN); expect(BR_PAGE_MIX, 2u, "TEMPO", 3u, 0u);
+        br_ui.part = 0u; down(BTN_OCT_DOWN); down(BTN_GLO); up(BTN_GLO); up(BTN_OCT_DOWN); expect(BR_PAGE_MIX, 2u, "TEMPO", 4u, 0u);
         host_encoder[ENC_KNOB3] += 1; tick(); assert(br_part[BR_DRUM_PART].sound.drum_snap == 40u);
         tap(BTN_HOME);
     }
