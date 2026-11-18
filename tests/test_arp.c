@@ -50,6 +50,59 @@ int main(void)
     const uint32_t step = (FS * 60u / 120u) / 4u;       /* 1/16 at 120 BPM */
     const uint32_t blocks_per_step = (step + BR_BLOCK - 1u) / BR_BLOCK;
 
+    /* Track LFO destinations act on real arp playback and leave stored controls untouched. */
+    for (uint32_t target = BR_TARGET_ARP_MODE; target <= BR_TARGET_ARP_GATE; ++target) {
+        static br_session_t session;
+        setup(); br_part[0].mod.lfo[0].wave = BR_WAVE_SQUARE;
+        br_part[0].mod.lfo[0].rate = 0u; br_part[0].mod.lfo[0].depth = 127u;
+        br_part[0].mod.lfo[0].target = target; br_part[0].revision += 2u;
+        assert(br_capture(&session)); br_part[0].mod.lfo[0].target = BR_TARGET_OFF;
+        assert(br_restore(&session)); assert(br_part[0].mod.lfo[0].target == target);
+        chord(c_major, 3u); run(1u);
+        if (target == BR_TARGET_ARP_MODE) assert(seen[0] == 64u); /* AS PLAYED */
+        if (target == BR_TARGET_ARP_RATE) assert(br_arp_state[0].sub_frames == (FS * 60u / 120u) / 8u);
+        if (target == BR_TARGET_ARP_OCTAVES) {
+            assert(br_arp_modulated(0u, target, 1u, 1u, 4u) == 4u);
+            run(blocks_per_step * 4u); assert(seen_count >= 4u && seen[3] == 72u);
+        }
+        if (target == BR_TARGET_ARP_GATE) assert(br_arp_state[0].gate_left == br_arp_state[0].sub_frames - BR_BLOCK);
+        assert(br_part[0].arp_mode == BR_ARP_UP && br_part[0].arp_rate == 2u &&
+               br_part[0].arp_octaves == 1u && br_part[0].arp_gate == 64u);
+        assert(br_arp_modulated(1u, target, 2u, 0u, 4u) == 2u);
+    }
+
+    /* A synth track offers these targets on LFO and shared PATCH pages. */
+    for (uint32_t target = BR_TARGET_ARP_MODE; target <= BR_TARGET_ARP_GATE; ++target) {
+        setup();
+        for (uint32_t lfo = 0u; lfo < BR_LFOS; ++lfo) {
+            br_ui.page = BR_PAGE_LFO; br_ui.screen[BR_PAGE_LFO] = lfo;
+            assert(br_target_ui_available(target));
+        }
+        br_ui.screen[BR_PAGE_LFO] = BR_LFOS; assert(!br_target_ui_available(target));
+        br_ui.page = BR_PAGE_ENV; assert(!br_target_ui_available(target));
+        br_ui.page = BR_PAGE_ROUTE; br_ui.screen[BR_PAGE_ROUTE] = 0u;
+        assert(br_target_ui_available(target));
+        br_ui.page = BR_PAGE_LFO; br_ui.screen[BR_PAGE_LFO] = 0u; br_ui.part = BR_DRUM_PART;
+        assert(!br_target_ui_available(target));
+    }
+    /* LFO 2 and patch sources both drive the arp without changing the saved base. */
+    setup();
+    br_part[0].mod.lfo[1] = (br_lfo_config_t){BR_WAVE_SQUARE, 0u, 127u, BR_TARGET_ARP_RATE};
+    br_part[0].revision += 2u; br_snapshot(0u);
+    br_mod_state[0].phase[1] = 0x80000000u;
+    assert(br_arp_modulated(0u, BR_TARGET_ARP_RATE, 2u, 0u, 4u) == 0u);
+    br_cached_mod[0].lfo[1].depth = 0u;
+    br_cached_mod[0].route[0] = (br_route_config_t){BR_SOURCE_GLOBAL_LFO, BR_TARGET_ARP_RATE, 127, 1u};
+    br_master.global_lfo.wave = BR_WAVE_SQUARE;
+    br_master.global_lfo.depth = 0u; /* source is the raw global waveform */
+    br_global_lfo_state.phase[0] = 0u;
+    assert(br_arp_modulated(0u, BR_TARGET_ARP_RATE, 2u, 0u, 4u) == 4u);
+    br_global_lfo_state.phase[0] = 0x80000000u;
+    assert(br_arp_modulated(0u, BR_TARGET_ARP_RATE, 2u, 0u, 4u) == 0u);
+    br_cached_mod[0].route[0].amount = -127;
+    assert(br_arp_modulated(0u, BR_TARGET_ARP_RATE, 2u, 0u, 4u) == 4u);
+    assert(br_part[0].arp_rate == 2u);
+
     /* A ninth distinct held note drops the oldest and reports the limit. */
     setup();
     for (uint32_t i = 0u; i < BR_ARP_MAX_NOTES; ++i) br_arp_add(0u, 48u + i, 0u);
@@ -98,14 +151,14 @@ int main(void)
      * triplet rates stay straight. Compare first free-running intervals. */
     {
         uint32_t straight, swung, triplet_straight, triplet_swung;
-        setup(); br_part[0].swing = 0u; br_part[0].arp_swing = 0u;
+        setup(); br_swing = 0u; br_part[0].arp_swing = 0u;
         chord(c_major, 3u); run(1u); straight = br_arp_state[0].free_left;
-        setup(); br_part[0].swing = BR_SWING_MAX; br_part[0].arp_swing = 0u;
+        setup(); br_swing = BR_SWING_MAX; br_part[0].arp_swing = 0u;
         chord(c_major, 3u); run(1u); swung = br_arp_state[0].free_left;
         assert(swung > straight);
-        setup(); br_part[0].arp_rate = 1u; br_part[0].swing = 0u;
+        setup(); br_part[0].arp_rate = 1u; br_swing = 0u;
         chord(c_major, 3u); run(1u); triplet_straight = br_arp_state[0].free_left;
-        setup(); br_part[0].arp_rate = 1u; br_part[0].swing = BR_SWING_MAX;
+        setup(); br_part[0].arp_rate = 1u; br_swing = BR_SWING_MAX;
         chord(c_major, 3u); run(1u); triplet_swung = br_arp_state[0].free_left;
         assert(triplet_swung == triplet_straight);
     }
@@ -116,7 +169,7 @@ int main(void)
         for (uint32_t gate_index = 0u; gate_index < 2u; ++gate_index) {
             uint32_t onsets[4], bases[4], gates[4], found = 0u;
             uint32_t gate = gate_index ? 127u : 63u;
-            setup(); br_part[0].swing = BR_SWING_MAX; br_part[0].arp_gate = gate;
+            setup(); br_swing = BR_SWING_MAX; br_part[0].arp_gate = gate;
             chord(c_major, 3u);
             if (playing) br_midi(0xFAu, 0u, 0u);
             for (uint32_t block = 0u; found < 4u && block < 200u; ++block) {
@@ -155,7 +208,7 @@ int main(void)
             uint32_t next_at = (next / d) * quarter + (next % d) * quarter / d +
                 ((next & 1u) ? nominal * swing / 128u : 0u);
             uint32_t end = (at + 1u) % bar;
-            setup(); br_part[0].arp_rate = rate; br_part[0].swing = BR_SWING_MAX;
+            setup(); br_part[0].arp_rate = rate; br_swing = BR_SWING_MAX;
             chord(c_major, 3u); br_midi(0xFAu, 0u, 0u);
             br_take_events(); /* MIDI transport is applied by the audio consumer. */
             br_global_beat = end / quarter; br_metro_frames = end % quarter;
@@ -207,24 +260,24 @@ int main(void)
     }
     br_recording = 0u;
 
-    /* Settings survive a session round trip; defaults save as zero bytes. */
+    /* Settings survive a session round trip; each has its own byte (session v17). */
     setup();
     {
         br_session_t saved;
         assert(br_capture(&saved));
-        for (uint32_t i = 0u; i < 8u; ++i) assert(!saved.v3.part[0].lane_level[i]);
+        assert(saved.b[br_v17_wire_at(BR_V17_ROW(T, arp_rate), 0u, 0u)] == 2u);
         br_part[1].arp_mode = BR_ARP_RANDOM; br_part[1].arp_rate = 4u; br_part[1].arp_octaves = 3u;
         br_part[1].arp_gate = 100u; br_part[1].arp_latch = 1u; br_part[1].arp_swing = 0u;
         br_part[1].arp_repeat = 4u;
-        assert(br_capture(&saved) && br_session_v16_valid(&saved));
+        assert(br_capture(&saved) && br_session_valid(&saved));
         br_arp_part_defaults(&br_part[1]);
         assert(br_restore(&saved));
         assert(br_part[1].arp_mode == BR_ARP_RANDOM && br_part[1].arp_rate == 4u &&
                br_part[1].arp_octaves == 3u && br_part[1].arp_gate == 100u &&
                br_part[1].arp_latch == 1u && br_part[1].arp_swing == 0u &&
                br_part[1].arp_repeat == 4u);
-        saved.v3.part[1].lane_level[1] = 9u;            /* invalid mode */
-        assert(!br_session_v16_valid(&saved));
+        saved.b[br_v17_wire_at(BR_V17_ROW(T, arp_mode), 1u, 0u)] = 9u;   /* out of range: clamped */
+        assert(br_session_valid(&saved) && br_restore(&saved) && br_part[1].arp_mode == BR_ARP_MODES - 1u);
     }
     printf("arp, hold, recording and session checks passed\n");
     return 0;

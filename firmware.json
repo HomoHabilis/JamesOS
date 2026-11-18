@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "jamesos",
+  "name": "JamesOS",
+  "author": "Aaron Grando",
+  "license": "GPL-3.0-only",
+  "description": "A groovebox for the FM-1 with three synth tracks, four drum lanes, 24 Plaits engines, 128 starting sounds, a pattern arranger and a 64-step sequencer. Shape your mix with track effects, shared reverb and master controls.",
+  "tags": ["groovebox", "synth", "sequencer", "arranger", "midi"],
+  "screenshot": "docs/images/home.png",
+  "hardware": {
+    "models": ["FM-1", "SMK-37 Pro"],
+    "flash": ["856014", "B36014", "EB6014"]
+  },
+  "credits": "Built on Dinghy by zvenson and Felucca by Leo Kuroshita and Hügelton Instruments, with SLOOP contributions; Plaits, Braids and stmlib keep their MIT licences; JamesOS-K's SMK-37 Pro input and display transport derive from M. Geisler's Felucca SMK-37 port."
+}

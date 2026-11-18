@@ -26,9 +26,10 @@ def address_data(addr,data):
  return addr.to_bytes(4,'big')+len(data).to_bytes(2,'big')+b'\0'+crc16(data).to_bytes(2,'little')
 
 class ReadOnlyGate:
- def __init__(self,loader):
+ def __init__(self,loader,*,smk37_pro=False):
   if not isinstance(loader,bytes) or len(loader)!=LOADER_SIZE or hashlib.sha256(loader).hexdigest()!=LOADER_SHA:raise ValueError('untrusted RAM loader')
   self.loader=loader;self.chunks=set();self.started=False;self.identified=False
+  self.smk37_pro=smk37_pro
  def check(self,command,out=None,n_in=0):
   if not isinstance(command,bytes) or type(n_in) is not int or n_in<0:raise ValueError('invalid command')
   if command==b'\x12\x00\x00\x00\x24\x00' and out is None and n_in==36:return ('inquiry',None)
@@ -55,5 +56,8 @@ class ReadOnlyGate:
   if action[0]=='chunk':self.chunks.add(action[1])
   elif action[0]=='start':self.started=True
  def confirm_chip(self,key,device_type,jedec):
-  if not self.started or key!=0x980f or (type(device_type) is not int or not 0<=device_type<=255) or jedec not in (0x856014,0xb36014):raise ValueError('unexpected chip identity')
+  if not self.started or key!=0x980f or (type(device_type) is not int or not 0<=device_type<=255):raise ValueError('unexpected chip key or device type')
+  if self.smk37_pro:
+   if not 0 < jedec < 0xffffff or jedec & 0xff != 0x14:raise ValueError('flash ID does not identify a 1 MiB part')
+  elif jedec not in (0x856014,0xb36014):raise ValueError('unexpected flash ID')
   self.identified=True

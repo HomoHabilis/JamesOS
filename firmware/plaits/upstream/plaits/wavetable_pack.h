@@ -14,14 +14,17 @@
 #define FM1_PLAITS_PACK_SINE 1
 #endif
 
-/* Reconstruct FM SysEx banks in their original direct-access symbols at boot. */
+/* Reconstruct FM SysEx banks in their original direct-access symbols at boot.
+ * Off since 16 Nov 2026: the three banks are read from flash as const data,
+ * which returns 12,288 B of .bss for about 3 KB of flash (flash has room on
+ * both products; the SMK-37 had 240 B of data RAM left). */
 #ifndef FM1_PLAITS_PACK_SYX
-#define FM1_PLAITS_PACK_SYX 1
+#define FM1_PLAITS_PACK_SYX 0
 #endif
 
 /* Place only the reconstructed SysEx backing arrays in zeroed .bss. */
 #ifndef FM1_PLAITS_SYX_DECODE_TO_BSS
-#define FM1_PLAITS_SYX_DECODE_TO_BSS 1
+#define FM1_PLAITS_SYX_DECODE_TO_BSS 0
 #endif
 
 /* Keep decoder scratch off .pool when this boot-only stack option is enabled. */

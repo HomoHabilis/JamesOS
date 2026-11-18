@@ -1,10 +1,20 @@
-/* One shared reverb with per-track sends, through the real app. */
+/* One shared reverb (instrument_reverb2.c, the reverb2 FDN) with per-track sends,
+ * through the real app. Behaviour: sends, track-1 settings, retired ids, tails, idle,
+ * restore, no click on TYPE or SIZE changes. Numbers: the prototype's measurements
+ * (a measurement kept outside this repository, SIZE 64): mid-band RT60 per type at
+ * DECAY 0/64/127 within 10%, wet level +6 dB +-1.5 over the dry track at SEND 127,
+ * stereo tails (ICC < 0.5, mono sum not cancelling). The numeric checks feed the
+ * prototype's own signals into track 1's FX input (br_fx_process: the send stage,
+ * the shared reverb job, its return, master and limiter); the rest plays notes. */
 #define DINGHY_HOST 1
 #define main host_unused_main
 #include "../firmware/src/dinghy.c"
 #undef main
 #include <assert.h>
 #include <math.h>
+#include <stdlib.h>
+#include "hd_look.h"
+#include "host_intro.h"
 
 static void publish(uint32_t p) { RING_PUBLISH(); br_part[p].revision++; }
 
@@ -12,9 +22,12 @@ static void setup(void)
 {
     br_app_init(); fm1_ms = 1000u;
     for (uint32_t p = 0u; p < BR_SYNTH_PARTS; ++p) {
+        /* The factory project may intentionally leave some tracks silent.
+         * Exercise shared sends with an audible, identical synth on each. */
+        br_load_preset(p, BR_FIRST_PLAITS);
         br_part[p].revision++;
-        br_part[p].sound.reverb = 0u; br_part[p].sound.delay = 0u; br_part[p].sound.space = 64u;
-        br_part[p].fx.reverb_engine = BR_REVERB_SPACE; br_part[p].fx.reverb_tone = 40u;
+        br_part[p].sound.reverb = 0u; br_part[p].sound.delay = 0u; br_master.reverb_size = 64u;
+        br_master.reverb_engine = BR_REVERB_SPACE; br_master.reverb_decay = 40u;
         publish(p);
     }
 }
@@ -25,15 +38,23 @@ static void send(uint32_t p, uint32_t amount)
 static void reverb_settings(uint32_t p, uint32_t engine, uint32_t tone, uint32_t space)
 {
     br_part[p].revision++;
-    br_part[p].fx.reverb_engine = engine; br_part[p].fx.reverb_tone = tone; br_part[p].sound.space = space;
+    br_master.reverb_engine = engine; br_master.reverb_decay = tone; br_master.reverb_size = space;
     publish(p);
 }
+/* The return the reverb added to this block's mix (zeros when its job did not run). */
+static const int32_t *wet_row(uint32_t ch)
+{
+    static const int32_t silent[BR_BLOCK];
+    return br_gr_out_seq == br_fx_block_seq ? br_gr_send[br_gr_cur ^ 1u][BR_GR_WET_L_ROW + ch] : silent;
+}
+static double wet_energy;                 /* sum of squares of the return, both channels */
 static double block_rms(int32_t *keep)
 {
     int32_t audio[BR_BLOCK * 2u] = {0};
     double sum = 0.0;
     assert(app_audio(audio, BR_BLOCK) == FM1_AUDIO_RENDER_OK);
     for (uint32_t i = 0u; i < BR_BLOCK * 2u; ++i) sum += (double)audio[i] * audio[i];
+    for (uint32_t c = 0u; c < 2u; ++c) for (uint32_t i = 0u; i < BR_BLOCK; ++i) wet_energy += (double)wet_row(c)[i] * wet_row(c)[i];
     if (keep) memcpy(keep, audio, sizeof audio);
     return sqrt(sum / (BR_BLOCK * 2u));
 }
@@ -50,15 +71,133 @@ static double tail_rms(uint32_t part, uint32_t skip, uint32_t count)
     return sqrt(sum / count);
 }
 
+/* ---- Feeding signals into track 1's FX input ---------------------------------- */
+/* Track 1 at SEND 127, the others off, no delay/mod/drive; the effective controls are
+ * settled by silent app blocks, then each block goes straight to br_fx_process. */
+static void setup_inject(uint32_t engine, uint32_t size, uint32_t decay)
+{
+    int32_t audio[BR_BLOCK * 2u];
+    setup();
+    for (uint32_t p = 0u; p < BR_SYNTH_PARTS; ++p) reverb_settings(p, engine, decay, size);
+    send(0u, 127u);
+    for (uint32_t b = 0u; b < 200u; ++b) { memset(audio, 0, sizeof audio); assert(app_audio(audio, BR_BLOCK) == FM1_AUDIO_RENDER_OK); }
+    assert(br_effective_sound[0].reverb == 127u);
+    /* A room selected while the tank is idle must be fully configured before
+     * its first input; silent blocks do not advance the tank's length slew. */
+    assert(br_gr_rv.idle);
+    for (uint32_t i = 0u; i < RV2_LINES; ++i)
+        assert(br_gr_rv.base[i] == br_gr_rv.target[i] && RV2_LN(&br_gr_rv, i, d) == br_gr_rv.target[i]);
+}
+/* Run x[0..n) (send domain) through the app; wet[2*t + c] is the return to input frame t
+ * (the shared reverb hears the send one block late). */
+static void inject(const float *x, long n, float *wet)
+{
+    static int32_t bus[BR_PARTS][BR_BLOCK], out[BR_BLOCK * 2u];
+    for (long t0 = 0; t0 < n + (long)BR_BLOCK; t0 += BR_BLOCK) {
+        memset(bus, 0, sizeof bus); memset(out, 0, sizeof out);
+        for (uint32_t i = 0u; i < BR_BLOCK; ++i) { long t = t0 + i; bus[0][i] = t < n ? (int32_t)lrintf(x[t]) : 0; }
+        br_fx_process(bus, out, BR_BLOCK);
+        for (uint32_t c = 0u; c < 2u; ++c) {
+            const int32_t *w = wet_row(c);
+            for (uint32_t i = 0u; i < BR_BLOCK; ++i) {
+                long t = t0 + i - (long)BR_BLOCK;
+                if (t >= 0 && t < n) wet[2 * t + c] = (float)w[i];
+            }
+        }
+    }
+}
+/* The prototype's measurement signals (harness/rv2lib.py), in C. */
+static uint32_t lcg = 7u;
+static double gauss(void)                 /* sum of 12 uniforms - 6: unit variance */
+{
+    double s = 0.0;
+    for (int k = 0; k < 12; ++k) { lcg = lcg * 1664525u + 1013904223u; s += (lcg >> 8) * (1.0 / 16777216.0); }
+    return s - 6.0;
+}
+static void burst(float *x, long n)       /* 30 ms noise at 70,000 RMS from frame 100 */
+{
+    memset(x, 0, n * sizeof *x);
+    for (long t = 100; t < 100 + 1323; ++t) { double v = gauss() * 70000.0; x[t] = (float)(v > 250000 ? 250000 : v < -250000 ? -250000 : v); }
+}
+/* Held saw triad: band-limited saws, one-pole low-pass at 5 kHz, 5 ms attack, held
+ * `hold` s then a 20 ms release, normalised to 24,000 RMS over 0.1..1 s. */
+static void chord(float *x, long n, const uint8_t notes[3], double hold)
+{
+    const double fs = 44100.0, a = exp(-2.0 * M_PI * 5000.0 / fs);
+    double s = 0.0, sum = 0.0; long ref = 0;
+    for (long t = 0; t < n; ++t) x[t] = 0.0f;
+    for (int k = 0; k < 3; ++k) {
+        double f = 440.0 * pow(2.0, (notes[k] - 69) / 12.0);
+        for (int h = 1; h * f < fs / 2 - 500; ++h) {
+            double w = 2.0 * M_PI * h * f / fs, c = cos(w), sn = sin(w), re = cos(h * k), im = sin(h * k), g = 2.0 / M_PI / h;
+            for (long t = 0; t < n; ++t) { x[t] += (float)(g * im); double r2 = re * c - im * sn; im = re * sn + im * c; re = r2; }
+        }
+    }
+    for (long t = 0; t < n; ++t) { s = a * s + (1.0 - a) * x[t]; x[t] = (float)s; }
+    for (long t = (long)(0.1 * fs); t < (long)(1.0 * fs); ++t) { sum += (double)x[t] * x[t]; ++ref; }
+    for (long t = 0; t < n; ++t) {
+        double env = t < 220 ? t / 220.0 : 1.0, h0 = hold * fs;
+        if (t >= h0) env = t < h0 + 882 ? 1.0 - (t - h0) / 882.0 : 0.0;
+        x[t] = (float)(x[t] / sqrt(sum / ref) * 24000.0 * env);
+    }
+}
+/* 1 kHz octave band (two RBJ band-passes, 1 octave), Schroeder decay, T30 (-5..-35 dB;
+ * T20 when the tail ends before -35 dB): the prototype's RT1k. */
+static double rt_1k(const float *wet, long n, long onset)
+{
+    const double w0 = 2.0 * M_PI * 1000.0 / 44100.0, alpha = sin(w0) * sinh(log(2.0) / 2.0 * 1.0 * w0 / sin(w0));
+    const double b0 = alpha / (1 + alpha), a1 = -2 * cos(w0) / (1 + alpha), a2 = (1 - alpha) / (1 + alpha);
+    double *e = calloc((size_t)n, sizeof *e), total = 0.0, lo = -5.0, hi = -35.0;
+    for (int c = 0; c < 2; ++c) {
+        double z[2][2] = {{0, 0}, {0, 0}};
+        for (long t = 0; t < n; ++t) {
+            double v = wet[2 * t + c];
+            for (int st = 0; st < 2; ++st) {      /* direct form II transposed, b = (b0, 0, -b0) */
+                double y = b0 * v + z[st][0];
+                z[st][0] = -a1 * y + z[st][1];
+                z[st][1] = -b0 * v - a2 * y;
+                v = y;
+            }
+            if (t >= onset) e[t] += v * v;
+        }
+    }
+    for (long t = n - 1; t >= onset; --t) { total += e[t]; e[t] = total; }
+    for (long t = onset; t < n; ++t) e[t] = 10.0 * log10(e[t] / total + 1e-30);
+    if (e[n - 1] > hi) hi = -25.0;
+    long i0 = onset, i1;
+    while (i0 < n && e[i0] > lo) ++i0;
+    i1 = i0;
+    while (i1 < n && e[i1] > hi) ++i1;
+    assert(i1 < n && i1 > i0 + 10);
+    double st = 0, sy = 0, stt = 0, sty = 0, m = (double)(i1 - i0);
+    for (long t = i0; t < i1; ++t) { double tt = t / 44100.0; st += tt; sy += e[t]; stt += tt * tt; sty += tt * e[t]; }
+    free(e);
+    return -60.0 / ((m * sty - st * sy) / (m * stt - st * st));
+}
+static double icc(const float *wet, long a, long b, double *mono_db)
+{
+    double ll = 0, rr = 0, lr = 0;
+    for (long t = a; t < b; ++t) { double l = wet[2 * t], r = wet[2 * t + 1]; ll += l * l; rr += r * r; lr += l * r; }
+    *mono_db = 10.0 * log10((ll + rr + 2 * lr) / (ll + rr + 1e-30));
+    return lr / sqrt(ll * rr + 1e-30);
+}
+
 int main(void)
 {
     double dry, wet, two, other;
+    static const uint32_t types[3] = {BR_REVERB_ROOM, BR_REVERB_HALL, BR_REVERB_SPACE};
     /* Without a send there is nothing after the note; with one there is a tail. */
     setup();
     dry = tail_rms(0u, 60u, 40u);
     setup(); send(0u, 100u);
     wet = tail_rms(0u, 60u, 40u);
     assert(wet > 1.0 && dry < 0.01);
+    {
+        double midpoint, full;
+        setup(); send(0u, 64u); wet_energy = 0; (void)tail_rms(0u, 60u, 40u); midpoint = wet_energy;
+        setup(); send(0u, 127u); wet_energy = 0; (void)tail_rms(0u, 60u, 40u); full = wet_energy;
+        assert(full > 0 && midpoint / full > 0.03 && midpoint / full < 0.15);
+    }
 
     /* Sends add: two tracks sending the same note level are louder than one. */
     setup(); send(0u, 100u); send(1u, 100u);
@@ -70,26 +209,20 @@ int main(void)
       two = sqrt(sum / 40.0); }
     assert(two > 1.15 * wet);
 
-    /* The reverb's type, decay and size come from track 1 alone. */
+    /* The reverb's type, decay and size are one global setting: it sounds the
+     * same whichever track's screen set it, and size changes what is heard. */
     setup(); send(1u, 100u); reverb_settings(1u, BR_REVERB_HALL, 120u, 100u);
     other = tail_rms(1u, 60u, 40u);
     setup(); send(1u, 100u); reverb_settings(0u, BR_REVERB_HALL, 120u, 100u);
     wet = tail_rms(1u, 60u, 40u);
-    assert(fabs(wet - other) > 0.02 * other);      /* track 1's settings are what is heard */
-    setup(); send(1u, 100u); reverb_settings(0u, BR_REVERB_HALL, 120u, 100u);
-    reverb_settings(1u, BR_REVERB_SPACE, 40u, 64u);        /* track 2's own values are ignored */
-    { double again = tail_rms(1u, 60u, 40u); assert(fabs(again - wet) < 1e-6); }
-
-    /* Size is shared too: track 1's value is heard, track 2's is not. */
+    assert(fabs(wet - other) < 1e-6);
     {
-        double both_small, small_big, big;
-        setup(); send(1u, 100u); reverb_settings(0u, BR_REVERB_HALL, 60u, 20u); reverb_settings(1u, BR_REVERB_HALL, 60u, 20u);
-        both_small = tail_rms(1u, 30u, 30u);
-        setup(); send(1u, 100u); reverb_settings(0u, BR_REVERB_HALL, 60u, 20u); reverb_settings(1u, BR_REVERB_HALL, 60u, 120u);
-        small_big = tail_rms(1u, 30u, 30u);
-        setup(); send(1u, 100u); reverb_settings(0u, BR_REVERB_HALL, 60u, 120u); reverb_settings(1u, BR_REVERB_HALL, 60u, 120u);
+        double small, big;
+        setup(); send(1u, 100u); reverb_settings(0u, BR_REVERB_HALL, 60u, 20u);
+        small = tail_rms(1u, 30u, 30u);
+        setup(); send(1u, 100u); reverb_settings(2u, BR_REVERB_HALL, 60u, 120u);
         big = tail_rms(1u, 30u, 30u);
-        assert(fabs(both_small - small_big) < 1e-6 && fabs(big - both_small) > 0.02 * both_small);
+        assert(fabs(big - small) > 0.02 * small);
     }
 
     /* The retired ids play exactly as their replacements: Spring as Room, Ethereal as Space. */
@@ -104,23 +237,32 @@ int main(void)
     }
 
     /* Every type runs and gives a tail; no non-finite blow-ups, output bounded. */
-    for (uint32_t engine = 0u; engine < BR_REVERB_COUNT; ++engine) {
-        if (engine == BR_REVERB_SPRING || engine == BR_REVERB_ETHEREAL) continue;
-        setup(); send(0u, 127u); reverb_settings(0u, engine, 100u, 64u);
+    for (uint32_t k = 0u; k < 3u; ++k) {
+        setup(); send(0u, 127u); reverb_settings(0u, types[k], 100u, 64u);
         double level = tail_rms(0u, 20u, 60u);
         assert(level > 0.2 && level < 20000.0);
     }
 
-    /* The tail dies away, the engine reports quiet, and a later phrase starts clean. */
+    /* The tail dies away within a bounded time (ROOM, DECAY 10: about 0.35 s, ended by
+     * the reverb's own end-of-tail logic), the output is then exactly zero, the job
+     * idle and the lines empty, and a later phrase starts clean. */
     setup(); send(0u, 100u); reverb_settings(0u, BR_REVERB_ROOM, 10u, 40u);
-    double first = tail_rms(0u, 5u, 20u);
+    wet_energy = 0.0;
+    double first = tail_rms(0u, 5u, 20u), first_wet = wet_energy;
     uint32_t blocks = 0u;
     while (br_fx_quiet() == 0 && blocks < 4000u) { (void)block_rms(0); ++blocks; }
-    assert(first > 0.5 && br_fx_quiet() && blocks > 100u && blocks < 4000u);
+    assert(first > 0.5 && br_fx_quiet() && blocks < 400u);           /* under 2.3 s after the 20 measured blocks */
     { double r = 0.0; for (uint32_t i = 0u; i < 20u; ++i) r += block_rms(0); assert(r == 0.0); }
-    for (uint32_t i = 0u; i < BR_FX_ROOM_SAMPLES; ++i) assert(br_room_line[0][i] == 0);   /* lines emptied */
-    assert(!br_gr_state.tail_storage);
-    { double again = tail_rms(0u, 5u, 20u); assert(fabs(again - first) < 0.1 * first); }
+    assert(br_gr_run == 0u && br_gr_rv.idle);
+    for (uint32_t i = 0u; i < RV2_POOL16_LEN; ++i) assert(br_gr_pool16[i] == 0);   /* lines emptied */
+    for (uint32_t i = 0u; i < RV2_POOL32_LEN; ++i) assert(br_gr_pool32[i] == 0);
+    /* the return of the same phrase again matches the first within 2 dB: the lines
+     * start empty, only the reverb's LFOs moved on, which shifts its response to one
+     * held tone by about a dB (the output itself can differ more, as the dry note and
+     * the early return then add with another phase) */
+    wet_energy = 0.0;
+    (void)tail_rms(0u, 5u, 20u);
+    assert(first_wet > 0.0 && fabs(10.0 * log10(wet_energy / first_wet)) < 2.0);
 
     /* Turning a send to zero lets the tail ring out rather than cutting it. */
     setup(); send(0u, 100u);
@@ -144,24 +286,102 @@ int main(void)
     for (uint32_t i = 0u; i < 4u; ++i) (void)block_rms(0);
     assert(br_gr_run == 0u);
 
-    /* At full send every type returns about as loud as the dry note (within 4 dB). */
+    /* No click when TYPE or SIZE changes under a held chord: the largest sample step of
+     * the return in the 10 blocks after the change stays within 1.25x the largest step
+     * of the 50 blocks before or the 50 blocks after (TYPE changes fade the return out
+     * and in over one block each; SIZE changes slew the line lengths). */
     {
-        double dry_level;
-        setup(); br_engine_note_on(0u, 60u, 100u);
-        { double sum = 0.0; for (uint32_t i = 0u; i < 100u; ++i) { double r = block_rms(0); if (i >= 40u) sum += r * r; } dry_level = sqrt(sum / 60.0); }
-        for (uint32_t engine = 0u; engine < BR_REVERB_COUNT; ++engine) {
-            if (engine == BR_REVERB_SPRING || engine == BR_REVERB_ETHEREAL) continue;
-            setup(); send(0u, 127u); reverb_settings(0u, engine, 64u, 64u);
-            br_engine_note_on(0u, 60u, 100u);
-            double sum = 0.0;
-            for (uint32_t i = 0u; i < 100u; ++i) {
+        static const uint32_t change[][4] = {           /* type, size -> type, size */
+            {BR_REVERB_ROOM, 64u, BR_REVERB_HALL, 64u}, {BR_REVERB_HALL, 64u, BR_REVERB_SPACE, 64u},
+            {BR_REVERB_SPACE, 64u, BR_REVERB_ROOM, 64u}, {BR_REVERB_ROOM, 64u, BR_REVERB_SPACE, 64u},
+            {BR_REVERB_ROOM, 64u, BR_REVERB_ROOM, 127u}, {BR_REVERB_ROOM, 127u, BR_REVERB_ROOM, 0u},
+            {BR_REVERB_HALL, 0u, BR_REVERB_HALL, 127u}, {BR_REVERB_SPACE, 127u, BR_REVERB_SPACE, 0u}};
+        for (uint32_t k = 0u; k < sizeof change / sizeof change[0]; ++k) {
+            double before = 0.0, at = 0.0, after = 0.0;
+            int32_t last[2] = {0, 0};
+            setup();
+            for (uint32_t p = 0u; p < BR_SYNTH_PARTS; ++p) reverb_settings(p, change[k][0], 64u, change[k][1]);
+            send(0u, 127u);
+            br_engine_note_on(0u, 48u, 100u); br_engine_note_on(0u, 55u, 100u); br_engine_note_on(0u, 64u, 100u);
+            for (uint32_t b = 0u; b < 300u; ++b) {
+                double m = 0.0;
+                if (b == 200u) for (uint32_t p = 0u; p < BR_SYNTH_PARTS; ++p) reverb_settings(p, change[k][2], 64u, change[k][3]);
                 (void)block_rms(0);
-                if (i >= 40u) for (uint32_t k = 0u; k < BR_BLOCK; ++k)
-                    sum += (double)br_gr_wet[k][0] * br_gr_wet[k][0] + (double)br_gr_wet[k][1] * br_gr_wet[k][1];
+                for (uint32_t c = 0u; c < 2u; ++c) {
+                    const int32_t *w = wet_row(c);
+                    for (uint32_t i = 0u; i < BR_BLOCK; ++i) { double d = fabs((double)w[i] - last[c]); if (d > m) m = d; last[c] = w[i]; }
+                }
+                if (b >= 150u && b < 200u && m > before) before = m;
+                if (b >= 200u && b < 210u && m > at) at = m;
+                if (b >= 250u && m > after) after = m;
             }
-            double ret = sqrt(sum / (60.0 * BR_BLOCK * 2.0));
-            assert(ret > 0.63 * dry_level && ret < 1.6 * dry_level);
+            assert(before > 500.0 && at < 1.25 * (before > after ? before : after));
         }
+    }
+
+    /* Mid-band RT60 per type at DECAY 0/64/127 (SIZE 64) within 10% of the prototype's
+     * measured RT1k, from a 30 ms noise burst; the tails are stereo (inter-channel
+     * correlation below 0.5) and their mono sum does not cancel (above -3 dB). */
+    {
+        static const double rt_proto[3][3] = {{0.25, 0.88, 5.97}, {0.79, 2.76, 19.61}, {2.62, 8.38, 57.20}};
+        static const double seconds[3][3] = {{3, 8, 20}, {5, 12, 35}, {10, 25, 40}};
+        static const uint32_t decays[3] = {0u, 64u, 127u};
+        for (uint32_t k = 0u; k < 3u; ++k) for (uint32_t d = 0u; d < 3u; ++d) {
+            long n = (long)(seconds[k][d] * 44100.0), onset = 100 + 1323;
+            float *x = malloc(n * sizeof *x), *w = calloc(2 * (size_t)n, sizeof *w);
+            double rt, mono, corr;
+            setup_inject(types[k], 64u, decays[d]);
+            lcg = 7u; burst(x, n);
+            inject(x, n, w);
+            rt = rt_1k(w, n, onset);
+            printf("type %u decay %3u: RT1k %.2f s (prototype %.2f)", types[k], decays[d], rt, rt_proto[k][d]);
+            assert(fabs(rt / rt_proto[k][d] - 1.0) < 0.10);
+            if (decays[d] == 64u) {
+                long a = onset + (long)(0.08 * 44100.0), b = onset + (long)((rt * 0.5 > 0.25 ? rt * 0.5 : 0.25) * 44100.0);
+                corr = icc(w, a, b, &mono);
+                printf(", ICC %+.2f, mono sum %+.1f dB", corr, mono);
+                assert(corr < 0.5 && mono > -3.0);
+            }
+            printf("\n");
+            free(x); free(w);
+        }
+    }
+
+    /* Calibration through the app: at SEND 127 a held saw triad returns +6 dB +-1.5 over
+     * its dry track (dry = send / 4 per channel, checked against the track's output),
+     * power mean of ten triads over 0.5..2 s, every type at SIZE 64, DECAY 64. */
+    {
+        static const uint8_t triads[10][3] = {{48,52,55},{50,53,57},{52,55,59},{55,59,62},{57,60,64},
+                                              {59,62,65},{60,64,67},{62,65,69},{64,67,71},{65,69,72}};
+        long n = (long)(2.5 * 44100.0);
+        float *x = malloc(n * sizeof *x), *w = calloc(2 * (size_t)n, sizeof *w);
+        for (uint32_t k = 0u; k < 3u; ++k) {
+            double ratio = 0.0;
+            for (uint32_t c = 0u; c < 10u; ++c) {
+                double sw = 0.0, sd = 0.0;
+                chord(x, n, triads[c], 2.0);
+                setup_inject(types[k], 64u, 64u);
+                inject(x, n, w);
+                for (long t = (long)(0.5 * 44100.0); t < 2 * 44100; ++t) {
+                    sw += (double)w[2 * t] * w[2 * t] + (double)w[2 * t + 1] * w[2 * t + 1];
+                    sd += 2.0 * ((double)x[t] / 4.0) * ((double)x[t] / 4.0);
+                }
+                ratio += sw / sd / 10.0;
+            }
+            printf("type %u: held triads at SEND 127 return %+.2f dB over the dry track\n", types[k], 10.0 * log10(ratio));
+            assert(fabs(10.0 * log10(ratio) - 6.0) < 1.5);
+        }
+        /* the dry track is a quarter of the send per channel */
+        {
+            static int32_t bus[BR_PARTS][BR_BLOCK], out[BR_BLOCK * 2u];
+            setup_inject(BR_REVERB_ROOM, 64u, 64u);
+            memset(bus, 0, sizeof bus);
+            for (uint32_t i = 0u; i < BR_BLOCK; ++i) bus[0][i] = (int32_t)lrintf(x[i + 22050]);
+            br_fx_process(bus, out, BR_BLOCK);
+            for (uint32_t i = 0u; i < BR_BLOCK; ++i)
+                assert(br_fx_track_stereo[0][i][0] == bus[0][i] >> 2 && br_fx_track_stereo[0][i][1] == bus[0][i] >> 2);
+        }
+        free(x); free(w);
     }
 
     /* The keyboard plays on the FX and GLO pages. */
@@ -176,62 +396,70 @@ int main(void)
     br_key_up(5u);
 
     /* A click leaves a dense wash, not a few separate echoes: the 4 ms envelope of the
-     * return changes smoothly (it was 0.5 to 0.8 log10 units per bin without input diffusion). */
-    for (uint32_t engine = 0u; engine < BR_REVERB_COUNT; ++engine) {
-        if (engine == BR_REVERB_SPRING || engine == BR_REVERB_ETHEREAL) continue;
+     * return changes smoothly (the old comb reverb measured 0.5 to 0.8 log10 units per
+     * bin without input diffusion). */
+    for (uint32_t k = 0u; k < 3u; ++k) {
         static double env[200];
-        setup(); send(0u, 127u); reverb_settings(0u, engine, 64u, 64u);
+        setup(); send(0u, 127u); reverb_settings(0u, types[k], 64u, 64u);
         br_load_preset(0u, BR_FIRST_PLAITS + 23u);
         br_part[0].revision++; br_part[0].sound.decay = 0u; br_part[0].sound.sustain = 0u; br_part[0].sound.release = 0u; publish(0u);
         uint32_t onset = 0u, count = 0u; double sum = 0.0; uint32_t bin = 0u;
-        for (uint32_t b = 0u; b < 60u; ++b) {
+        for (uint32_t b = 0u; b < 80u; ++b) {                /* SPACE starts ~0.11 s late (pre-delay) */
             if (b == 4u) br_engine_note_on(0u, 60u, 127u);
             if (b == 5u) br_engine_note_off(0u, 60u);
             (void)block_rms(0);
+            const int32_t *wl = wet_row(0u);
             for (uint32_t i = 0u; i < BR_BLOCK; ++i) {
-                double w = br_gr_wet[i][0];
-                if (!onset && fabs(w) > 3.0) onset = 1u, count = 0u, sum = 0.0, bin = 0u;
+                double v = wl[i];
+                if (!onset && fabs(v) > 3.0) onset = 1u, count = 0u, sum = 0.0, bin = 0u;
                 if (!onset) continue;
-                sum += w * w;
+                sum += v * v;
                 if (++count == 176u) { if (bin < 100u) env[bin++] = sqrt(sum / 176.0); count = 0u; sum = 0.0; }
             }
         }
-        assert(bin >= 60u);
         double rough = 0.0;
-        for (uint32_t k = 1u; k < 60u; ++k) rough += fabs(log10(env[k] + 1e-3) - log10(env[k - 1u] + 1e-3));
+        printf("type %u: wash onset ok, %u envelope bins\n", types[k], bin);
+        assert(bin >= 60u);
+        for (uint32_t i = 1u; i < 60u; ++i) rough += fabs(log10(env[i] + 1e-3) - log10(env[i - 1u] + 1e-3));
+        printf("type %u: return envelope roughness %.3f log10/bin\n", types[k], rough / 59.0);
         assert(rough / 59.0 < 0.25);
     }
 
-    /* SPACE's modulation is slow: both LFOs under 0.6 Hz. */
-    assert(BR_SP_LFO_A_INC * 11025.0 / 4294967296.0 < 0.6 && BR_SP_LFO_B_INC * 11025.0 / 4294967296.0 < 0.6);
+    /* The modulation is slow in every type: both LFOs under 0.6 Hz. */
+    for (uint32_t k = 0u; k < 3u; ++k) {
+        rv2_coeffs_t co;
+        rv2_design(types[k], 64u, 127u, 0, &co);
+        assert(co.lfo_inc[0] * 22050.0 / 4294967296.0 < 0.6 && co.lfo_inc[1] * 22050.0 / 4294967296.0 < 0.6);
+    }
 
-    /* SPACE stays bounded at its longest decay and extreme sizes, through loud notes and
-     * switches to another type and back. */
+    /* Every type stays bounded at its longest decay and extreme sizes, through loud notes
+     * and switches of type: the return never exceeds the reverb's +-65,535 clamp. */
     {
         double peak = 0.0;
         setup(); send(0u, 127u); send(1u, 127u);
         for (uint32_t round = 0u; round < 6u; ++round) {
             uint32_t sizes[3] = {0u, 127u, 64u};
-            reverb_settings(0u, round % 2u ? BR_REVERB_SPACE : BR_REVERB_SPACE, 127u, sizes[round % 3u]);
+            reverb_settings(0u, BR_REVERB_SPACE, 127u, sizes[round % 3u]);
             if (round == 3u) reverb_settings(0u, BR_REVERB_HALL, 127u, 64u);
-            if (round == 4u) reverb_settings(0u, BR_REVERB_SPACE, 127u, 100u);
+            if (round == 4u) reverb_settings(0u, BR_REVERB_ROOM, 127u, 100u);
             br_engine_note_on(0u, 48u, 127u); br_engine_note_on(1u, 55u, 127u);
             for (uint32_t i = 0u; i < 200u; ++i) {
                 (void)block_rms(0);
-                for (uint32_t k = 0u; k < BR_BLOCK; ++k) { double a = fabs((double)br_gr_wet[k][0]); if (a > peak) peak = a; }
+                for (uint32_t c = 0u; c < 2u; ++c) {
+                    const int32_t *wr = wet_row(c);
+                    for (uint32_t j = 0u; j < BR_BLOCK; ++j) { double a = fabs((double)wr[j]); if (a > peak) peak = a; }
+                }
             }
             br_engine_note_off(0u, 48u); br_engine_note_off(1u, 55u);
             for (uint32_t i = 0u; i < 100u; ++i) (void)block_rms(0);
         }
-        /* Both tracks at full send and decay with calibrated (louder) engines: a sanity bound against overflow. */
-        assert(peak > 100.0 && peak < 220000.0);
+        assert(peak > 100.0 && peak <= 65535.0);
     }
 
     /* After a boot or project load (restore, FX init, warm controls) the reverb is heard at once. */
-    for (uint32_t engine = 0u; engine < BR_REVERB_COUNT; ++engine) {
-        if (engine == BR_REVERB_SPRING || engine == BR_REVERB_ETHEREAL) continue;
+    for (uint32_t k = 0u; k < 3u; ++k) {
         br_session_t saved;
-        setup(); send(0u, 127u); send(1u, 90u); reverb_settings(0u, engine, 40u, 70u);
+        setup(); send(0u, 127u); send(1u, 90u); reverb_settings(0u, types[k], 40u, 70u);
         assert(br_capture(&saved));
         setup();
         assert(br_restore(&saved));
@@ -241,19 +469,22 @@ int main(void)
         double sum = 0.0; uint32_t seen = 0u;
         for (uint32_t i = 0u; i < 80u; ++i) {
             (void)block_rms(0);
-            if (i >= 30u) for (uint32_t k = 0u; k < BR_BLOCK; ++k)
-                sum += (double)br_gr_wet[k][0] * br_gr_wet[k][0] + (double)br_gr_wet[k][1] * br_gr_wet[k][1];
+            if (i >= 30u) for (uint32_t c = 0u; c < 2u; ++c) {
+                const int32_t *wr = wet_row(c);
+                for (uint32_t j = 0u; j < BR_BLOCK; ++j) sum += (double)wr[j] * wr[j];
+            }
             seen |= br_gr_run;
         }
-        assert(seen && br_gr_controls.reverb_return_q8 && sqrt(sum / (50.0 * BR_BLOCK * 2.0)) > 100.0);
+        assert(seen && br_gr_key_valid && br_gr_key[0] == types[k] && sqrt(sum / (50.0 * BR_BLOCK * 2.0)) > 100.0);
     }
 
 #if defined(BR_REVERB_AUDIO_ONLY) && BR_REVERB_AUDIO_ONLY
     puts("PASS: shared reverb audio checks (screen checks not run)");
     return 0;
 #endif
-    /* The mixer and the FX send bars are different screens: switching between them repaints. */
-    setup();
+    /* The mixer and the FX send bars are different screens: switching between them repaints.
+     * (SMK-37 Pro: after its startup intro, as on the device.) */
+    setup(); host_after_intro();
     br_ui.page = BR_PAGE_MIX; br_ui.screen[BR_PAGE_MIX] = 0u; br_ui.redraw = 1u; br_draw();
     uint32_t mixer_layout = br_draw_layout_old;
     br_ui.page = BR_PAGE_FX; br_ui.screen[BR_PAGE_FX] = BR_FX_SENDS; br_ui.redraw = 1u; br_draw();
@@ -278,26 +509,28 @@ int main(void)
         assert(!memcmp(fx_from_mixer, &fb[227u * 240u], sizeof fx_from_mixer));
     }
 
-    /* The REVERB screen has a goldenrod GLOBAL badge in its header. */
+    /* The REVERB screen has a goldenrod GLOBAL badge in its header. HD draws the badge as a raised
+     * chip (hdc_chip: a dithered gradient from a lighter to a darker shade of its colour), so its
+     * pixels are counted within 6 RGB565 steps of the colour (hd_look.h hd_near), not exactly. */
     {
         uint32_t gold_tag = 0u, gold_track = 0u;
-        uint16_t gold = BR_GLOBAL_ACC, gold_swapped = (uint16_t)(gold >> 8 | gold << 8);
+        uint16_t gold = BR_GLOBAL_ACC;
         br_ui.part = 1u; br_ui.page = BR_PAGE_FX; br_ui.screen[BR_PAGE_FX] = BR_FX_REVERB; br_ui.redraw = 1u; br_draw();
         assert(br_ui_accent == BR_GLOBAL_ACC);
         for (uint32_t y = 46u; y < 62u; ++y) for (uint32_t x = 80u; x < 160u; ++x)
-            gold_tag += fb[y * 240u + x] == gold || fb[y * 240u + x] == gold_swapped;
+            gold_tag += hd_near(fb[y * 240u + x], gold, 6u, 0);
         assert(gold_tag > 200u);
         br_ui.screen[BR_PAGE_FX] = BR_FX_DELAY; br_ui.redraw = 1u; br_draw();
         assert(br_ui_accent == br_track_color(1u) && br_ui_accent != BR_GLOBAL_ACC);
         for (uint32_t y = 46u; y < 62u; ++y) for (uint32_t x = 80u; x < 160u; ++x)
-            gold_track += fb[y * 240u + x] == gold || fb[y * 240u + x] == gold_swapped;
+            gold_track += hd_near(fb[y * 240u + x], gold, 6u, 0);
         assert(gold_track == 0u);
         /* The track's own effect screens carry a TRACK tag in the track's colour. */
         for (uint32_t screen = BR_FX_DRIVE; screen <= BR_FX_MOD; ++screen) {
-            uint32_t tag = 0u; uint16_t c = br_track_color(1u), cs = (uint16_t)(c >> 8 | c << 8);
+            uint32_t tag = 0u; uint16_t c = br_track_color(1u);
             br_ui.screen[BR_PAGE_FX] = screen; br_ui.redraw = 1u; br_draw();
             for (uint32_t y = 46u; y < 62u; ++y) for (uint32_t x = 80u; x < 160u; ++x)
-                tag += fb[y * 240u + x] == c || fb[y * 240u + x] == cs;
+                tag += hd_near(fb[y * 240u + x], c, 6u, 0);
             assert(tag > 200u);
         }
         br_ui.screen[BR_PAGE_FX] = BR_FX_SENDS; br_ui.redraw = 1u; br_draw();
@@ -330,23 +563,20 @@ int main(void)
     setup();
     br_ui.page = BR_PAGE_FX; br_ui.screen[BR_PAGE_FX] = BR_FX_REVERB; br_ui.part = 2u;
     {
-        uint32_t revisions[BR_PARTS];
-        for (uint32_t i = 0u; i < BR_PARTS; ++i) revisions[i] = br_part[i].revision;
         br_control_turn(1u, 7); br_control_turn(2u, -5);
-        for (uint32_t i = 0u; i < BR_PARTS; ++i) {
-            assert(br_part[i].sound.space == 71u && br_part[i].fx.reverb_tone == 35u);
-            assert(br_part[i].revision != revisions[i] && !(br_part[i].revision & 1u));
-        }
+        assert(br_master.reverb_size == 71u && br_master.reverb_decay == 35u);   /* one global home */
         br_control_turn(0u, 1);
-        for (uint32_t i = 0u; i < BR_PARTS; ++i)
-            assert(br_part[i].fx.reverb_engine == br_part[0].fx.reverb_engine);
-        assert(br_part[0].fx.reverb_engine != BR_REVERB_ETHEREAL);
+        assert(br_master.reverb_engine != BR_REVERB_ETHEREAL);
+        br_control_turn(3u, 3);
+        assert(!strcmp(br_control(3u).label, "PRE DELAY") && br_control(3u).value == 3);
+        br_ui.screen[BR_PAGE_FX] = BR_FX_SENDS;
         br_control_turn(3u, 40);
         assert(br_part[2].sound.reverb == 40u && !br_part[0].sound.reverb && !br_part[1].sound.reverb);
+        br_ui.screen[BR_PAGE_FX] = BR_FX_REVERB;
         br_ui.part = 0u;                      /* every track shows the same shared values */
         assert(br_control(1u).value == 71 && br_control(2u).value == 35);
         br_ui.part = 2u;
-        assert(br_control(1u).value == 71 && !strcmp(br_control(3u).label, "SEND"));
+        assert(br_control(1u).value == 71 && !strcmp(br_control(3u).label, "PRE DELAY"));
         br_ui.redraw = 1u; br_draw();
     }
 

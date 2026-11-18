@@ -208,6 +208,11 @@ class SwarmVoice {
       float* saw,
       float* sine,
       size_t size) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+    // Not inlined into SwarmEngine::Render, so its constant does not reach
+    // here; burst mode is the only reachable mode (plaits_config.h).
+    burst_mode = true;
+#endif
     envelope_.Step(density, burst_mode, start_burst);
     
     const float scale = 1.0f / kNumSwarmVoices;

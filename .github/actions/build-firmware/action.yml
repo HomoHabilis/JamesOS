@@ -29,8 +29,12 @@ runs:
         PRODUCT: ${{ inputs.product }}
       run: |
         python3 -m pip install --user Pillow
+        # Upstream 1.0b's FM-1 release configuration (README), with this fork's identity.
         python3 tools/build.py --pattern-device-candidate --app-opt Oz \
-          --product "$PRODUCT" --diagnostics distribution --sdk "$AC79_SDK"
+          --product "$PRODUCT" --diagnostics distribution --sdk "$AC79_SDK" \
+          --define RV2_LINE_STRUCT=1 --define BR_MODEL_MOD_EXPERIMENT=1 \
+          --define FM1_PATTERN_DELETE_EXPERIMENT=1 --define FM1_PATTERN_DELETE_PROTOCOL_EXPERIMENT=1 \
+          --define FM1_PATTERN_RAW_EXPORT_EXPERIMENT=1 --define BR_ADAPTIVE_POLY=1
         package="$(ls build/pattern-device-candidate-distribution/*.fwsc)"
         test "$(echo "$package" | wc -l)" = 1
         python3 tools/validate_package.py "$package" --identity "$PRODUCT"

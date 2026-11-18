@@ -10,41 +10,7 @@
 #include "instrument_failure_job_profile.h"
 #include "../hal/fm1_memory_sync.h"
 #include "audio_level.h"
-#ifndef BR_FX_REVERB_FLOAT_Q15
-#define BR_FX_REVERB_FLOAT_Q15 1
-#endif
-#if BR_FX_REVERB_FLOAT_Q15 != 0 && BR_FX_REVERB_FLOAT_Q15 != 1
-#error "BR_FX_REVERB_FLOAT_Q15 must be 0 or 1"
-#endif
-#ifndef BR_FX_GENERIC_FEEDBACK_STABLE_CACHE
-#define BR_FX_GENERIC_FEEDBACK_STABLE_CACHE 1
-#endif
-#if BR_FX_GENERIC_FEEDBACK_STABLE_CACHE != 0 && BR_FX_GENERIC_FEEDBACK_STABLE_CACHE != 1
-#error "BR_FX_GENERIC_FEEDBACK_STABLE_CACHE must be 0 or 1"
-#endif
-#ifndef BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE
-#define BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE 1
-#endif
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE != 0 && BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE != 1
-#error "BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE must be 0 or 1"
-#endif
-#ifndef BR_FX_REVERB_Q2_INLINE_DECODE
-#define BR_FX_REVERB_Q2_INLINE_DECODE 1
-#endif
-#if BR_FX_REVERB_Q2_INLINE_DECODE != 0 && BR_FX_REVERB_Q2_INLINE_DECODE != 1
-#error "BR_FX_REVERB_Q2_INLINE_DECODE must be 0 or 1"
-#endif
-#ifndef BR_FX_REVERB_OUTPUT_DIFFUSER_INLINE
-#define BR_FX_REVERB_OUTPUT_DIFFUSER_INLINE 1
-#endif
-#if BR_FX_REVERB_OUTPUT_DIFFUSER_INLINE != 0 && BR_FX_REVERB_OUTPUT_DIFFUSER_INLINE != 1
-#error "BR_FX_REVERB_OUTPUT_DIFFUSER_INLINE must be 0 or 1"
-#endif
-#if BR_FX_REVERB_OUTPUT_DIFFUSER_INLINE
-#define BR_FX_OUTPUT_DIFFUSER_FN static inline __attribute__((always_inline))
-#else
-#define BR_FX_OUTPUT_DIFFUSER_FN static BR_FX_RAM_AUDIO
-#endif
+#include "../product.h"
 #ifndef BR_FX_NATIVE_RATE_CALIBRATION
 #if defined(FM1_NATIVE_OUTPUT_32K) && FM1_NATIVE_OUTPUT_32K
 #define BR_FX_NATIVE_RATE_CALIBRATION 1
@@ -114,17 +80,10 @@
 #error "BR_FX_MASTER_WOW_PHASE_CACHE must be 0 or 1"
 #endif
 
-#ifndef BR_FX_REVERB_RATE2_HALL
-#define BR_FX_REVERB_RATE2_HALL 0
-#endif
 /* Skip the work of a track's modulation stage at MIX 0 and of its delay stage at send 0.
  * Neither is heard then; only the state a later enable reads is kept. */
 #ifndef BR_FX_STAGE_SKIP_IDLE
 #define BR_FX_STAGE_SKIP_IDLE 1
-#endif
-/* The half-rate reverb keeps its input history in a mirrored ring (needs Hall's storage). */
-#ifndef BR_FX_REVERB_RATE2_MIRROR
-#define BR_FX_REVERB_RATE2_MIRROR BR_FX_HALL_FIR_MIRROR_HISTORY
 #endif
 /* The shared-reverb emit step reads block constants once and writes track state once. */
 #ifndef BR_FX_SEND_BLOCK_HOIST
@@ -146,41 +105,10 @@
 #ifndef BR_FX_DELAY_BLOCK_ALL_ENGINES
 #define BR_FX_DELAY_BLOCK_ALL_ENGINES 1
 #endif
-#ifndef BR_FX_REVERB_RATE2_ALL
-#define BR_FX_REVERB_RATE2_ALL 1
-#endif
-#ifndef BR_FX_REVERB_STAGE_PRUNE_NATIVE_FOR_RATE2_ALL
-#define BR_FX_REVERB_STAGE_PRUNE_NATIVE_FOR_RATE2_ALL 1
-#endif
-#ifndef BR_FX_REVERB_RATE4_ROOM
-#define BR_FX_REVERB_RATE4_ROOM 0
-#endif
-#ifndef BR_FX_REVERB_RATE4_HALL
-#define BR_FX_REVERB_RATE4_HALL 1
-#endif
-#ifndef BR_FX_REVERB_RATE4_HALL_COMPACT
-#define BR_FX_REVERB_RATE4_HALL_COMPACT 1
-#endif
-#ifndef BR_FX_REVERB_RATE4_HALL_HALF_BAND
-#define BR_FX_REVERB_RATE4_HALL_HALF_BAND 1
-#endif
-#ifndef BR_FX_REVERB_RATE4_HALL_HALF_BAND_MAKEUP_73_64
-#define BR_FX_REVERB_RATE4_HALL_HALF_BAND_MAKEUP_73_64 1
-#endif
-#ifndef BR_FX_HALL_FIR_MIRROR_HISTORY
-#define BR_FX_HALL_FIR_MIRROR_HISTORY 1
-#endif
-#if BR_FX_HALL_FIR_MIRROR_HISTORY != 0 && BR_FX_HALL_FIR_MIRROR_HISTORY != 1
-#error "BR_FX_HALL_FIR_MIRROR_HISTORY must be 0 or 1"
-#endif
-#if BR_FX_REVERB_RATE4_HALL_HALF_BAND && !BR_FX_REVERB_RATE4_HALL
-#error "the Hall half-band requires BR_FX_REVERB_RATE4_HALL"
-#endif
-#if BR_FX_REVERB_RATE4_HALL_HALF_BAND_MAKEUP_73_64 && !BR_FX_REVERB_RATE4_HALL_HALF_BAND
-#error "the 73/64 Hall makeup requires the Hall half-band"
-#endif
-#ifndef BR_FX_REVERB_SEND_EVENT_PRODUCT
-#define BR_FX_REVERB_SEND_EVENT_PRODUCT 1
+/* One-pole high-pass (about 60 Hz) on the delay feedback path only, so bass
+ * does not build up at high feedback. The first echo is not filtered. */
+#ifndef BR_FX_DELAY_LOOP_HPF
+#define BR_FX_DELAY_LOOP_HPF 1
 #endif
 #ifndef BR_FX_STAGE_FULL_GAIN_UNITY
 #define BR_FX_STAGE_FULL_GAIN_UNITY 1
@@ -203,9 +131,6 @@
 #ifndef BR_FX_STAGE_EMIT_PAN_DIRECT
 #define BR_FX_STAGE_EMIT_PAN_DIRECT 1
 #endif
-#ifndef BR_FX_STAGE_REVERB_RATE_DISPATCH
-#define BR_FX_STAGE_REVERB_RATE_DISPATCH 1
-#endif
 #ifndef BR_FX_STAGE_EMIT_ROUTE_COEFFS
 #define BR_FX_STAGE_EMIT_ROUTE_COEFFS 0
 #endif
@@ -224,9 +149,6 @@
 #if BR_FX_STAGE_EMIT_PAN_DIRECT != 0 && BR_FX_STAGE_EMIT_PAN_DIRECT != 1
 #error "BR_FX_STAGE_EMIT_PAN_DIRECT must be 0 or 1"
 #endif
-#if BR_FX_STAGE_REVERB_RATE_DISPATCH != 0 && BR_FX_STAGE_REVERB_RATE_DISPATCH != 1
-#error "BR_FX_STAGE_REVERB_RATE_DISPATCH must be 0 or 1"
-#endif
 #if BR_FX_STAGE_EMIT_ROUTE_COEFFS != 0 && BR_FX_STAGE_EMIT_ROUTE_COEFFS != 1
 #error "BR_FX_STAGE_EMIT_ROUTE_COEFFS must be 0 or 1"
 #endif
@@ -235,9 +157,6 @@
 #endif
 #ifndef BR_FX_DELAY_RATE2
 #define BR_FX_DELAY_RATE2 1
-#endif
-#ifndef BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-#define BR_FX_REVERB_PACK_ALL_RATE2_ROOM 1
 #endif
 #ifndef BR_FX_MOD_RATE2
 #define BR_FX_MOD_RATE2 1
@@ -287,16 +206,6 @@
     (!(BR_FX_NATIVE_RATE_CALIBRATION || BR_FX_NATIVE_RATE_48K) || !BR_FX_DELAY_RATE2 || \
      !BR_FX_BLOCK_STAGE_SPECIALIZE_DELAY)
 #error "Tape wow delta lookup requires native calibration and the rate-2 Tape stage"
-#endif
-#ifndef BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB
-#define BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB 1
-#endif
-#if BR_FX_REVERB_RATE4_HALL_COMPACT && \
-    (!BR_FX_BLOCK_STAGE_ONLY_BUILD || !BR_FX_BLOCK_STAGE_PIPELINE || \
-     !BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB || !BR_FX_REVERB_RATE4_HALL || \
-     BR_FX_REVERB_RATE4_ROOM || BR_FX_REVERB_RATE2_HALL || \
-     !BR_FX_REVERB_RATE4_HALL_HALF_BAND)
-#error "compact Hall Q4 requires stage-only Hall Q4 + half-band, with no other Hall/Q4 engine path"
 #endif
 #ifndef BR_FX_INTERP_DELTA_1MUL
 #define BR_FX_INTERP_DELTA_1MUL 1
@@ -454,42 +363,6 @@
     (!BR_FX_BLOCK_STAGE_PIPELINE || !BR_FX_BLOCK_STAGE_ONLY_BUILD)
 #error "FX substage timing requires the block-staged, stage-only FX path"
 #endif
-#if BR_FX_REVERB_PACK_ALL_RATE2_ROOM && !BR_FX_REVERB_RATE2_ALL
-#error "packed room storage requires all-engine rate-2 reverb"
-#endif
-#if BR_FX_REVERB_RATE2_HALL || BR_FX_REVERB_RATE2_ALL
-#define BR_FX_HAS_REVERB_RATE2 1
-#else
-#define BR_FX_HAS_REVERB_RATE2 0
-#endif
-#if BR_FX_REVERB_RATE4_ROOM || BR_FX_REVERB_RATE4_HALL
-#define BR_FX_HAS_REVERB_RATE4 1
-#else
-#define BR_FX_HAS_REVERB_RATE4 0
-#endif
-#if BR_FX_HAS_REVERB_RATE2 || BR_FX_HAS_REVERB_RATE4
-#define BR_FX_HAS_REVERB_RATE 1
-#else
-#define BR_FX_HAS_REVERB_RATE 0
-#endif
-#if BR_FX_HALL_FIR_MIRROR_HISTORY && \
-    (!BR_FX_HAS_REVERB_RATE4 || !BR_FX_REVERB_RATE4_HALL || \
-     !BR_FX_REVERB_RATE4_HALL_HALF_BAND)
-#error "Hall FIR mirror history requires the Hall quarter-rate half-band path"
-#endif
-#if BR_FX_REVERB_STAGE_PRUNE_NATIVE_FOR_RATE2_ALL != 0 && \
-    BR_FX_REVERB_STAGE_PRUNE_NATIVE_FOR_RATE2_ALL != 1
-#error "BR_FX_REVERB_STAGE_PRUNE_NATIVE_FOR_RATE2_ALL must be 0 or 1"
-#endif
-#if BR_FX_REVERB_STAGE_PRUNE_NATIVE_FOR_RATE2_ALL && \
-    (!BR_FX_REVERB_RATE2_ALL || !BR_FX_BLOCK_STAGE_ONLY_BUILD || \
-     !BR_FX_BLOCK_STAGE_PIPELINE || !BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB)
-#error "native reverb pruning requires all-engine rate-2 selection and the staged stage-only reverb path"
-#endif
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE && \
-    (!BR_FX_REVERB_RATE2_ALL || !BR_FX_REVERB_STAGE_PRUNE_NATIVE_FOR_RATE2_ALL)
-#error "generic reverb read cursor cache requires all-engine Q2 with the native path pruned"
-#endif
 #if BR_FX_BLOCK_STAGE_PIPELINE
 #define BR_FX_TAIL_EVENT_PARAM , int32_t *tail_event
 #define BR_FX_TAIL_EVENT_ARG(value) , (value)
@@ -568,19 +441,21 @@
 #define BR_FX_MASTER_PREPARE_INVOKE(fn, ...) fn(__VA_ARGS__)
 #endif /* BR_FX_MASTER_PREPARE_FLASH */
 
-#if BR_FX_REVERB_SEND_EVENT_PRODUCT
-/* Keep the configured floating-point boundary query out of the hot RAM
- * stage. Only products at +/-381 need it; all other inputs use the exact
- * magnitude threshold. */
-static inline __attribute__((always_inline)) int
-br_fx_reverb_send_event_from_product(int32_t product)
-{
-    uint32_t raw = (uint32_t)product;
-    uint32_t sign = 0u - (uint32_t)(product < 0);
-    uint32_t magnitude = (raw ^ sign) - sign;
-    return magnitude >= 381u;
-}
-#endif
+/* The shared reverb (reverb2). Only its per-sample core, rv2_core_run, is RAM code;
+ * design, apply and the block driver run from XIP flash and reach the core through
+ * an absolute indirect call (pi32v2 cannot encode a relative call between the two
+ * regions). The core's small index tables stay ordinary constants: at -O3 the four
+ * allpass tables fold, but the line loop keeps rv2_off/rv2_blen (16 B each) as XIP
+ * .rodata loads. They cannot move to a named .data section: the vendor compiler marks
+ * a 16-byte constant there mergeable and its assembler then fails ("expected the entry
+ * size"). RV2_LINE_STRUCT=1 removes those loads (the offsets live in the state,
+ * same output). Build options, each overridable with build.py --define:
+ * RV2_UPSAMPLE_TAPS (6 or 4), RV2_INT_READS (0 or 1), RV2_LINE_STRUCT (0 or 1). */
+#define RV2_API static
+#define RV2_RAM BR_FX_RAM_AUDIO __attribute__((noinline))
+#define RV2_CORE_CALL(fn, ...) \
+    ({ __typeof__(&(fn)) volatile rv2_core_fn_ = &(fn); rv2_core_fn_(__VA_ARGS__); })
+#include "instrument_reverb2.c"
 
 typedef uint32_t br_fx_clear_word_t __attribute__((may_alias));
 static inline __attribute__((always_inline)) void br_fx_clear32(br_fx_clear_word_t *p, uint32_t words)
@@ -626,74 +501,64 @@ br_fx_glitch_quantize(int32_t sample, uint32_t step)
 #define BR_FX_DELAY_FULL_SAMPLES 16384u
 #if BR_FX_DELAY_RATE2
 #define BR_FX_DELAY_SAMPLES (BR_FX_DELAY_FULL_SAMPLES / 2u)
-#define BR_FX_DELAY_MAX_SHIFT 5u
+#define BR_FX_DELAY_MAX_SHIFT 5u   /* at most 8: the per-level ring indices are bytes */
 #else
 #define BR_FX_DELAY_SAMPLES BR_FX_DELAY_FULL_SAMPLES
 #define BR_FX_DELAY_MAX_SHIFT 0u
 #endif
 #define BR_FX_DELAY_XFADE_FRAMES 64u
-#if BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-#if BR_FX_NATIVE_RATE_48K
-#define BR_FX_ROOM_SAMPLES 4664u
-#else
-/* Max packed half-rate room lengths plus their per-engine offsets. */
-#define BR_FX_ROOM_SAMPLES 4286u
-#endif
-#else
-#if BR_FX_NATIVE_RATE_48K
-#define BR_FX_ROOM_SAMPLES 9322u
-#else
-#define BR_FX_ROOM_SAMPLES 8566u
-#endif
-#endif
-#if BR_FX_NATIVE_RATE_CALIBRATION && BR_FX_REVERB_PACK_ALL_RATE2_ROOM && \
-    BR_FX_ROOM_SAMPLES < 3110u
-#error "native32 packed room geometry exceeds the allocated room ring"
-#endif
 #if BR_FX_MOD_RATE2
 #define BR_FX_MOD_SAMPLES 1024u
 #else
 #define BR_FX_MOD_SAMPLES 2048u
 #endif
+/* The deepest MOD read (and its interpolation partner) in 44.1 kHz samples. */
+#define BR_FX_MOD_REACH (BR_FX_MOD_RATE2 ? 2u * (BR_FX_MOD_SAMPLES - 2u) : BR_FX_MOD_SAMPLES - 2u)
 #define BR_FX_TAIL_SAMPLES (FS * 3u)
-#define BR_FX_REVERB_OUTPUT_AP0_LENGTH 31u
-#define BR_FX_REVERB_OUTPUT_AP1_LENGTH 47u
 
 #ifndef BR_FX_GLOBAL_REVERB
 #define BR_FX_GLOBAL_REVERB 1
 #endif
-#if BR_FX_GLOBAL_REVERB
-/* The shared reverb needs one room line. It runs inside the render job of this
- * track, one block behind the tracks that feed it, so any track can host it.
- * Measured on build 1578, hosting it in the kit finalizer lowered the mean finish
- * time with stacked effects but raised the worst half: the finalizer starts after
- * the four lane jobs, so the reverb became a late tail. Track 3 stays the host. */
-#define BR_FX_ROOM_LINES 1u
+/* Only the shared reverb (instrument_reverb2.c) exists: the per-track reverb and the
+ * per-frame FX path that ran it were removed. */
+#if !BR_FX_GLOBAL_REVERB || !BR_FX_BLOCK_STAGE_ONLY_BUILD || !BR_FX_BLOCK_STAGE_PIPELINE
+#error "the per-track reverb was removed: BR_FX_GLOBAL_REVERB and the stage-only FX build are required"
+#endif
+/* The shared reverb runs inside the render job of this track, one block behind the
+ * tracks that feed it, so any track can host it. Measured on build 1578, hosting it
+ * in the kit finalizer lowered the mean finish time with stacked effects but raised
+ * the worst half: the finalizer starts after the four lane jobs, so the reverb
+ * became a late tail. Track 3 stays the host. */
 #ifndef BR_GR_HOST
 #define BR_GR_HOST 2u
-#endif
-#else
-#define BR_FX_ROOM_LINES BR_PARTS
 #endif
 
 /* Four independent mono effect memories. Their combined data reservation is
  * exactly 215,984 bytes: 131,072 delay + 68,528 reverb + 16,384 modulation. */
+#if BR_POLY_SUPPORT
+static int16_t br_delay_line[BR_PARTS][BR_FX_DELAY_SAMPLES] BR_POOL __attribute__((aligned(8)));
+#else
 static int16_t br_delay_line[BR_PARTS][BR_FX_DELAY_SAMPLES] BR_POOL __attribute__((aligned(4)));
-typedef int16_t br_fx_room_sample_t;
-static br_fx_room_sample_t br_room_line[BR_FX_ROOM_LINES][BR_FX_ROOM_SAMPLES] BR_POOL __attribute__((aligned(4)));
+#endif
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+/* Only selected-track effects may use a delay line while the other lines are
+ * loaned. Aliases are changed while both workers are parked. */
+static int16_t *br_fx_delay_alias[BR_PARTS] = {
+    br_delay_line[0], br_delay_line[1], br_delay_line[2], br_delay_line[3]
+};
+static uint8_t br_fx_poly_loaned, br_fx_poly_part, br_fx_poly_mode;
+#define BR_POLY_DELAY_LINE(p) br_fx_delay_alias[(p)]
+#elif BR_POLY_SUPPORT
+#define BR_POLY_DELAY_LINE(p) br_delay_line[(p)]
+#else
+#define BR_POLY_DELAY_LINE(p) br_delay_line[p]
+#endif
 static int16_t br_mod_line[BR_PARTS][BR_FX_MOD_SAMPLES] BR_POOL __attribute__((aligned(4)));
-/* Two short output allpasses diffuse one shared wet sum into stereo. Their
- * 31 + 47 int32 samples use 1,248 bytes across all tracks (+624 bytes). */
-static int32_t br_reverb_output_ap0[BR_PARTS][BR_FX_REVERB_OUTPUT_AP0_LENGTH]
-    BR_POOL __attribute__((aligned(4)));
-static int32_t br_reverb_output_ap1[BR_PARTS][BR_FX_REVERB_OUTPUT_AP1_LENGTH]
-    BR_POOL __attribute__((aligned(4)));
 /* Shared stereo master wow line: 2 KiB, linked modulation with separate channels. */
 static int32_t br_master_wow_line[2][256] BR_POOL;
 
 typedef struct {
-    uint32_t delay_pos, room_pos[4], mod_pos, lfo_phase;
-    uint32_t room_delay_q8[4], room_feedback[4];
+    uint32_t delay_pos, mod_pos, lfo_phase;
     uint32_t delay_storage_shift, delay_valid_samples, delay_last_time;
     uint32_t delay_output_xfade_left;
     int32_t delay_output_last, delay_output_xfade_from;
@@ -702,43 +567,35 @@ typedef struct {
     int32_t mod_rate2_input_history[3], mod_rate2_previous_output;
 #endif
     uint32_t glitch_count;
-    int32_t delay_lp, room_lp[4], phase_state[4], reverb_send_lp;
-    int32_t drive_lp, drive_dc, drive_prev, drive_send;     /* drive_send: last block's send, Q23 */
-    float reverb_output_scale; /* unity 32; normalized wet output for Space */
-    uint8_t reverb_output_ap_pos[2];
-    uint8_t reverb_output_unity;
+    int32_t delay_lp, phase_state[4], mod_feedback_last;
+    int32_t delay_hp;   /* loop high-pass: low-passed echo, Q4 */
+    int32_t drive_lp, drive_dc, drive_prev, drive_send;     /* drive_send: last block's send, 0..127 */
     int32_t glitch_hold;
     uint32_t tail_samples;
     uint32_t tail_storage;
-    uint32_t previous_delay_wet, previous_reverb_wet, previous_mod_mix;
+    uint32_t previous_delay_wet, previous_mod_mix;
 #if BR_FX_DELAY_RATE2
     uint32_t delay_rate2_phase, delay_rate2_history_pos;
     uint32_t glitch_half_error;
-    int32_t delay_rate2_send_history[8], delay_rate2_previous_echo;
+    /* Line writes left before the whole line is known to hold zeros: reset to the
+     * line length by every nonzero write. Zero lets the MIX 0 stage be skipped. */
+    uint32_t delay_ring;
+    /* Send half-band ring (track bus units), the wet half-band's ring of line
+     * echoes (one per storage sample) and the odd output still to be played. */
+    int32_t delay_rate2_send_history[16], delay_rate2_previous_echo;
+    int32_t delay_echo_history[8];
+    uint32_t delay_echo_pos;
+    uint32_t delay_wow_phase, delay_flutter_phase;   /* TAPE's own wow and flutter */
+    int32_t delay_pan_sigma;   /* WIDTH: slewed side of the echo now playing, Q15, + = left */
+    int32_t delay_side_q14;    /* WIDTH * sigma, Q14 */
 #if BR_FX_DELAY_MAX_SHIFT
-    uint32_t delay_long_pos[BR_FX_DELAY_MAX_SHIFT];
-    uint32_t delay_long_phase[BR_FX_DELAY_MAX_SHIFT];
+    uint8_t delay_long_pos[8], delay_long_phase[8];   /* per level: ring index, 0/1 */
     uint32_t delay_long_interp_phase;
-    int32_t delay_long_history[BR_FX_DELAY_MAX_SHIFT][8];
-    int32_t delay_long_previous_echo, delay_long_echo;
+    int16_t delay_long_history[BR_FX_DELAY_MAX_SHIFT][16];   /* half the line value */
+    int32_t delay_long_previous_echo, delay_long_echo, delay_long_odd;
 #endif
 #endif
-#if BR_FX_HAS_REVERB_RATE
-    uint32_t reverb_rate2_phase, previous_reverb_rate2, reverb_rate2_ramp;
-    uint32_t previous_reverb_engine;
-    int32_t reverb_rate2_input_hist[6], reverb_rate2_previous_l, reverb_rate2_previous_r;
-#endif
-#if BR_FX_HAS_REVERB_RATE4
-    uint32_t reverb_rate4_phase, previous_reverb_rate4;
-    int32_t reverb_rate4_input_hist[6], reverb_rate4_from_l, reverb_rate4_from_r;
-#endif
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-    /* Six-sample duplicated rings for Hall's two Q4 half-band stages. */
-    uint32_t reverb_hall_q4_full_history_pos, reverb_hall_q4_half_history_pos;
-    uint32_t reverb_hall_q4_history_valid;
-    int32_t reverb_hall_q4_full_history_mirror[12];
-    int32_t reverb_hall_q4_half_history_mirror[12];
-#endif
+    float drive_wet, drive_m, drive_ed, drive_ew;   /* DRIVE: wet gain s*M*T, level match M, smoothed energies (last, so no other offset moves) */
 } br_fx_track_t;
 static br_fx_track_t br_fx_track[BR_PARTS] BR_POOL;
 
@@ -749,7 +606,7 @@ typedef struct {
     uint32_t bit_hold_count;
     int32_t bit_hold[2];
     int32_t low[2];
-    float svf_low[2], band[2];
+    float svf_low[2], band[2], hp2_low[2], hp2_band[2], hp2_a, hp2_d;
 #if BR_FX_MASTER_WOW_PHASE_CACHE
     uint32_t stable_wow_phase_inc;
 #endif
@@ -761,13 +618,32 @@ typedef struct {
     float stable_resonance_mix;
 #endif
 #endif
+    uint32_t limit_cut;     /* master limiter: 32768 - gain (Q15); 0 = unity */
+#ifndef BR_MASTER_LEVELER
+#define BR_MASTER_LEVELER 0 /* trial: always-on output leveler (br_master_limit_block) */
+#endif
+#if BR_MASTER_LEVELER
+    /* Output leveler (all zero = idle, 0 dB): boost - 32768 (Q15), the
+     * applied gain reached - 32768 (Q15, boost x limiter), its per-frame
+     * step (Q30), the smoothed mean square (a^2 / 64) and blocks under the gate. */
+    uint32_t lev_boost;
+    int32_t lev_applied;
+    uint32_t lev_step;
+    uint32_t lev_ms;
+    uint32_t lev_quiet;
+#endif
+#if BR_FILTER_LADDER
+    /* Master low-pass: the track filter's four-pole ladder, one per channel.
+     * Both channels see the same control sequence, so their mixes match. */
+    br_filter_t ladder[2];
+#endif
 } br_master_state_t;
 
 /* The serialized br_master_fx_t keeps its legacy distortion member. The
  * renderer caches only the controls that still have an audible path. */
 typedef struct {
     uint32_t filter, saturation, wow, resonance;
-    uint32_t heat_type, heat_amount;
+    uint32_t heat_type, heat_amount, filter_snap_generation;
 } br_master_controls_t;
 
 /* Values derived from controls that are fixed for one audio block. The
@@ -782,34 +658,18 @@ typedef struct {
     uint32_t delay_tap[4];
     uint32_t delay_storage_shift;
 #if BR_FX_DELAY_RATE2
-    uint16_t delay_tape_alpha;
+    uint16_t delay_tape_alpha;   /* TAPE's per-pass low-pass, or TONE's for DIGITAL (0: open) */
+    uint16_t delay_wow_depth_q8, delay_flutter_depth_q8;   /* storage samples, Q8 */
+    uint32_t delay_wow_inc, delay_flutter_inc;             /* per storage sample */
 #endif
+    uint16_t delay_hp_alpha;   /* loop high-pass coefficient at the line rate, Q12 */
     uint16_t glitch_hold, glitch_step;
-    uint32_t reverb_engine, reverb_wet, reverb_tone, reverb_space;
-    uint32_t reverb_return_q8; /* shared reverb: gain on the summed sends, 256 = unity */
-    float reverb_output_scale; /* output-diffuser target */
-    int32_t *reverb_output_ap0_base;
-    int32_t *reverb_output_ap1_base;
-    uint32_t reverb_feedback, reverb_alpha, reverb_tail_hold;
-    uint16_t reverb_size_delay[4];
-    uint32_t reverb_slew_shift;
-    uint16_t reverb_feedback_line[4];
-#if BR_FX_REVERB_FLOAT_Q15
-    float reverb_alpha_float;
-    float reverb_feedback_line_float[4];
-#if BR_FX_GENERIC_FEEDBACK_STABLE_CACHE
-    uint8_t reverb_feedback_stable;
-#endif
-#endif
-    uint16_t reverb_start[4], reverb_length[4];
+    uint16_t delay_width_q15;  /* WIDTH 0..127 as 0..32767; 0 = the mono line */
+    uint32_t reverb_wet;       /* SEND to the shared reverb, 0..127 */
 #if BR_FX_PAN_COEFF_CACHE
     uint16_t pan_left_q15, pan_right_q15;
 #endif
-#if BR_FX_HAS_REVERB_RATE
-    uint32_t reverb_rate2;
-    uint32_t reverb_rate4;
-#endif
-    uint32_t mod_engine, mod_depth, mod_mix, mod_lfo_inc, mod_base_q8, mod_span;
+    uint32_t mod_engine, mod_depth, mod_mix, mod_lfo_inc, mod_base_q8, mod_span, mod_feedback;
 #if BR_FX_Q15_MIX_GAIN
     uint16_t delay_amount_gain, mod_mix_gain;
 #elif BR_FX_FLOAT_MIX_GAIN
@@ -817,14 +677,6 @@ typedef struct {
 #endif
 } br_fx_controls_t;
 static br_fx_controls_t br_fx_controls[BR_PARTS] BR_POOL;
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE
-/* The generic Q2 kernel advances these only after a real internal wet tick.
- * Per-block preparation rebuilds them from room_pos without touching DSP state. */
-static uint16_t br_fx_reverb_read_cursor[BR_PARTS][4] BR_POOL;
-static const br_fx_room_sample_t *br_fx_reverb_read_ring[BR_PARTS][4] BR_POOL;
-static uint8_t br_fx_reverb_read_cursor_stable[BR_PARTS] BR_POOL;
-static uint8_t br_fx_reverb_read_cursor_init_mask[BR_PARTS] BR_POOL;
-#endif
 #ifndef BR_FX_STABLE_CONTROL_CACHE
 #define BR_FX_STABLE_CONTROL_CACHE 1
 #endif
@@ -834,25 +686,8 @@ static uint8_t br_fx_reverb_read_cursor_init_mask[BR_PARTS] BR_POOL;
 #if BR_FX_STABLE_CONTROL_CACHE
 /* Exact raw control key: derived values never depend on advancing DSP state.
  * Full words preserve out-of-range inputs and low-bit glitch controls too. */
-static uint32_t br_fx_control_key[BR_PARTS][14];
+static uint32_t br_fx_control_key[BR_PARTS][11];
 static uint32_t br_fx_control_key_valid;
-/* Private warm prototype: remembers the pre-warm control baseline until the
- * first real non-dry block so cache preparation is behaviorally transparent. */
-static uint32_t br_fx_warm_pending;
-typedef struct {
-    uint32_t engine, space, feedback;
-    uint16_t feedback_line[4];
-} br_fx_warm_baseline_t;
-static br_fx_warm_baseline_t br_fx_warm_baseline[BR_PARTS];
-typedef struct {
-    float output_scale;
-    uint32_t room_feedback[4];
-    int32_t reverb_send_lp;
-    uint8_t output_unity;
-} br_fx_warm_saved_t;
-/* This is called only from a foreground quiescent transaction, so static
- * scratch avoids adding 112 bytes to the audio/foreground stack. */
-static br_fx_warm_saved_t br_fx_warm_saved[BR_PARTS];
 #endif
 /* Shared call-free wide-delta helper; master paths use it in every mix mode. */
 /* Keep the cold wide-delta work in one shared RAM helper instead of
@@ -913,7 +748,7 @@ br_fx_blend127_cached(int32_t delta, uint32_t mix, float gain)
 #endif
 static br_master_state_t br_master_state BR_POOL;
 static br_master_controls_t br_master_cached = {
-    64u, 0u, 0u, 0u, BR_HEAT_BIT, 0u
+    64u, 0u, 0u, 0u, BR_HEAT_BIT, 0u, 0u
 };
 #if BR_FX_MASTER_Q15_MIX_GAIN
 static uint32_t br_master_saturation_mix_gain_q15;
@@ -949,36 +784,50 @@ static uint8_t br_fx_progress_reserved[sizeof(br_fx_progress_retained_t)]
 static int32_t (*br_fx_job_bus)[BR_BLOCK];
 static uint32_t br_fx_job_n;
 static uint32_t br_fx_job_enabled[BR_PARTS], br_fx_job_pan[BR_PARTS], br_fx_job_kit[BR_PARTS];
+/* The PAN gains each track's last block ended on, packed and XOR 0x80008000 (0 = centre). */
+static uint32_t br_fx_pan_prev[BR_PARTS];
 static int32_t br_fx_track_stereo[BR_PARTS][BR_BLOCK][2] BR_POOL;
 /* A track job that took the silent-skip path records the current block's
  * sequence, so the finish stage knows that row is all zero without a scan. */
 static uint32_t br_fx_block_seq, br_fx_track_silent_seq[BR_PARTS];
 static volatile uint32_t br_gr_separate_seq = 0xffffffffu; /* block whose reverb is its own job */
 #if BR_FX_GLOBAL_REVERB
-/* One reverb for all tracks. Each track job leaves its send (post-delay signal
- * times its send level) in the buffer for the current block; the shared reverb
- * sums the previous block's sends, so its wet return lags the tracks by one
- * block (5.8 ms) and runs in the render phase instead of the serial tail. */
+/* One reverb for all tracks (instrument_reverb2.c). Each track job leaves its send
+ * (post-delay signal times its send level) in the buffer for the current block; the
+ * shared reverb sums the previous block's sends, so its wet return lags the tracks
+ * by one block (5.8 ms) and runs in the render phase instead of the serial tail.
+ * Once the reverb has read them, the previous block's rows are free until the next
+ * block's tracks write them: row 0 takes the summed send, rows 1 and 2 the stereo
+ * return that br_gr_add_range adds to this block's mix (no separate wet buffer). */
 static int32_t br_gr_send[2][BR_PARTS][BR_BLOCK] BR_POOL;
-static int32_t br_gr_wet[BR_BLOCK][2] BR_POOL;
-static br_fx_track_t br_gr_state BR_POOL;
-static br_fx_controls_t br_gr_controls BR_POOL;
+#define BR_GR_IN_ROW 0u
+#define BR_GR_WET_L_ROW 1u
+#define BR_GR_WET_R_ROW 2u
 static uint8_t br_gr_have[2][BR_PARTS];
-/* Input diffusion: four allpasses ahead of the reverb turn each hit into a dense burst
- * (without them the comb network answers a click with a few separate echoes). */
-#define BR_GR_AP0_LEN 211u
-#define BR_GR_AP1_LEN 157u
-#define BR_GR_AP2_LEN 563u
-#define BR_GR_AP3_LEN 409u
-static int32_t br_gr_ap0[BR_GR_AP0_LEN] BR_POOL, br_gr_ap1[BR_GR_AP1_LEN] BR_POOL;
-static int32_t br_gr_ap2[BR_GR_AP2_LEN] BR_POOL, br_gr_ap3[BR_GR_AP3_LEN] BR_POOL;
-static uint16_t br_gr_ap_pos[4];
-static uint32_t br_gr_key[3], br_gr_key_valid, br_gr_wanted, br_gr_run, br_gr_cur;
+/* Line pools and state of the reverb (24,656 + 2,760 bytes of lines). */
+static int16_t br_gr_pool16[RV2_POOL16_LEN] BR_POOL __attribute__((aligned(4)));
+static int32_t br_gr_pool32[RV2_POOL32_LEN] BR_POOL;
+static rv2_state_t br_gr_rv BR_POOL;
+static int16_t br_gr_sync_pre[RV2_SYNC_PRE_LEN];
+/* The optional user controls (pre-delay, tone, mod, low cut, width), each 0..127 or
+ * RV2_DERIVE (255: derived from TYPE/SIZE/DECAY). br_gr_prepare refreshes them each
+ * block from br_master.reverb_extra / reverb_manual (the saved homes). */
+static rv2_overrides_t br_gr_overrides = {RV2_DERIVE, RV2_DERIVE, RV2_DERIVE, RV2_DERIVE, RV2_DERIVE};
+static rv2_overrides_t br_gr_key_overrides;
+static rv2_coeffs_t br_gr_design_cache;
+/* br_gr_key: TYPE, SIZE, DECAY the coefficients were designed for. br_gr_out_seq:
+ * the block whose return rows hold this block's reverb output. */
+static uint32_t br_gr_key[3], br_gr_key_valid, br_gr_wanted, br_gr_run, br_gr_cur, br_gr_out_seq;
+/* TYPE change de-click: 1 = this block's return fades out (the new TYPE is applied
+ * next block), 2 = this block's return fades in after it was applied. */
+static uint32_t br_gr_duck;
+/* Bound expensive reverb redesigns by elapsed samples, even in 32-frame pipelines. */
+static uint32_t br_gr_lfo_frames;
+static uint32_t br_gr_sync_key = 0xffffffffu;
 static void br_gr_prepare(void);
-static void br_sp_clear(void);
 /* Output of the DRIVE stage, one row per track; the rest of the track chain reads it as its input. */
 static int32_t br_fx_drive_buf[BR_PARTS][BR_BLOCK] BR_POOL;
-static void br_fx_drive_block(uint32_t p, const int32_t *in, int32_t *out, uint32_t n);
+static uint32_t br_fx_drive_block(uint32_t p, const int32_t *in, int32_t *out, uint32_t n);
 static void br_gr_plan(void);
 /* Blocks the shared reverb ran, guard hits, last and worst job time in ticks. */
 #if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
@@ -1068,9 +917,55 @@ static uint32_t br_fx_pipeline_cpu0_only;
 static uint32_t br_fx_comp_active, br_fx_comp_key_part;
 static uint32_t br_fx_dry_center;
 static volatile uint32_t br_fx_fusion_pending;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+/* Caller owns a parked worker and muted audio. Inactive delay tails are
+ * discarded when the loan ends; project settings are never changed. */
+BR_AUDIO_API int br_fx_poly_can_loan(uint32_t part, uint32_t required)
+{
+    return part < BR_SYNTH_PARTS && !br_fx_poly_loaned && !br_fx_fusion_pending &&
+        !br_punch_effect && required <= sizeof br_delay_line - sizeof br_delay_line[0];
+}
+BR_AUDIO_API uint32_t br_fx_poly_loan_active(void) { return br_fx_poly_loaned; }
+BR_AUDIO_API int br_fx_poly_mode_set(uint32_t part, uint32_t enabled)
+{
+    if (br_fx_fusion_pending || part >= BR_SYNTH_PARTS) return 0;
+    if (!enabled && br_fx_poly_loaned) return 0;
+    if (enabled && br_fx_poly_mode) return 0;
+    br_fx_poly_part = (uint8_t)part;
+    br_fx_poly_mode = !!enabled;
+    return 1;
+}
+BR_AUDIO_API int br_fx_poly_loan_acquire(uint32_t part, uint32_t required, void **buffer, uint32_t *bytes)
+{
+    if (!buffer || !bytes || !br_fx_poly_can_loan(part, required)) return 0;
+    if (part != 0u) memmove(br_delay_line[0], br_delay_line[part], sizeof br_delay_line[0]);
+    br_fx_delay_alias[part] = br_delay_line[0];
+    br_fx_poly_part = (uint8_t)part;
+    br_fx_poly_loaned = 1u;
+    *buffer = br_delay_line[1];
+    *bytes = (uint32_t)(sizeof br_delay_line - sizeof br_delay_line[0]);
+    return 1;
+}
+BR_AUDIO_API int br_fx_poly_loan_release(void)
+{
+    if (!br_fx_poly_loaned) return 1;
+    if (br_fx_fusion_pending) return 0;
+    uint32_t selected = br_fx_poly_part;
+    if (selected != 0u) memmove(br_delay_line[selected], br_delay_line[0], sizeof br_delay_line[0]);
+    for (uint32_t p = 0; p < BR_PARTS; ++p) {
+        if (p != selected) {
+            memset(br_delay_line[p], 0, sizeof br_delay_line[p]);
+            memset(&br_fx_track[p], 0, sizeof br_fx_track[p]);
+        }
+        br_fx_delay_alias[p] = br_delay_line[p];
+    }
+    br_fx_poly_loaned = 0u;
+    return 1;
+}
+#endif
 static volatile uint8_t br_fx_fusion_done[BR_PARTS];
 #if !BR_AUDIO_FUSION_ONLY_BUILD
-static br_master_fx_t br_pipeline_last_master = {64u, 0u, 0u, 0u, 0u};
+static br_master_fx_t br_pipeline_last_master = {64u, 0u, 0u, 0u, 0, 0u, 0u};
 #endif
 static BR_FX_RAM_AUDIO int32_t br_fx_pole(int32_t current, int32_t target, uint32_t alpha);
 static BR_FX_RAM_AUDIO int32_t br_fx_softclip(int32_t x);
@@ -1089,62 +984,76 @@ br_fx_mul_q15_asr64_bounded(int32_t x, uint32_t q)
 }
 #endif
 
-static BR_FX_RAM_AUDIO void br_fx_pan_stereo(int32_t left, int32_t right, uint32_t pan,
-                                              int32_t *out_left, int32_t *out_right)
+/* PAN: constant power, sqrt2*cos / sqrt2*sin of theta = pi/4 * (1 -/+ amount),
+ * amount = (64 - v) / 64 to the left, (v - 64) / 63 to the right. Centre is
+ * unity on both sides (and bypassed exactly), hard pan +3.0 dB on one side and
+ * silence on the other, total power flat within 0.02 dB. Table: sqrt2*cos(pi*k/32)
+ * in Q15, k = 0..16, linearly interpolated; the near side reads 8 - 8*amount,
+ * the far side 8 + 8*amount. Returns the gains packed (left << 16 | right). */
+static const uint16_t br_fx_pan_cos_q15[17] = {
+    46341u, 46118u, 45451u, 44346u, 42813u, 40869u, 38531u, 35822u, 32768u,
+    29398u, 25746u, 21845u, 17734u, 13452u, 9041u, 4542u, 0u
+};
+static inline __attribute__((always_inline)) uint32_t br_fx_pan_table_gain(uint32_t index_q8)
 {
-    if (pan > 127u) pan = 127u;
-    if (pan == 64u) {
-        *out_left = left;
-        *out_right = right;
-    } else if (pan < 64u) {
-        *out_left = left + br_fx_div_pow2(right * (int32_t)(64u - pan), 6u);
-        *out_right = br_fx_div_pow2(right * (int32_t)pan, 6u);
-    } else {
-        *out_left = (left * (int32_t)(127u - pan)) / 63;
-        *out_right = right + (left * (int32_t)(pan - 64u)) / 63;
-    }
+    uint32_t i = index_q8 >> 8;
+    int32_t a = br_fx_pan_cos_q15[i], b = i < 16u ? br_fx_pan_cos_q15[i + 1u] : a;
+    return (uint32_t)(a + (((b - a) * (int32_t)(index_q8 & 255u)) >> 8));
 }
-
-#if BR_FX_PAN_COEFF_CACHE
-/* Right-pan gains are block-constant. A Q15 split replaces two per-sample
- * divisions by 63 with one multiply per output; rounded coefficients keep
- * each gain within half a Q15 LSB of the original rational pan law. */
+static BR_FX_PREPARE_CODE __attribute__((minsize, noinline)) uint32_t br_fx_pan_gains(uint32_t pan)
+{
+    uint32_t amount_q8 = pan < 64u ? (64u - pan) * 32u : ((pan - 64u) * 2048u + 31u) / 63u;
+    uint32_t near = br_fx_pan_table_gain(2048u - amount_q8);
+    uint32_t far = br_fx_pan_table_gain(2048u + amount_q8);
+    return pan < 64u ? near << 16 | far : far << 16 | near;
+}
+/* Gains above unity act as crossfeed so a stereo input keeps its image:
+ * the near side is its own channel plus (g - 1) of the other. For the mono
+ * track signal this is exactly out = x * g on each side. */
+static inline __attribute__((always_inline)) int32_t br_fx_pan_mul(int32_t x, int32_t g)
+{
+    return (int32_t)(((int64_t)x * g) >> 15);
+}
 static inline __attribute__((always_inline)) void br_fx_pan_stereo_cached(
     int32_t left, int32_t right, uint32_t pan, uint32_t left_q15,
     uint32_t right_q15, int32_t *out_left, int32_t *out_right)
 {
-    if (pan <= 64u) {
-        br_fx_pan_stereo(left, right, pan, out_left, out_right);
-    } else if (pan == 127u) {
-        *out_left = 0;
-        *out_right = right + left;
-    } else {
-        *out_left = br_fx_mul_q15(left, left_q15);
-        *out_right = right + br_fx_mul_q15(left, right_q15);
+    (void)pan;
+    if (left_q15 >= 32768u) {
+        *out_left = left + br_fx_pan_mul(right, (int32_t)left_q15 - 32768);
+        *out_right = br_fx_pan_mul(right, (int32_t)right_q15);
+    } else {   /* also mid-ramp, where both gains can sit below unity */
+        *out_left = br_fx_pan_mul(left, (int32_t)left_q15);
+        *out_right = right + br_fx_pan_mul(left, (int32_t)right_q15 - 32768);
     }
 }
+#define br_fx_pan_stereo_cached_noncenter br_fx_pan_stereo_cached
+#if !BR_FX_PAN_COEFF_CACHE
+#error "the constant-power PAN law needs its block gains (BR_FX_PAN_COEFF_CACHE)"
+#endif
 
-#if BR_FX_STAGE_EMIT_PAN_DIRECT
-/* StageEmit calls this only when pan != 64 and block preparation already
- * clamped pan to 0..127. Skip the general helper's redundant center/clamp
- * tests while preserving its exact left/right pan arithmetic. */
-static inline __attribute__((always_inline)) void
-br_fx_pan_stereo_cached_noncenter(int32_t left, int32_t right, uint32_t pan,
-    uint32_t left_q15, uint32_t right_q15, int32_t *out_left, int32_t *out_right)
+/* A PAN change ramps both gains linearly across one block. The track job runs
+ * that block at centre (identity), then this cold pass applies the ramp; a
+ * static PAN costs nothing extra per sample. `from`/`to` are packed gains
+ * XOR 0x80008000, so 0 is centre (the zeroed state). */
+static BR_FX_PREPARE_CODE __attribute__((minsize, noinline)) void
+br_fx_pan_ramp(int32_t (*stereo)[2], uint32_t n, uint32_t from, uint32_t to)
 {
-    if (pan < 64u) {
-        *out_left = left + br_fx_div_pow2(right * (int32_t)(64u - pan), 6u);
-        *out_right = br_fx_div_pow2(right * (int32_t)pan, 6u);
-    } else if (pan == 127u) {
-        *out_left = 0;
-        *out_right = right + left;
-    } else {
-        *out_left = br_fx_mul_q15(left, left_q15);
-        *out_right = right + br_fx_mul_q15(left, right_q15);
+    uint32_t i;
+    int32_t gl, gr, dl, dr;
+    if (!n) return;
+    from ^= 0x80008000u; to ^= 0x80008000u;
+    gl = (int32_t)(from >> 16) << 8; gr = (int32_t)(from & 0xffffu) << 8;   /* Q23 */
+    dl = (((int32_t)(to >> 16) << 8) - gl) / (int32_t)n;
+    dr = (((int32_t)(to & 0xffffu) << 8) - gr) / (int32_t)n;
+    /* Each side times its own gain: exact for the mono track signal (the device's
+     * shared-reverb build); a stereo input skips the crossfeed for this one block. */
+    for (i = 0u; i < n; ++i) {
+        gl += dl; gr += dr;
+        stereo[i][0] = br_fx_pan_mul(stereo[i][0], gl >> 8);
+        stereo[i][1] = br_fx_pan_mul(stereo[i][1], gr >> 8);
     }
 }
-#endif
-#endif
 
 #if defined(FM1_DEVICE)
 #define BR_FX_TABLE_DATA __attribute__((section(".data.fm1_fx_tables"), used))
@@ -1152,122 +1061,7 @@ br_fx_pan_stereo_cached_noncenter(int32_t left, int32_t right, uint32_t pan,
 #define BR_FX_TABLE_DATA
 #endif
 #include "instrument_softclip_table.h"
-/* The CPU1 FX worker reads these from inside the reverb inner loop.
- * Keep the immutable tables in copied internal RAM so CPU1 never fetches
- * this hot-path metadata from XIP while CPU0 is executing in flash. */
-#if !BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-static const uint16_t br_room_start[4] BR_FX_TABLE_DATA = {0, 1777, 3776, 6015};
-#endif
-static const uint16_t br_room_length[BR_REVERB_COUNT][4] BR_FX_TABLE_DATA = {
-    {521, 613, 733, 907},       /* room */
-    {1061, 1277, 1499, 1723},   /* hall */
-    {521, 613, 733, 907},       /* retired id 2 (Spring) runs as room */
-    {1777, 1999, 2239, 2551},   /* space */
-    {1777, 1999, 2239, 2551}    /* retired id 4 (Ethereal) runs as space */
-};
 
-/* Match per-second decay: g_i = g_longest^(length_i / longest_length).
- * The longest line keeps its original gain; shorter lines retain more on
- * each, more frequent round trip. A positive eight-term binomial expansion
- * of (1 - (1-g))^ratio is evaluated only during control preparation. The
- * SIZE/DECAY endpoint oracle bounds its Q15 approximation; no audio-rate power/LUT. */
-static inline uint32_t br_fx_reverb_feedback_for_length(
-    uint32_t feedback, uint32_t length, uint32_t reference_length)
-{
-    uint32_t ratio, drop, term, sum, factor;
-    if (!length || !reference_length || length >= reference_length)
-        return feedback;
-    ratio = (length * 32768u + reference_length / 2u) / reference_length;
-    drop = 32768u - feedback;
-    term = (ratio * drop + 16384u) >> 15;
-    sum = term;
-    factor = ((32768u - ratio) / 2u * drop + 16384u) >> 15;
-    term = (term * factor + 16384u) >> 15;
-    sum += term;
-    factor = (((65536u - ratio) / 3u) * drop + 16384u) >> 15;
-    term = (term * factor + 16384u) >> 15;
-    sum += term;
-    factor = (((98304u - ratio) / 4u) * drop + 16384u) >> 15;
-    term = (term * factor + 16384u) >> 15;
-    sum += term;
-    factor = (((131072u - ratio) / 5u) * drop + 16384u) >> 15;
-    term = (term * factor + 16384u) >> 15;
-    sum += term;
-    factor = (((163840u - ratio) / 6u) * drop + 16384u) >> 15;
-    term = (term * factor + 16384u) >> 15;
-    sum += term;
-    factor = (((196608u - ratio) / 7u) * drop + 16384u) >> 15;
-    term = (term * factor + 16384u) >> 15;
-    sum += term;
-    factor = (((229376u - ratio) / 8u) * drop + 16384u) >> 15;
-    term = (term * factor + 16384u) >> 15;
-    sum += term;
-    return 32768u - sum;
-}
-
-#if BR_FX_NATIVE_RATE_CALIBRATION
-static const uint16_t br_fx_reverb_alpha_32k[128] BR_FX_TABLE_DATA = {
-    1234u, 1561u, 1887u, 2211u, 2535u, 2859u, 3181u, 3502u,
-    3822u, 4141u, 4459u, 4777u, 5093u, 5408u, 5722u, 6036u,
-    6348u, 6659u, 6969u, 7279u, 7587u, 7894u, 8200u, 8505u,
-    8809u, 9112u, 9414u, 9715u, 10015u, 10314u, 10611u, 10908u,
-    11203u, 11498u, 11791u, 12083u, 12374u, 12664u, 12952u, 13240u,
-    13526u, 13812u, 14096u, 14378u, 14660u, 14941u, 15220u, 15498u,
-    15775u, 16050u, 16325u, 16598u, 16870u, 17140u, 17410u, 17678u,
-    17944u, 18210u, 18474u, 18736u, 18998u, 19258u, 19517u, 19774u,
-    20030u, 20284u, 20537u, 20789u, 21039u, 21288u, 21535u, 21781u,
-    22026u, 22268u, 22510u, 22749u, 22988u, 23224u, 23459u, 23692u,
-    23924u, 24154u, 24383u, 24609u, 24834u, 25058u, 25279u, 25499u,
-    25717u, 25933u, 26147u, 26359u, 26570u, 26778u, 26985u, 27189u,
-    27392u, 27592u, 27790u, 27986u, 28180u, 28372u, 28562u, 28749u,
-    28934u, 29116u, 29296u, 29473u, 29648u, 29820u, 29990u, 30156u,
-    30320u, 30481u, 30639u, 30793u, 30945u, 31093u, 31237u, 31378u,
-    31515u, 31648u, 31777u, 31901u, 32021u, 32136u, 32245u, 32348u,
-};
-static const uint16_t br_fx_master_alpha_32k[63] BR_FX_TABLE_DATA = {
-    248u, 906u, 1561u, 2211u, 2859u, 3502u, 4141u, 4777u,
-    5408u, 6036u, 6659u, 7279u, 7894u, 8505u, 9112u, 9715u,
-    10314u, 10908u, 11498u, 12083u, 12664u, 13240u, 13812u, 14378u,
-    14941u, 15498u, 16050u, 16598u, 17140u, 17678u, 18210u, 18736u,
-    19258u, 19774u, 20284u, 20789u, 21288u, 21781u, 22268u, 22749u,
-    23224u, 23692u, 24154u, 24609u, 25058u, 25499u, 25933u, 26359u,
-    26778u, 27189u, 27592u, 27986u, 28372u, 28749u, 29116u, 29473u,
-    29820u, 30156u, 30481u, 30793u, 31093u, 31378u, 31648u,
-};
-#endif
-#if BR_FX_NATIVE_RATE_48K
-/* Per-sample coefficients converted from the established 44.1 kHz curve by
- * alpha48 = 1 - (1 - alpha44)^(441/480). Half-rate wet loops subsequently
- * apply their existing exact two-sample pole remap in control preparation. */
-static const uint16_t br_fx_reverb_alpha_48k[128] BR_FX_TABLE_DATA = {
-    828u, 1049u, 1270u, 1491u, 1713u, 1935u, 2156u, 2378u,
-    2600u, 2822u, 3045u, 3267u, 3490u, 3713u, 3936u, 4159u,
-    4382u, 4605u, 4829u, 5053u, 5276u, 5500u, 5725u, 5949u,
-    6174u, 6398u, 6623u, 6848u, 7073u, 7299u, 7524u, 7750u,
-    7976u, 8202u, 8428u, 8655u, 8881u, 9108u, 9335u, 9563u,
-    9790u, 10018u, 10245u, 10473u, 10702u, 10930u, 11159u, 11388u,
-    11617u, 11846u, 12076u, 12305u, 12535u, 12766u, 12996u, 13227u,
-    13458u, 13689u, 13920u, 14152u, 14384u, 14616u, 14849u, 15081u,
-    15314u, 15548u, 15781u, 16015u, 16249u, 16484u, 16718u, 16953u,
-    17189u, 17424u, 17660u, 17896u, 18133u, 18370u, 18607u, 18845u,
-    19083u, 19321u, 19560u, 19799u, 20039u, 20279u, 20519u, 20760u,
-    21001u, 21243u, 21485u, 21727u, 21970u, 22214u, 22458u, 22702u,
-    22947u, 23193u, 23439u, 23686u, 23933u, 24181u, 24429u, 24679u,
-    24929u, 25179u, 25430u, 25683u, 25935u, 26189u, 26444u, 26699u,
-    26956u, 27213u, 27472u, 27731u, 27992u, 28254u, 28518u, 28783u,
-    29049u, 29317u, 29587u, 29859u, 30134u, 30410u, 30690u, 30973u,
-};
-static const uint16_t br_fx_master_alpha_48k[63] BR_FX_TABLE_DATA = {
-    165u, 607u, 1049u, 1491u, 1935u, 2378u, 2822u, 3267u,
-    3713u, 4159u, 4605u, 5053u, 5500u, 5949u, 6398u, 6848u,
-    7299u, 7750u, 8202u, 8655u, 9108u, 9563u, 10018u, 10473u,
-    10930u, 11388u, 11846u, 12305u, 12766u, 13227u, 13689u, 14152u,
-    14616u, 15081u, 15548u, 16015u, 16484u, 16953u, 17424u, 17896u,
-    18370u, 18845u, 19321u, 19799u, 20279u, 20760u, 21243u, 21727u,
-    22214u, 22702u, 23193u, 23686u, 24181u, 24679u, 25179u, 25683u,
-    26189u, 26699u, 27213u, 27731u, 28254u, 28783u, 29317u,
-};
-#endif
 #if BR_FX_TAPE_WOW_DELTA_LUT
 /* One complete, continuous triangular wow cycle. Interpolation below uses
  * the full oscillator phase, rather than repeating an audio-rate nibble.
@@ -1277,12 +1071,12 @@ static const int32_t br_fx_tape_wow_delta[16] BR_FX_TABLE_DATA = {
      5,  4,  2,  1,-1,-2,-4,-5
 };
 #endif
-/* Durations are quarter-note beats. The requested fractional divisions use
- * standard note values; 1/4 aliases one beat and 1/2 aliases two beats. */
-static const uint8_t br_fx_delay_note_num[11] BR_FX_TABLE_DATA =
-    {1u, 1u, 1u, 1u, 1u, 1u, 1u, 2u, 2u, 3u, 4u};
-static const uint8_t br_fx_delay_note_den[11] BR_FX_TABLE_DATA =
-    {8u, 6u, 4u, 3u, 2u, 1u, 1u, 1u, 1u, 1u, 1u};
+/* TIME entries in 24ths of a quarter note, ordered by duration: 1/32, 1/16T,
+ * 1/16, 1/8T, 1/16D, 1/8, 1/4T, 1/8D, 1/4, 1/2T, 1/4D, 1/2, 1/2D, 1 BAR.
+ * Stored 0..127 maps to the 14 entries in even buckets. */
+#define BR_FX_DELAY_NOTE_COUNT 14u
+static const uint8_t br_fx_delay_note_24ths[BR_FX_DELAY_NOTE_COUNT] BR_FX_TABLE_DATA =
+    {3u, 4u, 6u, 8u, 9u, 12u, 16u, 18u, 24u, 32u, 36u, 48u, 72u, 96u};
 #undef BR_FX_TABLE_DATA
 
 /* Convert 44.1 kHz sample counts to the selected native profile. The FX
@@ -1302,29 +1096,45 @@ static inline __attribute__((always_inline)) uint32_t br_fx_rate_samples(uint32_
 #endif
 }
 
-BR_AUDIO_API uint32_t br_fx_delay_note_index(uint32_t stored)
+static inline __attribute__((always_inline)) uint32_t br_fx_delay_note_of(uint32_t stored)
 {
     stored = stored > 127u ? 127u : stored;
-    return stored * 11u / 128u;
+    return stored * BR_FX_DELAY_NOTE_COUNT / 128u;
+}
+BR_AUDIO_API uint32_t br_fx_delay_note_index(uint32_t stored) { return br_fx_delay_note_of(stored); }
+/* Keep every legacy 0..127 TIME value intact; the two new short divisions use
+ * a separate saved field. The UI list remains ordered by actual duration. */
+BR_AUDIO_API uint32_t br_fx_delay_choice(uint32_t stored, uint32_t short_note)
+{
+    uint32_t old = br_fx_delay_note_of(stored);
+    if (short_note == 1u) return 0u;   /* 1/32 triplet */
+    if (short_note == 2u) return 3u;   /* dotted 1/32 */
+    return old < 2u ? old + 1u : old + 2u;
+}
+BR_AUDIO_API void br_fx_delay_choice_set(uint32_t choice, uint32_t *stored, uint8_t *short_note)
+{
+    if (choice > 15u) choice = 15u;
+    *short_note = choice == 0u ? 1u : choice == 3u ? 2u : 0u;
+    uint32_t old = *short_note || choice == 1u ? 0u : choice == 2u ? 1u : choice - 2u;
+    *stored = (old * 128u + 64u) / BR_FX_DELAY_NOTE_COUNT;
 }
 
+
+/* The middle of the entry's bucket. */
 BR_AUDIO_API uint32_t br_fx_delay_note_store(uint32_t index)
 {
-    if (index > 10u) index = 10u;
-    return (index * 127u + 5u) / 10u;
+    if (index >= BR_FX_DELAY_NOTE_COUNT) index = BR_FX_DELAY_NOTE_COUNT - 1u;
+    return (index * 128u + 64u) / BR_FX_DELAY_NOTE_COUNT;
 }
 
+/* Full-rate samples: FS * 60 / bpm * 24ths / 24. The line holds every entry
+ * exactly at every tempo (1 BAR at 60 BPM is 4 s; the longest storage holds 16 s). */
 static BR_FX_PREPARE_CODE uint32_t br_fx_delay_note_samples(uint32_t stored,
                                                           uint32_t bpm)
 {
-    uint32_t index;
-    uint32_t numerator, denominator;
-    stored = stored > 127u ? 127u : stored;
-    index = stored * 11u / 128u;
+    uint32_t n = br_fx_delay_note_24ths[br_fx_delay_note_of(stored)];
     bpm = bpm < BR_BPM_MIN ? BR_BPM_MIN : bpm > BR_BPM_MAX ? BR_BPM_MAX : bpm;
-    numerator = br_fx_delay_note_num[index];
-    denominator = br_fx_delay_note_den[index] * bpm;
-    return (FS * 60u * numerator + denominator / 2u) / denominator;
+    return (FS * 5u * n + bpm) / (2u * bpm);
 }
 static inline __attribute__((always_inline)) uint32_t br_fx_rate_q8(uint32_t q8)
 {
@@ -1384,39 +1194,37 @@ static inline __attribute__((always_inline)) uint32_t br_fx_rate_phase(uint32_t 
     return phase;
 #endif
 }
-static inline __attribute__((always_inline)) uint32_t br_fx_reverb_alpha(uint32_t tone)
+/* Global high-pass coefficients (filter 65..127): the track high-pass's law
+ * (instrument_filter.c), in float for the master frame's TPT state-variable
+ * filter: g = tan(pi*fc/fs), a = q + g, d = 1/(1 + q*g + g*g), q = 1/Q from
+ * the same resonance nodes (Butterworth at 0, +16 dB peak at 127). Runs from
+ * flash only when the filter or resonance moves. */
+static __attribute__((noinline)) void
+br_master_hp_coeffs(uint32_t filter, uint32_t resonance, float *g, float *a, float *d)
 {
-    tone = tone > 127u ? 127u : tone;
-#if BR_FX_NATIVE_RATE_CALIBRATION
-    return br_fx_reverb_alpha_32k[tone];
-#elif BR_FX_NATIVE_RATE_48K
-    return br_fx_reverb_alpha_48k[tone];
-#else
-    return 900u + tone * 240u;
+    float gf, qf;
+    if (filter < 65u) filter = 65u;
+    if (resonance > 127u) resonance = 127u;
+    gf = (float)br_filter_hp_target(filter - 65u) * (1.0f / 536870912.0f);
+    qf = (float)br_filter_res_node(br_filter_hp_q_nodes, resonance) * (1.0f / 32768.0f);
+    *g = gf;
+    *a = qf + gf;
+    *d = 1.0f / (1.0f + qf * gf + gf * gf);
+    { float g2 = gf * 0.5f;
+      br_master_state.hp2_a = 1.41421356f + g2;
+      br_master_state.hp2_d = 1.0f / (1.0f + 1.41421356f * g2 + g2 * g2); }
+#if BR_FX_MASTER_STABLE_FASTPATH && BR_FX_MASTER_COEFF_CACHE
+    br_master_state.stable_filter_alpha = 1u + filter + 128u * resonance;
 #endif
 }
-static inline __attribute__((always_inline)) uint32_t br_fx_master_filter_alpha(uint32_t filter)
-{
-    uint32_t index;
-    if (filter == 63u || filter == 64u) return 0u;
-    index = filter < 63u ? filter : filter - 65u;
-#if BR_FX_NATIVE_RATE_CALIBRATION
-    return br_fx_master_alpha_32k[index];
-#elif BR_FX_NATIVE_RATE_48K
-    return br_fx_master_alpha_48k[index];
+#if defined(FM1_DEVICE) && !defined(FX_FAULT_TEST)
+/* RAM -> XIP flash: pi32v2 needs an absolute indirect call. */
+#define BR_MASTER_HP_COEFFS_INVOKE(...) \
+    ({ __typeof__(&br_master_hp_coeffs) volatile hp_coeffs_fn_ = &br_master_hp_coeffs; \
+       hp_coeffs_fn_(__VA_ARGS__); })
 #else
-    return 180u + index * 480u;
+#define BR_MASTER_HP_COEFFS_INVOKE(...) br_master_hp_coeffs(__VA_ARGS__)
 #endif
-}
-/* Stay well inside the SVF stability boundary at low Q, avoiding an
- * unintended near-Nyquist pole. The cap opens smoothly with resonance;
- * maximum resonance retains the full calibrated cutoff table. */
-static inline __attribute__((always_inline)) uint32_t
-br_fx_master_resonance_alpha(uint32_t alpha, uint32_t resonance)
-{
-    uint32_t limit = 24576u + resonance * 64u;
-    return alpha > limit ? limit : alpha;
-}
 static inline __attribute__((always_inline)) float
 br_fx_master_q15_float(uint32_t value)
 {
@@ -1442,24 +1250,6 @@ static inline __attribute__((always_inline)) uint32_t br_fx_tape_alpha_rate2(voi
 #endif
 }
 
-#if BR_FX_DELAY_RATE2
-static inline __attribute__((always_inline)) uint32_t
-br_fx_tape_alpha_for_shift(uint32_t shift)
-{
-    uint32_t complement = 32768u - br_fx_tape_alpha_rate2();
-    while (shift--)
-        complement = (complement * complement + 16384u) >> 15;
-    {
-        uint32_t alpha = 32768u - complement;
-        if (alpha > 32767u) alpha = 32767u;
-        return alpha ? alpha : 1u;
-    }
-}
-#endif
-static inline __attribute__((always_inline)) uint32_t br_fx_reverb_ramp_frames(void)
-{
-    return br_fx_rate_samples(32u);
-}
 
 BR_AUDIO_API int32_t br_clip(int32_t x, int32_t low, int32_t high)
 { return x < low ? low : x > high ? high : x; }
@@ -1491,6 +1281,54 @@ br_fx_delay_feedback_q15(int32_t sample, uint32_t feedback)
     int32_t remainder = sample - whole * 32768;
     return whole * (int32_t)feedback +
         br_fx_div_pow2(remainder * (int32_t)feedback, 15u);
+}
+
+/* Loop protection on every value written to a delay line (send + feedback).
+ * Exactly linear for |x| <= 16384, then a quadratic knee whose slope falls
+ * from 1 to 0, held at +/-32752 from about |x| = 48300 (the line store rounds
+ * 32760..32767 up to 32768, so this keeps every decoded value in int16). With
+ * loop gain near 1 a sustained input cannot grow the line past full scale. */
+static inline __attribute__((always_inline)) int32_t br_fx_delay_write_sat(int32_t x)
+{
+    uint32_t m = x < 0 ? 0u - (uint32_t)x : (uint32_t)x;
+    if (m <= 16384u) return x;
+    m -= 16384u;
+    m = m >= 32767u ? 32767u : 16383u + m - ((m * m) >> 16);
+    /* 32752 is the largest magnitude the compact line store keeps below 32768
+     * (it rounds 32760..32767 up to 32768), so a decoded line stays in int16. */
+    if (m > 32752u) m = 32752u;
+    return x < 0 ? -(int32_t)m : (int32_t)m;
+}
+
+/* Loop high-pass corner: 2*pi*60/line_rate in Q12 at storage shift 0 (the line
+ * runs at FS/2 with the rate-2 delay). Longer delays store at FS/2^(1+shift);
+ * the prepare step squares the complement once per shift to keep the corner. */
+#if BR_FX_DELAY_RATE2
+#define BR_FX_DELAY_HP_ALPHA_Q12 ((60u * 2u * 25736u + FS / 2u) / FS)
+#else
+#define BR_FX_DELAY_HP_ALPHA_Q12 ((60u * 25736u + FS / 2u) / FS)
+#endif
+
+/* echo - LP(echo): a first-order high-pass with its zero at DC and one state
+ * word. |echo| <= 32767 (line writes are saturated, TAPE is clipped) and
+ * alpha <= 2047 keep (16 * echo - lp) * alpha inside int32. */
+static inline __attribute__((always_inline)) int32_t
+br_fx_delay_loop_hp(int32_t *state, int32_t echo, uint32_t alpha_q12)
+{
+#if BR_FX_DELAY_LOOP_HPF
+    /* Subtract the previous low-pass value: (1 - z^-1) / (1 - (1 - a) z^-1),
+     * whose gain rises to 1/(1 - a/2) at Nyquist. The prepare step folds
+     * (1 - a/2) into the feedback gain, so the loop gain above the corner is
+     * the feedback law at every storage rate. Subtracting the updated value
+     * instead lost a further (1 - a) per pass: 0.1 dB at full storage rate,
+     * about 1 dB at the longest. */
+    int32_t lp = *state;
+    *state = lp + (((echo * 16 - lp) * (int32_t)alpha_q12) >> 12);
+    return echo - (lp >> 4);
+#else
+    (void)state; (void)alpha_q12;
+    return echo;
+#endif
 }
 
 /* Exact signed /3 via a 32x32->64 reciprocal multiply. The quotient formula
@@ -1747,68 +1585,6 @@ br_fx_reverb_lerp_q8_companded(int32_t a, int32_t b, uint32_t fraction)
     return br_fx_div_pow2(weighted, 8u);
 }
 
-/* One common wet sum drives two unity-magnitude output allpasses. Their
- * unequal delays and opposite half-gains decorrelate the channels without
- * giving either side its own recursively decaying comb output. Inputs and
- * Q8 state carries fractional wet-sum history; output converts back to
- * track-output units after symmetric nearest rounding. */
-BR_FX_OUTPUT_DIFFUSER_FN void br_fx_reverb_output_diffuse(br_fx_track_t *st,
-    const br_fx_controls_t *c, int32_t *left, int32_t *right)
-{
-    int32_t rv_l = *left, rv_r = *right;
-    int32_t mono_q8;
-    /* Expanded ring storage plus Hall's 73/64 makeup bounds |rv| by
-     * 4,782,960. Thus |mono_q8| <= 306,109,440, each stable half-feedback
-     * allpass state <= 459,164,160 and |y_q8| <= 612,218,880: int32-safe. */
-    if (st->reverb_output_unity) {
-        mono_q8 = (rv_l + rv_r) * 32;
-    } else {
-        float output_scale_target = c->reverb_output_scale;
-        float output_scale = st->reverb_output_scale;
-        if (output_scale != output_scale_target) {
-            float delta = output_scale_target - output_scale;
-            output_scale += delta * (1.0f / 512.0f); /* 16 ms time constant at 32 kHz */
-            /* Snap before a sub-ULP update stalls below the unity fast path. */
-            if (delta > -(1.0f / 1024.0f) && delta < (1.0f / 1024.0f))
-                output_scale = output_scale_target;
-            st->reverb_output_scale = output_scale;
-        }
-        if (output_scale == 32.0f && output_scale_target == 32.0f)
-            st->reverb_output_unity = 1u;
-        /* Keep the unity path exactly integer; only normalized engines use FPU scaling. */
-        mono_q8 = output_scale == 32.0f
-            ? (rv_l + rv_r) * 32
-            : (int32_t)((float)(rv_l + rv_r) * output_scale);
-    }
-    int32_t half_q8 = br_fx_div_pow2(mono_q8, 1u);
-    uint32_t pos0 = st->reverb_output_ap_pos[0];
-    uint32_t pos1 = st->reverb_output_ap_pos[1];
-    int32_t delayed0 = c->reverb_output_ap0_base[pos0];
-    int32_t delayed1 = c->reverb_output_ap1_base[pos1];
-    int32_t y0_q8 = delayed0 - half_q8;
-    int32_t y1_q8 = delayed1 + half_q8;
-
-    c->reverb_output_ap0_base[pos0] = mono_q8 + br_fx_div_pow2(y0_q8, 1u);
-    c->reverb_output_ap1_base[pos1] = mono_q8 - br_fx_div_pow2(y1_q8, 1u);
-    pos0 = pos0 + 1u == BR_FX_REVERB_OUTPUT_AP0_LENGTH ? 0u : pos0 + 1u;
-    pos1 = pos1 + 1u == BR_FX_REVERB_OUTPUT_AP1_LENGTH ? 0u : pos1 + 1u;
-    st->reverb_output_ap_pos[0] = (uint8_t)pos0;
-    st->reverb_output_ap_pos[1] = (uint8_t)pos1;
-    /* Round symmetrically to nearest PCM unit, ties away from zero. */
-    *left = (y0_q8 + (y0_q8 < 0 ? 127 : 128)) >> 8;
-    *right = (y1_q8 + (y1_q8 < 0 ? 127 : 128)) >> 8;
-}
-static inline __attribute__((always_inline)) void br_fx_reverb_output_ap_reset(
-    uint32_t p, br_fx_track_t *st)
-{
-    br_fx_clear32((br_fx_clear_word_t *)br_reverb_output_ap0[p], BR_FX_REVERB_OUTPUT_AP0_LENGTH);
-    br_fx_clear32((br_fx_clear_word_t *)br_reverb_output_ap1[p], BR_FX_REVERB_OUTPUT_AP1_LENGTH);
-    st->reverb_output_ap_pos[0] = 0u;
-    st->reverb_output_ap_pos[1] = 0u;
-    st->reverb_send_lp = 0;
-    br_fx_clear32((br_fx_clear_word_t *)st->room_delay_q8, 4u);
-    br_fx_clear32((br_fx_clear_word_t *)st->room_feedback, 4u);
-}
 
 #if BR_FX_PHASER_MUL_Q15_APPROX32
 /* Phaser-only fast path. br_fx_tri() stays in the symmetric range
@@ -1844,18 +1620,6 @@ br_fx_mul_q15_phaser_asr64(int32_t x, uint32_t q)
 #define br_fx_mul_q15_phaser_selected br_fx_mul_q15
 #endif
 
-/* Keep the original one-product path for normal int16-range deltas. The
- * compacted ring can widen poles beyond that range, so use the exact split
- * Q15 multiply there rather than overflowing x * alpha. */
-static BR_FX_RAM_AUDIO int32_t br_fx_mul_q15_reverb_pole(int32_t x, uint32_t alpha)
-{
-    if (x >= -65535 && x <= 65535) {
-        int32_t product = x * (int32_t)alpha;
-        if (product < 0) product += 32767;
-        return product >> 15;
-    }
-    return br_fx_mul_q15(x, alpha);
-}
 
 static BR_FX_RAM_AUDIO int32_t br_fx_wet_gain(int32_t x, uint32_t gain)
 {
@@ -1874,29 +1638,6 @@ static BR_FX_RAM_AUDIO int32_t br_fx_wet_gain(int32_t x, uint32_t gain)
     return br_fx_mul_q15(x, gain * 258u);
 }
 
-static inline __attribute__((always_inline)) uint32_t
-br_fx_reverb_rate4_selected(uint32_t engine)
-{
-#if BR_FX_HAS_REVERB_RATE4
-    return (BR_FX_REVERB_RATE4_ROOM && engine == BR_REVERB_ROOM) ||
-           (BR_FX_REVERB_RATE4_HALL && engine == BR_REVERB_HALL);
-#else
-    (void)engine;
-    return 0u;
-#endif
-}
-
-#if BR_FX_HAS_REVERB_RATE2
-static BR_FX_PREPARE_CODE uint32_t br_fx_reverb_rate2_selected(uint32_t engine)
-{
-#if BR_FX_REVERB_RATE2_ALL
-    /* A selected quarter-rate Room/Hall path takes precedence. */
-    return !br_fx_reverb_rate4_selected(engine);
-#else
-    return engine == BR_REVERB_HALL && !br_fx_reverb_rate4_selected(engine);
-#endif
-}
-#endif
 
 static BR_FX_RAM_AUDIO int br_fx_any_enabled(const br_sound_t *s, const br_fx_config_t *cfg)
 {
@@ -1927,21 +1668,37 @@ static BR_FX_MASTER_PREPARE_CODE void br_master_snapshot_ram(void)
         br_master_cache_heat(s->heat_type, s->heat_amount);
         br_master_cached.filter = s->filter > 127u ? 127u : s->filter;
         br_master_cached.resonance = s->resonance > 127u ? 127u : s->resonance;
+        br_master_cached.filter_snap_generation = s->filter_snap_generation;
         return;
     }
 #endif
     uint32_t before = br_master.revision;
-    uint32_t filter, heat_type, heat_amount, resonance, after;
+    uint32_t filter, heat_type, heat_amount, resonance, snap_generation, after;
     if (before & 1u) return;
     filter = br_master.fx.filter;
     heat_type = br_master.fx.heat_type;
     heat_amount = br_master.fx.heat_amount;
     resonance = br_master.fx.resonance;
+    snap_generation = br_master.fx.filter_snap_generation;
     after = br_master.revision;
     if (before != after || (after & 1u)) return;
     br_master_cached.filter = filter > 127u ? 127u : filter;
     br_master_cache_heat(heat_type, heat_amount);
     br_master_cached.resonance = resonance > 127u ? 127u : resonance;
+    br_master_cached.filter_snap_generation = snap_generation;
+}
+
+/* Pipeline snapshots already contain their own block's modulation. */
+static BR_FX_MASTER_PREPARE_CODE __attribute__((noinline)) void br_master_apply_lfo(void)
+{
+#if !BR_AUDIO_FUSION_ONLY_BUILD
+    if (br_fx_pipeline_controls) return;
+#endif
+    uint32_t type = br_global_lfo_value(BR_GLOBAL_TARGET_HEAT_TYPE, br_master_cached.heat_type, BR_HEAT_COUNT - 1u);
+    uint32_t amount = br_global_lfo_value(BR_GLOBAL_TARGET_HEAT_AMOUNT, br_master_cached.heat_amount, 127u);
+    br_master_cached.filter = br_global_lfo_value(BR_GLOBAL_TARGET_FILTER, br_master_cached.filter, 127u);
+    br_master_cached.resonance = br_global_lfo_value(BR_GLOBAL_TARGET_RESONANCE, br_master_cached.resonance, 127u);
+    br_master_cache_heat(type, amount);
 }
 
 static inline __attribute__((always_inline)) const br_sound_t *br_fx_sound_at(uint32_t p)
@@ -1975,6 +1732,14 @@ void br_fx_capture_pipeline_controls(br_pipeline_controls_t *controls)
         }
     }
     controls->master_fx = br_pipeline_last_master;
+    controls->master_fx.filter = br_global_lfo_value(BR_GLOBAL_TARGET_FILTER, controls->master_fx.filter, 127u);
+    controls->master_fx.resonance = br_global_lfo_value(BR_GLOBAL_TARGET_RESONANCE, controls->master_fx.resonance, 127u);
+    controls->master_fx.heat_amount = br_global_lfo_value(BR_GLOBAL_TARGET_HEAT_AMOUNT, controls->master_fx.heat_amount, 127u);
+    controls->master_fx.heat_type = br_global_lfo_value(BR_GLOBAL_TARGET_HEAT_TYPE, controls->master_fx.heat_type, BR_HEAT_COUNT - 1u);
+    controls->reverb_size = (uint8_t)br_global_lfo_value(BR_GLOBAL_TARGET_REVERB_SIZE, br_master.reverb_size, 127u);
+    controls->reverb_decay = (uint8_t)br_global_lfo_value(BR_GLOBAL_TARGET_REVERB_DECAY, br_master.reverb_decay, 127u);
+    controls->reverb_lfo_active = br_master.global_lfo.depth &&
+        (br_master.global_lfo.target == BR_GLOBAL_TARGET_REVERB_SIZE || br_master.global_lfo.target == BR_GLOBAL_TARGET_REVERB_DECAY);
     controls->compressor = br_source_compressor;
     controls->revision = br_source_compressor_revision;
 }
@@ -2233,31 +1998,29 @@ static void br_master_fx_init(void)
     br_master_state.resonance = br_master_cached.resonance;
 }
 
-/* Global filter, once per block: the knob is smoothed (smoothness 0 follows it raw; 100
- * ramps for up to a second, longer for bigger moves) and a short envelope retriggered
- * by every note adds its bipolar depth on top. */
+/* A full-range move takes about 250 ms; smaller moves take proportionally less.
+ * A snap generation travels with the filter snapshot so the shortcut lands immediately. */
 static struct {
-    uint32_t knob_q8, target, remaining, env;
+    uint32_t knob_q8, target, remaining, env, snap_generation;
     int32_t step_q8;
     uint32_t valid;
 } br_gf;
-static BR_FX_MASTER_PREPARE_CODE void br_gf_apply(void)
+static BR_FX_MASTER_PREPARE_CODE void br_gf_apply(uint32_t n)
 {
-    uint32_t target = br_master.fx.filter, smooth = br_master.fx.smooth;
+    uint32_t target = br_master_cached.filter, snap = br_master_cached.filter_snap_generation;
     int32_t depth = br_master.fx.env_depth, value, delta;
     if (target > 127u) target = 127u;
-    if (smooth > 100u) smooth = 100u;
     if (depth < -127) depth = -127;
     if (depth > 127) depth = 127;
-    if (!br_gf.valid) { br_gf.knob_q8 = target << 8; br_gf.target = target; br_gf.remaining = 0u; br_gf.valid = 1u; }
-    if (!smooth) {
+    if (!br_gf.valid || snap != br_gf.snap_generation) {
         br_gf.knob_q8 = target << 8; br_gf.target = target; br_gf.remaining = 0u;
+        br_gf.snap_generation = snap; br_gf.valid = 1u;
     } else if (target != br_gf.target) {
-        uint32_t magnitude, blocks;
+        uint32_t magnitude, blocks, denominator;
         delta = (int32_t)(target << 8) - (int32_t)br_gf.knob_q8;
         magnitude = (uint32_t)(delta < 0 ? -delta : delta) >> 8;
-        /* 172 blocks of 256 frames are about one second at 44.1 kHz */
-        blocks = (smooth * magnitude * 172u + 6350u) / (100u * 127u);
+        denominator = 127u * (n ? n : 1u);
+        blocks = ((FS / 4u) * magnitude + denominator / 2u) / denominator;
         if (blocks < 1u) blocks = 1u;
         br_gf.target = target; br_gf.remaining = blocks;
         br_gf.step_q8 = delta / (int32_t)blocks;
@@ -2275,7 +2038,8 @@ static BR_FX_MASTER_PREPARE_CODE void br_gf_apply(void)
 static BR_FX_MASTER_PREPARE_CODE uint32_t br_master_fx_begin_block(uint32_t n)
 {
     BR_FX_MASTER_PREPARE_INVOKE(br_master_snapshot_ram);
-    br_gf_apply();
+    BR_FX_MASTER_PREPARE_INVOKE(br_master_apply_lfo);
+    br_gf_apply(n);
 #if BR_FX_MASTER_STABLE_FASTPATH
     br_master_state.controls_stable =
         br_master_state.filter == br_master_cached.filter &&
@@ -2306,18 +2070,16 @@ static BR_FX_MASTER_PREPARE_CODE uint32_t br_master_fx_begin_block(uint32_t n)
             br_fx_rate_phase(18000u + br_master_state.wow * 1200u);
 #endif
 #if BR_FX_MASTER_COEFF_CACHE
-        uint32_t filter = br_master_state.filter;
         uint32_t saturation = br_master_state.saturation;
-        uint32_t resonance = br_master_state.resonance;
-        br_master_state.stable_filter_alpha = br_fx_master_filter_alpha(filter);
-        br_master_state.stable_resonance_alpha = br_fx_master_q15_float(
-            br_fx_master_resonance_alpha(br_master_state.stable_filter_alpha,
-                                         resonance));
+        /* High-pass cache: resonance_alpha = g, resonance_mix = q + g,
+         * filter_damping = d; stable_filter_alpha = the (filter, resonance) key. */
+        if (br_master_state.filter > 64u && br_master_state.stable_filter_alpha !=
+            1u + br_master_state.filter + 128u * br_master_state.resonance)
+            br_master_hp_coeffs(br_master_state.filter, br_master_state.resonance,
+                                &br_master_state.stable_resonance_alpha,
+                                &br_master_state.stable_resonance_mix,
+                                &br_master_state.stable_filter_damping);
         br_master_state.stable_saturation_gain = 128u + saturation * 4u;
-        br_master_state.stable_filter_damping = br_fx_master_q15_float(
-            65534u - resonance * 477u);
-        br_master_state.stable_resonance_mix = resonance >= 127u ? 1.0f :
-            br_fx_master_q15_float(resonance * 258u);
 #endif
     }
 #endif
@@ -2327,7 +2089,11 @@ static BR_FX_MASTER_PREPARE_CODE uint32_t br_master_fx_begin_block(uint32_t n)
         (br_master_state.filter == 63u || br_master_state.filter == 64u) &&
         !br_master_cached.saturation && !br_master_state.saturation &&
         !br_master_cached.wow && !br_master_state.wow && !br_master_state.wow_tail &&
-        !br_master_cached.heat_amount && !br_master_state.heat_amount) {
+        !br_master_cached.heat_amount && !br_master_state.heat_amount
+#if BR_FILTER_LADDER
+        && !br_master_state.ladder[0].mix && !br_master_state.ladder[1].mix
+#endif
+        ) {
         if (n) {
             br_master_state.filter = br_master_cached.filter;
             br_master_state.resonance = br_master_cached.resonance;
@@ -2335,30 +2101,72 @@ static BR_FX_MASTER_PREPARE_CODE uint32_t br_master_fx_begin_block(uint32_t n)
             br_master_state.low[0] = br_master_state.low[1] = 0;
             br_master_state.svf_low[0] = br_master_state.svf_low[1] = 0;
             br_master_state.band[0] = br_master_state.band[1] = 0;
+            br_master_state.hp2_low[0] = br_master_state.hp2_low[1] = 0;
+            br_master_state.hp2_band[0] = br_master_state.hp2_band[1] = 0;
+#if BR_FILTER_LADDER
+            memset(br_master_state.ladder, 0, sizeof br_master_state.ladder);
+#endif
         }
         return 0u;
     }
     return 1u;
 }
 
-/* The 44.1 kHz master filter maps valid controls 0..127 to alpha 0 or
- * 180 + index*480, index <= 62: alpha <= 29940 < 32768.  Elide the generic
- * Q15 alpha range test on the hot bounded-magnitude path only; retain the
- * original wide-magnitude fallback and exact truncation toward zero. */
-#if !BR_FX_NATIVE_RATE_CALIBRATION && !BR_FX_NATIVE_RATE_48K
-static inline __attribute__((always_inline)) int32_t
-br_master_pole_alpha_bounded(int32_t current, int32_t target, uint32_t alpha)
+#if BR_FILTER_LADDER
+#ifndef BR_FX_MASTER_LADDER_HEADROOM_SHIFT
+#define BR_FX_MASTER_LADDER_HEADROOM_SHIFT 1 /* the summed bus is hotter than one track: saturate 6 dB later */
+#endif
+/* Master low-pass (filter < 63), and its fade back to dry once the control
+ * leaves the low-pass side. Runs from flash, like br_filter_ladder itself;
+ * the RAM frame only tests and calls. Only the wet difference is scaled back,
+ * so mix 0 returns the input bit-exactly. The one-pole/SVF state is held at
+ * zero meanwhile, so a following high-pass starts from dry. Same 2 s tail as
+ * the old low-pass: fade over the last FS/4, then zero the ladder. */
+static __attribute__((noinline)) void
+br_master_ladder_frame(const int32_t *input, int32_t *filtered, int32_t peak)
 {
-    int32_t delta = target - current;
-    uint32_t magnitude = delta < 0 ? 0u - (uint32_t)delta : (uint32_t)delta;
-    int32_t step;
-    if (magnitude <= 131071u) {
-        uint32_t scaled = (magnitude * alpha) >> 15;
-        step = delta < 0 ? -(int32_t)scaled : (int32_t)scaled;
-    } else step = br_fx_mul_q15(delta, alpha);
-    if (!step && delta) step = delta > 0 ? 1 : -1;
-    return current + step;
+    uint32_t ch, filter = br_master_state.filter, fade, gain;
+    /* Hold a high-pass target at 64 until the fade to dry is done, so the
+     * high-pass then opens one step per sample from its widest setting, as
+     * it does when entered from bypass. */
+    if (filter > 64u) br_master_state.filter = 64u;
+    br_master_state.low[0] = br_master_state.low[1] = 0;
+    br_master_state.svf_low[0] = br_master_state.svf_low[1] = 0;
+    br_master_state.band[0] = br_master_state.band[1] = 0;
+            br_master_state.hp2_low[0] = br_master_state.hp2_low[1] = 0;
+            br_master_state.hp2_band[0] = br_master_state.hp2_band[1] = 0;
+    if (peak > 2) br_master_state.filter_tail = FS * 2u;
+    else if (br_master_state.filter_tail) --br_master_state.filter_tail;
+    fade = peak <= 2 && br_master_state.filter_tail < FS / 4u;
+    /* Q15 copy of br_fx_wet_gain(x, tail gain); that one lives in RAM. */
+    gain = fade ? br_fx_tail_gain(br_master_state.filter_tail) * 258u : 0u;
+    for (ch = 0; ch < 2u; ++ch) {
+        br_filter_t *f = &br_master_state.ladder[ch];
+        int32_t x = input[ch] >> BR_FX_MASTER_LADDER_HEADROOM_SHIFT, y;
+        if (x > 262144) x = 262144;
+        if (x < -262144) x = -262144;
+        if (!f->mix) f->low = x;
+        y = br_filter_ladder(f, x, filter < 63u ? filter : 63u,
+                             br_master_state.resonance);
+        y = input[ch] + (int32_t)((uint32_t)(y - x) << BR_FX_MASTER_LADDER_HEADROOM_SHIFT);
+        if (fade) {
+            if (!br_master_state.filter_tail) {
+                f->low = f->band = 0;
+                f->ladder_s[0] = f->ladder_s[1] = f->ladder_s[2] = f->ladder_s[3] = 0;
+            }
+            y = (int32_t)(((int64_t)y * (int32_t)gain) >> 15);
+        }
+        filtered[ch] = y;
+    }
 }
+#if defined(FM1_DEVICE) && !defined(FX_FAULT_TEST)
+/* RAM -> XIP flash: pi32v2 needs an absolute indirect call. */
+#define BR_MASTER_LADDER_INVOKE(...) \
+    ({ __typeof__(&br_master_ladder_frame) volatile ladder_fn_ = &br_master_ladder_frame; \
+       ladder_fn_(__VA_ARGS__); })
+#else
+#define BR_MASTER_LADDER_INVOKE(...) br_master_ladder_frame(__VA_ARGS__)
+#endif
 #endif
 
 #if BR_FX_MASTER_FRAME_INLINE_FINISH
@@ -2386,17 +2194,14 @@ static BR_FX_RAM_AUDIO void br_master_fx_process_frame(int32_t *stereo)
         br_master_state.resonance = br_master_slew(
             br_master_state.resonance, br_master_cached.resonance);
 #if BR_FX_MASTER_COEFF_CACHE
-        br_master_state.stable_filter_alpha =
-            br_fx_master_filter_alpha(br_master_state.filter);
         br_master_state.stable_saturation_gain =
             128u + br_master_state.saturation * 4u;
-        br_master_state.stable_resonance_alpha = br_fx_master_q15_float(
-            br_fx_master_resonance_alpha(br_master_state.stable_filter_alpha,
-                                         br_master_state.resonance));
-        br_master_state.stable_filter_damping =
-            br_fx_master_q15_float(65534u - br_master_state.resonance * 477u);
-        br_master_state.stable_resonance_mix = br_master_state.resonance >= 127u ?
-            1.0f : br_fx_master_q15_float(br_master_state.resonance * 258u);
+        if (br_master_state.filter > 64u && br_master_state.stable_filter_alpha !=
+            1u + br_master_state.filter + 128u * br_master_state.resonance)
+            BR_MASTER_HP_COEFFS_INVOKE(br_master_state.filter, br_master_state.resonance,
+                                       &br_master_state.stable_resonance_alpha,
+                                       &br_master_state.stable_resonance_mix,
+                                       &br_master_state.stable_filter_damping);
 #endif
     }
     filter = br_master_state.filter;
@@ -2420,95 +2225,70 @@ static BR_FX_RAM_AUDIO void br_master_fx_process_frame(int32_t *stereo)
 #endif
 #endif
 #if BR_FX_MASTER_STABLE_FASTPATH && BR_FX_MASTER_COEFF_CACHE
-    float filter_damping = br_master_state.stable_filter_damping;
-    float resonance_alpha = br_master_state.stable_resonance_alpha;
-    float resonance_mix = br_master_state.stable_resonance_mix;
+    float hp_d = br_master_state.stable_filter_damping;
+    float hp_g = br_master_state.stable_resonance_alpha;
+    float hp_a = br_master_state.stable_resonance_mix;
 #else
-    float filter_damping = br_fx_master_q15_float(65534u - resonance * 477u);
-    float resonance_alpha = br_fx_master_q15_float(
-        br_fx_master_resonance_alpha(br_fx_master_filter_alpha(filter), resonance));
-    float resonance_mix = resonance >= 127u ? 1.0f :
-        br_fx_master_q15_float(resonance * 258u);
+    float hp_g = 0.0f, hp_a = 0.0f, hp_d = 0.0f;
+    if (filter > 64u) BR_MASTER_HP_COEFFS_INVOKE(filter, resonance, &hp_g, &hp_a, &hp_d);
 #endif
     int32_t input[2], filtered[2], shaped[2], result[2];
     int32_t peak;
     input[0] = stereo[0]; input[1] = stereo[1];
     peak = br_fx_abs(input[0]);
     if (br_fx_abs(input[1]) > peak) peak = br_fx_abs(input[1]);
+#if BR_FILTER_LADDER
+    if (filter < 63u || br_master_state.ladder[0].mix)
+        BR_MASTER_LADDER_INVOKE(input, filtered, peak);
+    else
+#endif
     if (filter == 63u || filter == 64u) {
         br_master_state.filter_tail = 0;
         br_master_state.low[0] = br_master_state.low[1] = 0;
         br_master_state.svf_low[0] = br_master_state.svf_low[1] = 0;
         br_master_state.band[0] = br_master_state.band[1] = 0;
+            br_master_state.hp2_low[0] = br_master_state.hp2_low[1] = 0;
+            br_master_state.hp2_band[0] = br_master_state.hp2_band[1] = 0;
         filtered[0] = input[0]; filtered[1] = input[1];
     } else {
-#if BR_FX_MASTER_STABLE_FASTPATH && BR_FX_MASTER_COEFF_CACHE
-        uint32_t alpha = br_master_state.stable_filter_alpha;
-#else
-        uint32_t alpha = br_fx_master_filter_alpha(filter);
-#endif
         if (peak > 2) br_master_state.filter_tail = FS * 2u;
         else if (br_master_state.filter_tail) --br_master_state.filter_tail;
-#if BR_FX_MASTER_TAIL_GAIN_HOIST
-        {
-            uint32_t tail_gain = 127u;
-            if (peak <= 2 && br_master_state.filter_tail > 0u &&
-                br_master_state.filter_tail < FS / 4u)
-                tail_gain = br_fx_tail_gain(br_master_state.filter_tail);
-#endif
-        /* Keep one stereo filter loop rather than duplicating the float
-         * stage in RAM. Channel state and sample order remain independent. */
+        /* High-pass (filter 65..127; the low-pass is the ladder above): a TPT
+         * state-variable filter, band = s1 (band[]), low = s2 (svf_low[]).
+         * Unconditionally stable, so the float states need no clamp. Keep one
+         * stereo loop rather than duplicating it in RAM. */
 #if defined(__clang__)
 #pragma clang loop unroll(disable)
 #endif
         for (ch = 0; ch < 2u; ++ch) {
-#if !BR_FX_NATIVE_RATE_CALIBRATION && !BR_FX_NATIVE_RATE_48K
-            br_master_state.low[ch] = br_master_pole_alpha_bounded(br_master_state.low[ch], input[ch], alpha);
-#else
-            br_master_state.low[ch] = br_fx_pole(br_master_state.low[ch], input[ch], alpha);
-#endif
-            filtered[ch] = filter < 63u ? br_master_state.low[ch] :
-                input[ch] - br_master_state.low[ch];
-            if (resonance) {
-                float svf_low = br_master_state.svf_low[ch] +
-                    br_master_state.band[ch] * resonance_alpha;
-                float svf_high, next_band, svf_filtered;
-                svf_low = svf_low < -1048576.0f ? -1048576.0f :
-                    svf_low > 1048576.0f ? 1048576.0f : svf_low;
-                svf_high = (float)input[ch] - svf_low -
-                    br_master_state.band[ch] * filter_damping;
-                next_band = br_master_state.band[ch] + svf_high * resonance_alpha;
-                next_band = next_band < -1048576.0f ? -1048576.0f :
-                    next_band > 1048576.0f ? 1048576.0f : next_band;
-                br_master_state.svf_low[ch] = svf_low;
-                br_master_state.band[ch] = next_band;
-                svf_filtered = filter < 63u ? svf_low : svf_high;
-                /* Maximum resonance is exactly unity; otherwise crossfade in
-                 * float and truncate only once at the output boundary. */
-                if (resonance == 127u) filtered[ch] = (int32_t)svf_filtered;
-                else filtered[ch] = (int32_t)((float)filtered[ch] +
-                    (svf_filtered - (float)filtered[ch]) * resonance_mix);
+            float s1 = br_master_state.band[ch], s2 = br_master_state.svf_low[ch];
+            float hp = ((float)input[ch] - hp_a * s1 - s2) * hp_d;
+            float v = hp_g * hp, band = v + s1;
+            br_master_state.band[ch] = band + v;
+            v = hp_g * band;
+            br_master_state.svf_low[ch] = s2 + v + v;
+            s1 = br_master_state.hp2_band[ch]; s2 = br_master_state.hp2_low[ch];
+            hp = (hp - br_master_state.hp2_a * s1 - s2) * br_master_state.hp2_d;
+            v = (hp_g * 0.5f) * hp; band = v + s1;
+            br_master_state.hp2_band[ch] = band + v;
+            v = (hp_g * 0.5f) * band; br_master_state.hp2_low[ch] = s2 + v + v;
+            filtered[ch] = (int32_t)hp;
+        }
+        /* The 2 s tail: fade over its last FS/4, then zero. Outside the loop,
+         * so the compiler does not version the loop on it. */
+        if (peak <= 2 && br_master_state.filter_tail < FS / 4u) {
+            if (!br_master_state.filter_tail) {
+                br_master_state.svf_low[0] = br_master_state.svf_low[1] = 0;
+                br_master_state.band[0] = br_master_state.band[1] = 0;
+            br_master_state.hp2_low[0] = br_master_state.hp2_low[1] = 0;
+            br_master_state.hp2_band[0] = br_master_state.hp2_band[1] = 0;
+                filtered[0] = filtered[1] = 0;
             } else {
-                br_master_state.svf_low[ch] = (float)br_master_state.low[ch];
-                br_master_state.band[ch] = 0;
-            }
-            if (!br_master_state.filter_tail && peak <= 2) {
-                br_master_state.low[ch] = 0;
-                br_master_state.svf_low[ch] = 0;
-                br_master_state.band[ch] = 0;
-                filtered[ch] = 0;
-            } else if (peak <= 2 && br_master_state.filter_tail < FS / 4u) {
-#if BR_FX_MASTER_TAIL_GAIN_HOIST
-                filtered[ch] = br_fx_wet_gain(filtered[ch], tail_gain);
-#else
                 uint32_t g = br_fx_tail_gain(br_master_state.filter_tail);
-                filtered[ch] = br_fx_wet_gain(filtered[ch], g);
-#endif
+                filtered[0] = br_fx_wet_gain(filtered[0], g);
+                filtered[1] = br_fx_wet_gain(filtered[1], g);
             }
         }
-#if BR_FX_MASTER_TAIL_GAIN_HOIST
-        }
-#endif
     }
     for (ch = 0; ch < 2u; ++ch)
         shaped[ch] = br_master_shape(filtered[ch], saturation
@@ -2628,11 +2408,15 @@ br_master_fx_process_range(int32_t *stereo, uint32_t first, uint32_t end)
 {
     uint32_t i;
 #if BR_FX_MASTER_SILENT_SKIP
+    /* The ladder needs no test here: it only holds state while filter_tail
+     * runs, and br_master_ladder_frame zeroes it when the tail expires. */
     if (!br_master_state.filter_tail && !br_master_state.wow_tail &&
         !(br_master_state.low[0] | br_master_state.low[1] |
           br_master_state.bit_hold[0] | br_master_state.bit_hold[1]) &&
         br_master_state.svf_low[0] == 0.0f && br_master_state.svf_low[1] == 0.0f &&
-        br_master_state.band[0] == 0.0f && br_master_state.band[1] == 0.0f) {
+        br_master_state.band[0] == 0.0f && br_master_state.band[1] == 0.0f &&
+        br_master_state.hp2_low[0] == 0.0f && br_master_state.hp2_low[1] == 0.0f &&
+        br_master_state.hp2_band[0] == 0.0f && br_master_state.hp2_band[1] == 0.0f) {
         int32_t any = 0;
         for (i = 2u * first; i < 2u * end; ++i) any |= stereo[i];
         if (!any) return;
@@ -2642,6 +2426,188 @@ br_master_fx_process_range(int32_t *stereo, uint32_t first, uint32_t end)
         br_master_fx_process_frame(&stereo[2u * i]);
 }
 #endif
+
+/* Master output limiter: the last thing done to the summed stereo mix before
+ * master volume (the hard clip there stays as the backstop). Once per block:
+ * peak over both channels, target gain T/peak (one divide), attack within the
+ * block by a linear per-sample ramp from the previous gain, release about
+ * 150 ms (5/128 of the cut per 256-frame block, plus 8 so it ends at exactly
+ * unity). One gain for both channels keeps the stereo image. A soft knee then
+ * catches the first block's overshoot: linear up to 24576, quadratic above,
+ * reaching 32767 at 40960 and never more. A block whose peak is <= 24576 at
+ * unity gain is left untouched (bit-identical), after one peak scan. */
+#define BR_MASTER_LIMIT_KNEE 24576u
+#define BR_MASTER_LIMIT_THRESHOLD 26000u
+#if BR_MASTER_LEVELER
+/* Output LEVELER (trial, -DBR_MASTER_LEVELER=1): a slow gain rider, boost
+ * only, folded into the limiter's gain. Per block: the mean square of the
+ * louder channel (the limiter's own scan, samples clamped to full scale),
+ * smoothed over ~400 ms; the boost steps toward TARGET / level, clamped to
+ * 0 .. MAX_BOOST, up at UP dB/s (not while a block is 3 dB louder than that),
+ * down at DOWN dB/s (it holds within one step of the wanted value). Below GATE (smoothed level or this block) the boost
+ * holds; after GATE_HOLD under it, it relaxes toward 0 dB at RELAX dB/s. The
+ * limiter then sees peak x boost, so its ceiling is unchanged, and the one
+ * combined gain (boost x limiter) ramps linearly across the block. Levels
+ * are RMS on the full scale 32768. Tune by ear here: */
+#define BR_MASTER_LEV_TARGET_RMS 6528u       /* -14 dBFS RMS (32768 x 10^(-14/20)) */
+#define BR_MASTER_LEV_GATE_RMS 104u          /* -50 dBFS RMS */
+#define BR_MASTER_LEV_MAX_BOOST 65380u       /* +6 dB (Q15, rounded down; <= 65535) */
+#define BR_MASTER_LEV_UP_MDB_S 2000u         /* boost rises 2 dB/s */
+#define BR_MASTER_LEV_DOWN_MDB_S 12000u      /* boost falls 12 dB/s */
+#define BR_MASTER_LEV_RELAX_MDB_S 2000u      /* gated: back to 0 dB at 2 dB/s */
+#define BR_MASTER_LEV_GATE_HOLD_MS 2000u     /* gated this long before relaxing */
+#define BR_MASTER_LEV_WINDOW_MS 400u         /* level smoothing time constant */
+/* Derived, per block. A step of r mdB/s is a Q16 factor 1 + r ln10/20000 x
+ * BR_BLOCK/FS (7545 = 65536 ln10 / 20). */
+#define BR_MASTER_LEV_STEP_Q16(mdb) \
+    ((uint32_t)(((uint64_t)(mdb) * 7545u * BR_BLOCK) / ((uint64_t)FS * 1000u)))
+#define BR_MASTER_LEV_WINDOW_Q13 \
+    ((uint32_t)((8192ull * BR_BLOCK * 1000u) / ((uint64_t)FS * BR_MASTER_LEV_WINDOW_MS)))
+#define BR_MASTER_LEV_HOLD_BLOCKS \
+    ((uint32_t)(((uint64_t)BR_MASTER_LEV_GATE_HOLD_MS * FS) / (1000u * BR_BLOCK)))
+/* Levels are mean squares in units of a^2 / 64 (the mean of (a >> 3)^2). */
+#define BR_MASTER_LEV_GATE_MS (BR_MASTER_LEV_GATE_RMS * BR_MASTER_LEV_GATE_RMS / 64u)
+/* boost^2 (Q14) x level / 256 against target^2 / 64 / 256 (Q14): 32-bit. */
+#define BR_MASTER_LEV_WANT ((BR_MASTER_LEV_TARGET_RMS * BR_MASTER_LEV_TARGET_RMS / 64u >> 8) << 14)
+#define BR_MASTER_LEV_OVER(b, ms) ((((b) * (b)) >> 16) * ((ms) >> 8))
+_Static_assert(BR_BLOCK <= 256u, "leveler: 32-bit sums of (a >> 3)^2 hold 256 frames");
+_Static_assert(BR_MASTER_LEV_MAX_BOOST <= 65535u, "leveler: Q15 product range");
+_Static_assert(BR_MASTER_LEV_WINDOW_Q13 * 4095ull * 4095u < 0x80000000ull, "leveler: smoothing range");
+
+/* Block-rate part (flash): leveler, then the limiter's target on the boosted
+ * peak. Returns the ramp's start (Q30, biased to round up) and leaves the
+ * per-frame step in lev_step; 0 = block untouched (all at unity). */
+static __attribute__((noinline)) uint32_t
+br_master_leveler_block(uint32_t peak, uint32_t sumsq, uint32_t n)
+{
+    br_master_state_t *s = &br_master_state;
+    uint32_t boost = 32768u + s->lev_boost, old = s->limit_cut, cut, target = 0u, gain, peak_b;
+    uint32_t blk = n ? sumsq / n : 0u, ms = s->lev_ms;
+    uint32_t old_gain = (uint32_t)(32768 + s->lev_applied);
+    int32_t d = (int32_t)((blk - ms) * BR_MASTER_LEV_WINDOW_Q13);
+    /* One-pole, rounded away from the level so it always arrives. */
+    ms += (uint32_t)(d > 0 ? (d + 8191) >> 13 : d >> 13);
+    s->lev_ms = ms;
+    if (ms < BR_MASTER_LEV_GATE_MS || blk < BR_MASTER_LEV_GATE_MS) {
+        if (s->lev_quiet < BR_MASTER_LEV_HOLD_BLOCKS) {
+            ++s->lev_quiet;
+        } else {
+            boost -= (boost * BR_MASTER_LEV_STEP_Q16(BR_MASTER_LEV_RELAX_MDB_S)) >> 16;
+            if (boost < 32768u) boost = 32768u;
+        }
+    } else {
+        uint32_t up = boost + ((boost * BR_MASTER_LEV_STEP_Q16(BR_MASTER_LEV_UP_MDB_S)) >> 16);
+        uint32_t down = boost - ((boost * BR_MASTER_LEV_STEP_Q16(BR_MASTER_LEV_DOWN_MDB_S)) >> 16);
+        s->lev_quiet = 0u;
+        if (up > BR_MASTER_LEV_MAX_BOOST) up = BR_MASTER_LEV_MAX_BOOST;
+        if (down < 32768u) down = 32768u;
+        /* (boost x level)^2 against target^2: no divide, no square root.
+         * Up only if this block, 3 dB down, agrees too (an onset after quiet
+         * is not lifted while the smoothed level still lags). */
+        if (up != boost && BR_MASTER_LEV_OVER(up, (blk >> 1) > ms ? blk >> 1 : ms) <= BR_MASTER_LEV_WANT)
+            boost = up;
+        else if (down != boost && BR_MASTER_LEV_OVER(down, ms) >= BR_MASTER_LEV_WANT) boost = down;
+    }
+    s->lev_boost = boost - 32768u;
+    peak_b = (peak >> 15) * boost + (((peak & 32767u) * boost) >> 15);   /* exact, as the RAM loop */
+    if (peak_b <= BR_MASTER_LIMIT_KNEE && !old && boost == 32768u && old_gain == 32768u) return 0u;
+    if (peak_b > BR_MASTER_LIMIT_THRESHOLD)
+        target = 32768u - (BR_MASTER_LIMIT_THRESHOLD << 15) / peak_b;
+    cut = old - (old >> 5) - (old >> 7) - 8u;    /* release, as without the leveler */
+    if ((int32_t)cut < (int32_t)target) cut = target;
+    s->limit_cut = cut;
+    gain = (boost * (32768u - cut)) >> 15;
+    /* Q30 ramp: lands exactly on gain after BR_BLOCK frames (power of two). */
+    s->lev_step = (gain - old_gain) * (32768u / BR_BLOCK);
+    return (old_gain << 15) | 0x7fffu;
+}
+#if defined(FM1_DEVICE) && !defined(FX_FAULT_TEST)
+/* RAM -> XIP flash: pi32v2 needs an absolute indirect call. */
+#define BR_MASTER_LEVELER_INVOKE(...) \
+    ({ __typeof__(&br_master_leveler_block) volatile leveler_fn_ = &br_master_leveler_block; \
+       leveler_fn_(__VA_ARGS__); })
+#else
+#define BR_MASTER_LEVELER_INVOKE(...) br_master_leveler_block(__VA_ARGS__)
+#endif
+
+static BR_FX_RAM_AUDIO __attribute__((noinline)) void
+br_master_limit_block(int32_t *stereo, uint32_t n)
+{
+    uint32_t i, a, peak = 0u, sl = 0u, sr = 0u, gain, step;
+    n *= 2u;
+    for (i = 0u; i < n; i += 2u) {
+        a = stereo[i] < 0 ? 0u - (uint32_t)stereo[i] : (uint32_t)stereo[i];
+        if (a > peak) peak = a;
+        if (a > 32767u) a = 32767u;
+        a >>= 3;
+        sl += a * a;
+        a = stereo[i + 1u] < 0 ? 0u - (uint32_t)stereo[i + 1u] : (uint32_t)stereo[i + 1u];
+        if (a > peak) peak = a;
+        if (a > 32767u) a = 32767u;
+        a >>= 3;
+        sr += a * a;
+    }
+    gain = BR_MASTER_LEVELER_INVOKE(peak, sl > sr ? sl : sr, n >> 1);
+    if (!gain) return;
+    step = br_master_state.lev_step;
+    for (i = 0u; i < n; ++i) {
+        int32_t x = stereo[i];
+        uint32_t g;
+        if (!(i & 1u)) gain += step;
+        g = gain >> 15;
+        a = x < 0 ? 0u - (uint32_t)x : (uint32_t)x;
+        /* Exact truncated Q15 product for any int32 magnitude (g <= 65535). */
+        a = (a >> 15) * g + (((a & 32767u) * g) >> 15);
+        if (a > BR_MASTER_LIMIT_KNEE + 16384u) a = BR_MASTER_LIMIT_KNEE + 16384u;
+        if (a > BR_MASTER_LIMIT_KNEE) {
+            uint32_t u = a - BR_MASTER_LIMIT_KNEE;
+            a -= (u * u) >> 15;
+            if (a > 32767u) a = 32767u;
+        }
+        stereo[i] = x < 0 ? -(int32_t)a : (int32_t)a;
+    }
+    br_master_state.lev_applied = (int32_t)(gain >> 15) - 32768;
+}
+#else
+static BR_FX_RAM_AUDIO __attribute__((noinline)) void
+br_master_limit_block(int32_t *stereo, uint32_t n)
+{
+    uint32_t i, a, peak = 0u, old = br_master_state.limit_cut, cut, gain, step, target = 0u;
+    n *= 2u;
+    for (i = 0u; i < n; ++i) {
+        a = stereo[i] < 0 ? 0u - (uint32_t)stereo[i] : (uint32_t)stereo[i];
+        if (a > peak) peak = a;
+    }
+    if (peak <= BR_MASTER_LIMIT_KNEE && !old) return;
+    if (peak > BR_MASTER_LIMIT_THRESHOLD)
+        target = 32768u - (BR_MASTER_LIMIT_THRESHOLD << 15) / peak;
+    /* Release (old <= 32768, so a release past unity is at worst -8 signed). */
+    cut = old - (old >> 5) - (old >> 7) - 8u;
+    if ((int32_t)cut < (int32_t)target) cut = target;
+    /* Gain in Q15 << 16, biased by 0xFFFF so it rounds up: the step lands
+     * exactly on the target after BR_BLOCK frames when BR_BLOCK is a power of
+     * two and within one unit otherwise, and a release always reaches unity. */
+    gain = ((32768u - old) << 16) | 0xFFFFu;
+    step = (old - cut) * (65536u / BR_BLOCK);
+    for (i = 0u; i < n; ++i) {
+        int32_t x = stereo[i];
+        uint32_t g;
+        if (!(i & 1u)) gain += step;
+        g = gain >> 16;
+        a = x < 0 ? 0u - (uint32_t)x : (uint32_t)x;
+        /* Exact truncated Q15 product for any int32 magnitude. */
+        a = (a >> 15) * g + (((a & 32767u) * g) >> 15);
+        if (a > BR_MASTER_LIMIT_KNEE + 16384u) a = BR_MASTER_LIMIT_KNEE + 16384u;
+        if (a > BR_MASTER_LIMIT_KNEE) {
+            uint32_t u = a - BR_MASTER_LIMIT_KNEE;
+            a -= (u * u) >> 15;
+            if (a > 32767u) a = 32767u;
+        }
+        stereo[i] = x < 0 ? -(int32_t)a : (int32_t)a;
+    }
+    br_master_state.limit_cut = 32768u - (gain >> 16);
+}
+#endif /* BR_MASTER_LEVELER */
 
 #if !BR_FX_MASTER_FRAME_INLINE_FINISH || !defined(FM1_DEVICE)
 static BR_FX_RAM_AUDIO void br_master_fx_process(int32_t *stereo, uint32_t n)
@@ -2702,36 +2668,12 @@ BR_AUDIO_API uint32_t __attribute__((noinline)) br_fx_bounded_pole_benchmark(uin
 
 #endif
 
-static BR_FX_RAM_AUDIO int32_t br_fx_pole_reverb(int32_t current, int32_t target, uint32_t alpha)
-{
-    int32_t delta = target - current;
-    int32_t step = br_fx_mul_q15_reverb_pole(delta, alpha);
-    if (!step && delta) step = delta > 0 ? 1 : -1;
-    return current + step;
-}
-#if BR_FX_REVERB_FLOAT_Q15
-/* Generic reverb coefficients are cached blockwise; all feedback and pole
- * products stay inside the bounded int32 signal/state domain. */
-static inline __attribute__((always_inline)) int32_t
-br_fx_mul_q15_reverb_float(int32_t x, float q15)
-{
-    return (int32_t)((float)x * q15);
-}
-static inline __attribute__((always_inline)) int32_t
-br_fx_pole_reverb_float(int32_t current, int32_t target, float alpha)
-{
-    int32_t delta = target - current;
-    int32_t step = br_fx_mul_q15_reverb_float(delta, alpha);
-    if (!step && delta) step = delta > 0 ? 1 : -1;
-    return current + step;
-}
-#endif
-
 static BR_FX_RAM_AUDIO int32_t br_fx_softclip(int32_t x)
 {
     return br_fx_softclip_table_bounded(x);
 }
 
+#if !BR_FX_DELAY_RATE2   /* the rate-2 TAPE saturates on the write instead */
 /* Same rational curve as br_fx_softclip, with an algebraic wide-input path.
  * Tape can inherit expanded state when the user switches delay engines. */
 static BR_FX_RAM_AUDIO int32_t br_fx_delay_softclip(int32_t x)
@@ -2743,6 +2685,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay_softclip(int32_t x)
     int32_t result = 32767 - (int32_t)correction;
     return x < 0 ? -result : result;
 }
+#endif
 
 /* Symmetric triangle keeps both endpoints inside [-32767,32767]. */
 static BR_FX_RAM_AUDIO int32_t br_fx_tri(uint32_t phase)
@@ -2750,6 +2693,52 @@ static BR_FX_RAM_AUDIO int32_t br_fx_tri(uint32_t phase)
     uint32_t x = phase >> 16;
     if (x < 32768u) return (int32_t)(x * 2u) - 32767;
     return 98303 - (int32_t)(x * 2u);
+}
+
+/* MOD RATE: exponential in two segments pinned at the default 40, which keeps
+ * the old law's 2.5655 Hz (phase step 249856 per 44.1 kHz sample) bit-exactly:
+ * 0.05 Hz at 0 rising x1.10346 per step to 40, then x1.01576 per step to 10 Hz
+ * at 127. Returns the LFO phase step per sample at 44.1 kHz (Q0.32 of a cycle);
+ * the read-out shows it in Hz through the LFO page's formatter. */
+BR_AUDIO_API __attribute__((noinline)) uint32_t br_mod_rate_inc(uint32_t rate)
+{
+    float inc = 249856.0f;
+    if (rate > 127u) rate = 127u;
+    for (; rate < 40u; ++rate) inc *= 0.906243777f;        /* 1 / 1.1034559 */
+    for (; rate > 40u; --rate) inc *= 1.01576014f;
+    return (uint32_t)(inc + 0.5f);
+}
+
+/* MOD DEPTH. The delay sweeps base + span (44.1 kHz samples) with a triangle,
+ * so the pitch moves by +-x, x = 2 * span * f / FS = span * step / 2^31. For
+ * CHORUS and VIBRATO the knob means that deviation: the span is set at the
+ * default rate (CHORUS 1 + 4d, VIBRATO 8 + 7d, as before) and scaled by
+ * f(40) / f(rate), so the cents hold as RATE moves, until the span reaches the
+ * line (2044 samples less the base: CHORUS 1724, VIBRATO 1996, about 39 / 45 ms).
+ * FLANGER keeps a fixed sweep (it is a comb sweep, not a pitch), PHASER has no
+ * delay line; both stay in %. */
+static uint32_t br_mod_base(uint32_t engine)
+{
+    return engine == BR_MOD_FLANGE ? 24u : engine == BR_MOD_VIBRATO ? 48u : 320u;
+}
+BR_AUDIO_API __attribute__((noinline)) uint32_t br_mod_depth_span(uint32_t engine, uint32_t depth, uint32_t rate)
+{
+    uint32_t span, inc, room = BR_FX_MOD_REACH - br_mod_base(engine);
+    if (depth > 127u) depth = 127u;
+    if (engine == BR_MOD_FLANGE) return 1u + depth * 4u;
+    span = engine == BR_MOD_VIBRATO ? 8u + depth * 7u : 1u + depth * 4u;
+    inc = br_mod_rate_inc(rate);
+    span = (span * 249856u + inc / 2u) / inc;          /* <= 897 * 249856 */
+    return span < room ? span : room;
+}
+/* Peak pitch deviation in cents (half the up/down span) for the read-out:
+ * 600 log2((1 + x) / (1 - x)) = 1731.234 * (x + x^3/3 + ...), x in Q16 (x <= 0.11,
+ * so the x^5 term is under 0.05 cent). span * step <= 1996 * 973919 < 2^32. */
+BR_AUDIO_API uint32_t br_mod_depth_cents(uint32_t engine, uint32_t depth, uint32_t rate)
+{
+    uint32_t x = br_mod_depth_span(engine, depth, rate) * br_mod_rate_inc(rate) >> 15;
+    uint32_t t = x * 1731u >> 8;                        /* cents, Q8 */
+    return (t + ((t >> 4) * ((x * x >> 16) / 3u) >> 12) + 128u) >> 8;
 }
 
 static BR_FX_RAM_AUDIO uint32_t br_fx_mod_delay_q8(uint32_t base_q8, uint32_t span, int32_t tri)
@@ -2780,6 +2769,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_mod(br_fx_track_t *st, uint32_t p, int32_t 
         int32_t a = 3500 + (int32_t)((((uint32_t)(tri + 32767)) *
             (5000u + depth * 110u)) >> 16);
         st->lfo_phase += c->mod_lfo_inc;
+        wet = br_fx_clip_ram(wet + ((st->mod_feedback_last * (int32_t)c->mod_feedback) >> 8), -65535, 65535);
         for (i = 0u; i < 4u; ++i) {
             int32_t y = st->phase_state[i] -
                 br_fx_mul_q15_phaser_selected(wet, (uint32_t)a);
@@ -2787,6 +2777,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_mod(br_fx_track_t *st, uint32_t p, int32_t 
                 wet + br_fx_mul_q15_phaser_selected(y, (uint32_t)a), -65535, 65535);
             wet = y;
         }
+        st->mod_feedback_last = br_fx_clip_ram(wet, -65535, 65535);
         return mix ? input + BR_FX_BLEND127((wet - input), mix, c->mod_mix_gain)
                    : input;
     }
@@ -2816,7 +2807,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_mod(br_fx_track_t *st, uint32_t p, int32_t 
         int32_t tri = br_fx_tri(st->lfo_phase);
         uint32_t delay_q8, read_pos, frac;
         int32_t sample_a, sample_b;
-        br_mod_line[p][st->mod_pos] = br_fx_clip16_ram(filtered_input);
+        br_mod_line[p][st->mod_pos] = br_fx_clip16_ram(filtered_input + ((st->mod_feedback_last * (int32_t)c->mod_feedback) >> 8));
         delay_q8 = br_fx_mod_delay_q8(c->mod_base_q8, c->mod_span, tri) >> 1;
         if (delay_q8 >= BR_FX_MOD_SAMPLES * 256u)
             delay_q8 = (BR_FX_MOD_SAMPLES - 1u) * 256u;
@@ -2825,6 +2816,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_mod(br_fx_track_t *st, uint32_t p, int32_t 
         sample_a = br_mod_line[p][read_pos];
         sample_b = br_mod_line[p][(read_pos - 1u) & (BR_FX_MOD_SAMPLES - 1u)];
         wet = br_fx_interp_q8_i16(sample_a, sample_b, frac);
+        st->mod_feedback_last = wet;
         if (engine == BR_MOD_FLANGE)
             wet -= br_fx_div_pow2(filtered_input, 1u);
         st->mod_pos = (st->mod_pos + 1u) & (BR_FX_MOD_SAMPLES - 1u);
@@ -2882,12 +2874,49 @@ static BR_FX_RAM_AUDIO int32_t br_fx_mod(br_fx_track_t *st, uint32_t p, int32_t 
 #endif
 }
 
-BR_AUDIO_API uint32_t br_fx_delay_samples(uint32_t value)
+/* FEEDBACK: Q15 loop gain with the repeats to -60 dB growing geometrically,
+ * from 1 at 1 to 224 at 127 (gain 0.9696, the old safe maximum), 0 at 0:
+ * 16 -> 1.9, 32 -> 3.8, 48 -> 7.5, 64 -> 15, 80 -> 30, 96 -> 59, 112 -> 117.
+ * Points every 8 steps, linear between (repeats within 5 % of the law); the
+ * last point is placed so that 127 lands exactly on 31771. */
+static const uint16_t br_fx_delay_feedback_q15_law[17] = {
+    0u, 197u, 871u, 2500u, 5282u, 8979u, 13081u, 17084u, 20645u,
+    23612u, 25972u, 27787u, 29152u, 30160u, 30896u, 31429u, 31820u
+};
+static BR_FX_PREPARE_CODE uint32_t br_fx_delay_feedback_law(uint32_t fb)
 {
-    uint32_t delay;
-    value = br_fx_bound(value, 127u);
-    delay = br_fx_rate_samples(32u + value * value);
-    return delay >= BR_FX_DELAY_FULL_SAMPLES ? BR_FX_DELAY_FULL_SAMPLES - 1u : delay;
+    const uint16_t *t = br_fx_delay_feedback_q15_law;
+    uint32_t i;
+    fb = br_fx_bound_ram(fb, 127u);
+    i = fb >> 3;
+    return t[i] + (((t[i + 1u] - t[i]) * (fb & 7u)) >> 3);
+}
+
+/* Delay controls that have no saved field yet: one value per track with a
+ * fixed default, read when the track's controls are prepared. The session
+ * format work connects them (WIDTH 0 = the mono line, TONE 127 = open,
+ * WOW RATE 64 = 0.6 Hz). */
+#ifndef BR_FX_DELAY_TONE_DEFAULT
+#define BR_FX_DELAY_TONE_DEFAULT 127u
+#endif
+#ifndef BR_FX_DELAY_WOW_RATE_DEFAULT
+#define BR_FX_DELAY_WOW_RATE_DEFAULT 64u
+#endif
+/* Phase increment per sample for 1 mHz. */
+#define BR_FX_DELAY_MHZ_INC ((uint32_t)(4294967.296 / (double)FS + 0.5))
+
+/* The TIME entry's length at the current tempo (the value text shows it). */
+BR_AUDIO_API uint32_t br_fx_delay_samples(uint32_t index)
+{
+    return BR_FX_PREPARE_INVOKE(br_fx_delay_note_samples, br_fx_delay_note_store(index), br_bpm);
+}
+BR_AUDIO_API uint32_t br_fx_delay_choice_samples(uint32_t choice)
+{
+    uint32_t stored, bpm = br_bpm < BR_BPM_MIN ? BR_BPM_MIN : br_bpm > BR_BPM_MAX ? BR_BPM_MAX : br_bpm;
+    uint8_t short_note;
+    br_fx_delay_choice_set(choice, &stored, &short_note);
+    if (short_note) return (FS * 5u * (short_note == 1u ? 4u : 9u) + 2u * bpm) / (4u * bpm);
+    return BR_FX_PREPARE_INVOKE(br_fx_delay_note_samples, stored, bpm);
 }
 
 static BR_FX_RAM_AUDIO uint32_t br_fx_delay_samples_ram(uint32_t value)
@@ -2898,6 +2927,94 @@ static BR_FX_RAM_AUDIO uint32_t br_fx_delay_samples_ram(uint32_t value)
     return delay >= BR_FX_DELAY_FULL_SAMPLES ? BR_FX_DELAY_FULL_SAMPLES - 1u : delay;
 }
 
+#if BR_FX_DELAY_RATE2 && BR_FX_DELAY_MAX_SHIFT
+/* A TIME or tempo change that needs another storage rate keeps a ringing
+ * tail: the line is resampled in place (oldest at delay_pos) instead of
+ * cleared. Slower storage: each 2^k old samples are averaged into the newest
+ * 1/2^k of the line, and the older part, which the old rate never held, is
+ * continued with the tail's own period (what a longer line would have held,
+ * one pass newer). Faster storage: the newest 1/2^k is interpolated over the
+ * whole line. The processing order never overwrites a sample before it is
+ * read. Runs once per crossing, from the block prepare step (flash). */
+static BR_FX_PREPARE_CODE __attribute__((minsize, noinline)) void
+br_fx_delay_storage_convert(br_fx_track_t *st, uint32_t p, uint32_t shift)
+{
+    int16_t *line = BR_POLY_DELAY_LINE(p);
+    const uint32_t n = BR_FX_DELAY_SAMPLES, mask = BR_FX_DELAY_SAMPLES - 1u;
+    uint32_t pos = st->delay_pos, valid = st->delay_valid_samples, k, keep, j, m;
+    /* The compander's slow paths live in RAM: reach them through absolute
+     * pointers (pi32v2 cannot encode a direct call from XIP flash). */
+    int32_t (*volatile dec_slow)(int16_t) = br_fx_reverb_decompress16;
+    int16_t (*volatile enc_slow)(int32_t) = br_fx_reverb_compress16;
+#define BR_FX_CONVERT_DEC(v) ((v) > -4096 && (v) < 4096 ? (int32_t)(v) : dec_slow(v))
+#define BR_FX_CONVERT_DIV(v) (((v) + ((v) < 0 ? (int32_t)(1u << k) - 1 : 0)) >> k)
+#define BR_FX_CONVERT_ENC(v) ((v) > -4096 && (v) < 4096 ? (int16_t)(v) : enc_slow(v))
+    if (shift > st->delay_storage_shift) {
+        uint32_t period = (st->delay_last_time + (1u << shift)) >> (shift + 1u);
+        k = shift - st->delay_storage_shift;
+        keep = n >> k;
+        for (j = keep; j--; ) {
+            int32_t sum = 0;
+            for (m = 0u; m < (1u << k); ++m)
+                sum += BR_FX_CONVERT_DEC(line[(pos + (j << k) + m) & mask]);
+            {
+                int32_t avg = BR_FX_CONVERT_DIV(sum);
+                line[(pos + n - keep + j) & mask] = BR_FX_CONVERT_ENC(avg);
+            }
+        }
+        valid >>= k;
+        if (period && period <= valid) {
+            for (m = n - valid; m--; )
+                line[(pos + m) & mask] = line[(pos + m + period) & mask];
+            valid = n;
+        }
+    } else {
+        k = st->delay_storage_shift - shift;
+        keep = n >> k;
+        for (m = 0u; m < n; ++m) {
+            uint32_t a = (n - 1u - m) >> k, fraction = (n - 1u - m) & ((1u << k) - 1u);
+            int32_t x = BR_FX_CONVERT_DEC(line[(pos + n - 1u - a) & mask]);
+            if (fraction)
+            {
+                int32_t step = (BR_FX_CONVERT_DEC(line[(pos + n - 2u - a) & mask]) - x) *
+                    (int32_t)fraction;
+                x += BR_FX_CONVERT_DIV(step);
+            }
+            line[(pos + m) & mask] = BR_FX_CONVERT_ENC(x);
+        }
+        valid = valid > keep ? n : valid << k;
+    }
+#undef BR_FX_CONVERT_DEC
+#undef BR_FX_CONVERT_ENC
+#undef BR_FX_CONVERT_DIV
+    st->delay_storage_shift = shift;
+    st->delay_valid_samples = valid;
+    /* The send decimators restart; the wet output continues from its last value. */
+    br_fx_clear32((br_fx_clear_word_t *)st->delay_long_history,
+                  sizeof st->delay_long_history / sizeof(uint32_t));
+    br_fx_clear32((br_fx_clear_word_t *)st->delay_long_pos,
+                  sizeof st->delay_long_pos / sizeof(uint32_t));
+    br_fx_clear32((br_fx_clear_word_t *)st->delay_long_phase,
+                  sizeof st->delay_long_phase / sizeof(uint32_t));
+    {
+        /* The wet half-band and its output ramp hold the last wet value (line units). */
+        int32_t last = st->delay_output_last / 4;
+        for (k = 0u; k < 8u; ++k) st->delay_echo_history[k] = last;
+        st->delay_long_previous_echo = st->delay_long_echo = st->delay_long_odd =
+            st->delay_rate2_previous_echo = last;
+    }
+    st->delay_long_interp_phase = 2u << shift;
+}
+#endif
+
+/* A gentler send taper puts the midpoint at one quarter of full send while
+ * keeping zero silent and retaining the full effect at the top of the range. */
+static inline uint32_t br_fx_send_taper(uint32_t value)
+{
+    if (value > 127u) value = 127u;
+    return (value * value + 63u) / 127u;
+}
+
 /* Derive controls only after a cache miss. Keep this cold setup compact;
  * the block dispatcher and per-sample kernels retain their O3 settings. */
 static BR_FX_PREPARE_CODE __attribute__((minsize, noinline)) void
@@ -2906,33 +3023,15 @@ br_fx_prepare_track_controls(uint32_t p, const br_sound_t *s,
                              uint32_t bpm)
 {
     uint32_t i;
-#if BR_FX_NATIVE_RATE_CALIBRATION && BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-    uint32_t packed_room_start = 0u;
-#endif
-    uint32_t output_engine = br_fx_reverb_engine_of(cfg->reverb_engine);
-    float output_target = 32.0f;
-    if (output_engine == BR_REVERB_SPACE)
-        output_target = 18.0f;
-    if (!(br_fx_track[p].reverb_output_scale > 0.0f))
-        br_fx_track[p].reverb_output_scale = output_target;
-    c->reverb_output_scale = output_target;
-    br_fx_track[p].reverb_output_unity =
-        br_fx_track[p].reverb_output_scale == 32.0f && output_target == 32.0f;
-        /* Loop-gain normalization depends only on engine geometry and SIZE.
-         * Wet, PAN, delay and modulation edits must not redo its expansion. */
-        uint32_t reverb_decay_refresh = !c->reverb_feedback_line[3] ||
-            c->reverb_engine != br_fx_reverb_engine_of(cfg->reverb_engine) ||
-            c->reverb_space != br_fx_bound_ram(s->space, 127u) ||
-            c->reverb_feedback != 14000u + 130u * br_fx_bound_ram(cfg->reverb_tone, 127u);
         c->delay_engine = br_fx_bound_ram(cfg->delay_engine, BR_DELAY_COUNT - 1u);
-        c->delay_amount = br_fx_bound_ram(s->delay, 127u);
-#if BR_FX_Q15_MIX_GAIN
-        c->delay_amount_gain = (uint16_t)((c->delay_amount * 32768u + 63u) / 127u);
-#elif BR_FX_FLOAT_MIX_GAIN
-        c->delay_amount_gain = c->delay_amount >= 127u ? 1.0f :
-            (float)c->delay_amount * (1.0f / 127.0f);
-#endif
-        c->delay_time = BR_FX_PREPARE_INVOKE(br_fx_delay_note_samples, cfg->delay_time, bpm);
+        /* Delay send controls only the input to the line, so tails continue
+         * naturally when the send is turned down. */
+        c->delay_amount = br_fx_send_taper(s->delay);
+        if (br_part_pending[p].delay_short == 1u || br_part_pending[p].delay_short == 2u) {
+            uint32_t ticks = br_part_pending[p].delay_short == 1u ? 4u : 9u; /* 48ths of a beat */
+            uint32_t beat = bpm < BR_BPM_MIN ? BR_BPM_MIN : bpm > BR_BPM_MAX ? BR_BPM_MAX : bpm;
+            c->delay_time = (FS * 5u * ticks + 2u * beat) / (4u * beat);
+        } else c->delay_time = BR_FX_PREPARE_INVOKE(br_fx_delay_note_samples, cfg->delay_time, bpm);
         c->delay_tail_hold = BR_FX_TAIL_SAMPLES;
         if (c->delay_time >= BR_FX_TAIL_SAMPLES - FS / 4u ||
             br_fx_bound_ram(cfg->delay_feedback, 127u))
@@ -2942,117 +3041,89 @@ br_fx_prepare_track_controls(uint32_t p, const br_sound_t *s,
         while (c->delay_storage_shift < BR_FX_DELAY_MAX_SHIFT &&
                c->delay_time > (BR_FX_DELAY_SAMPLES << (c->delay_storage_shift + 1u)))
             ++c->delay_storage_shift;
-        c->delay_tape_alpha = (uint16_t)br_fx_tape_alpha_for_shift(c->delay_storage_shift);
+        /* Whole storage samples: no fractional read, whose linear interpolation
+         * took the wet bandwidth from about 3.0 to 2.4 kHz on some entries (and
+         * likewise at every storage rate). The loop period moves by at most half
+         * a storage sample (31 us at full storage rate). */
+        c->delay_time = (c->delay_time + (1u << c->delay_storage_shift)) &
+            ~((2u << c->delay_storage_shift) - 1u);
+        {
+            /* TAPE: one-pole low-pass per pass, 3.5 kHz at TONE open (darker as
+             * TONE falls, 500 Hz at 0), at every storage rate. DIGITAL: none at
+             * TONE open, else the same pole from 500 Hz to 8.5 kHz. Wow 0.15..1.9 Hz
+             * (0.6 at WOW RATE 64) at +/-8 cents and 6 Hz flutter at +/-3 cents:
+             * the pitch deviation depends on the depth in time and the rate, not
+             * on TIME, so the depth is fixed in time (1.2 ms wow, 0.05 ms flutter
+             * at the default rate) and only rescaled to the storage rate. */
+            uint32_t tone = br_fx_bound_ram(br_part_pending[p].delay_tone, 127u);
+            uint32_t wow = br_fx_bound_ram(br_part_pending[p].delay_wow_rate, 127u);
+            uint32_t wow_mhz = 150u + wow * wow * 450u / 4096u, hz = 0u;
+            uint32_t rate = FS >> (c->delay_storage_shift + 1u);
+            if (c->delay_engine == BR_DELAY_TAPE) hz = 500u + tone * 3000u / 127u;
+            else if (tone < 127u) hz = 500u + tone * 8000u / 127u;
+            if (hz) {
+                float w = 6.2831853f * (float)hz / (float)rate;
+                float a = 1.0f - 1.0f / (1.0f + w * (1.0f + w * (0.5f + w * (1.0f / 6.0f))));
+                c->delay_tape_alpha = (uint16_t)(a * 32767.0f);
+            } else {
+                c->delay_tape_alpha = 0u;
+            }
+            c->delay_wow_inc = (wow_mhz * BR_FX_DELAY_MHZ_INC) << (c->delay_storage_shift + 1u);
+            c->delay_flutter_inc = (6000u * BR_FX_DELAY_MHZ_INC) << (c->delay_storage_shift + 1u);
+            c->delay_wow_depth_q8 = (uint16_t)((FS * 148u / wow_mhz) >> (c->delay_storage_shift + 1u));
+            c->delay_flutter_depth_q8 = (uint16_t)((FS * 37u / 4000u) >> (c->delay_storage_shift + 1u));
+            c->delay_width_q15 = (uint16_t)(br_fx_bound_ram(br_part_pending[p].delay_width, 127u) * 258u);
+        }
+#if BR_FX_DELAY_MAX_SHIFT
+        /* A ringing line is resampled rather than cleared (the kernel's reset
+         * then sees no change); a silent one is simply reset by the kernel.
+         * Lines lent to polyphonic voices are never touched. */
+        if (c->delay_storage_shift != br_fx_track[p].delay_storage_shift &&
+            br_fx_track[p].delay_ring
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+            && !(br_fx_poly_mode && p != br_fx_poly_part)
 #endif
+            )
+            br_fx_delay_storage_convert(&br_fx_track[p], p, c->delay_storage_shift);
+#endif
+#endif
+        {
+            /* TAPE loses a little more low end per pass: 120 Hz instead of 60. */
+            uint32_t complement = 4096u - (c->delay_engine == BR_DELAY_TAPE ?
+                2u * BR_FX_DELAY_HP_ALPHA_Q12 : BR_FX_DELAY_HP_ALPHA_Q12), k;
+            for (k = 0u; k < c->delay_storage_shift; ++k)
+                complement = (complement * complement + 2048u) >> 12;
+            c->delay_hp_alpha = (uint16_t)(complement < 2049u ? 2047u : 4096u - complement);
+        }
         for (i = 1u; i <= 4u; ++i) {
             uint32_t d = (c->delay_time * i) >> 2;
             c->delay_tap[i - 1u] = d < 1u ? 1u : d;
         }
-        c->delay_feedback = br_fx_bound_ram(cfg->delay_feedback, 127u) * 145u;
-        c->glitch_hold = (uint16_t)br_fx_rate_samples(1u + (cfg->delay_time & 7u));
-        c->glitch_step = (uint16_t)(1u << (1u + (br_fx_bound_ram(cfg->delay_time, 127u) >> 4)));
-        /* A different diffusion matrix has a different folded gain bound.
-         * Never slew a previous unscaled gain through the dense matrix. */
-        if (c->reverb_engine != br_fx_reverb_engine_of(cfg->reverb_engine)) {
-            br_fx_clear32((br_fx_clear_word_t *)br_fx_track[p].room_feedback, 4u);
-            br_fx_track[p].reverb_send_lp = 0;
-        }
-        c->reverb_engine = br_fx_reverb_engine_of(cfg->reverb_engine);
-        c->reverb_wet = br_fx_bound_ram(s->reverb, 127u);
-        /* Legacy serialized TONE is now independent DECAY. SIZE grows the
-         * physical comb taps while progressively damping high frequencies. */
-        c->reverb_tone = 86u - (62u * br_fx_bound_ram(s->space, 127u)) / 127u;
-        c->reverb_space = br_fx_bound_ram(s->space, 127u);
-        c->reverb_feedback = 14000u + 130u * br_fx_bound_ram(cfg->reverb_tone, 127u);
-        c->reverb_tail_hold = FS * (2u + br_fx_bound_ram(cfg->reverb_tone, 127u) / 8u);
-        c->reverb_alpha = br_fx_reverb_alpha(c->reverb_tone);
-#if BR_FX_PAN_COEFF_CACHE
-        if (br_fx_job_pan[p] > 64u) {
-            uint32_t left_weight = 127u - br_fx_job_pan[p];
-            c->pan_left_q15 = (uint16_t)((left_weight * 32768u + 31u) / 63u);
-            c->pan_right_q15 = (uint16_t)(32768u - c->pan_left_q15);
-        } else {
-            c->pan_left_q15 = c->pan_right_q15 = 0u;
-        }
+        c->delay_feedback = br_fx_delay_feedback_law(cfg->delay_feedback);
+#if BR_FX_DELAY_LOOP_HPF
+        c->delay_feedback = (c->delay_feedback * (8192u - c->delay_hp_alpha)) >> 13;
 #endif
         {
-#if BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-            uint32_t packed_room_start = 0u;
-#endif
-            for (i = 0u; i < 4u; ++i) {
-#if BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-                uint32_t packed_max = br_fx_rate_samples(
-                    br_room_length[BR_REVERB_SPACE][i]);
-                c->reverb_start[i] = (uint16_t)packed_room_start;
-                packed_room_start += (packed_max + 1u) >> 1;
+            /* GLITCH hold and quantizer step rise with the TIME entry, never
+             * jumping between neighbours: 1..8 samples (44.1 kHz units), 2..256. */
+            uint32_t g = br_part_pending[p].delay_short ? 0u :
+                br_fx_delay_note_of(cfg->delay_time) * 7u / (BR_FX_DELAY_NOTE_COUNT - 1u);
+            c->glitch_hold = (uint16_t)br_fx_rate_samples(1u + g);
+#if BR_FX_DELAY_RATE2
+            /* The line holds a quarter of the track bus: the same steps in bus units. */
+            c->glitch_step = (uint16_t)((2u << g) >> 2 ? (2u << g) >> 2 : 1u);
 #else
-                c->reverb_start[i] =
-                    (uint16_t)br_fx_rate_samples(br_room_start[i]);
+            c->glitch_step = (uint16_t)(2u << g);
 #endif
-                c->reverb_length[i] = (uint16_t)br_fx_rate_samples(
-                    br_room_length[c->reverb_engine][i]);
-            }
-
         }
-#if BR_FX_HAS_REVERB_RATE
-#if BR_FX_HAS_REVERB_RATE2
-        c->reverb_rate2 = BR_FX_PREPARE_INVOKE(br_fx_reverb_rate2_selected, c->reverb_engine);
-#else
-        c->reverb_rate2 = 0u;
-#endif
-#if BR_FX_HAS_REVERB_RATE4
-        c->reverb_rate4 = br_fx_reverb_rate4_selected(c->reverb_engine);
-#else
-        c->reverb_rate4 = 0u;
-#endif
-        if (c->reverb_rate4) {
-            /* Two cascaded native-to-half-rate decimators make a quarter-rate
-             * path. Preserve the one-pole time constant across four samples. */
-            uint32_t q = 32768u - c->reverb_alpha;
-            uint32_t q2 = (q * q + 16384u) >> 15;
-            uint32_t q4 = (q2 * q2 + 16384u) >> 15;
-            c->reverb_alpha = 32768u - q4;
-            for (i = 0u; i < 4u; ++i)
-                c->reverb_length[i] = (uint16_t)((c->reverb_length[i] + 3u) >> 2);
-        } else if (c->reverb_rate2) {
-            /* A half-rate traversal lasts the same time through half as many
-             * comb cells; remap the one-pole coefficient to that cadence. */
-            c->reverb_alpha = 2u * c->reverb_alpha -
-                ((c->reverb_alpha * c->reverb_alpha) >> 15);
-            for (i = 0u; i < 4u; ++i)
-                c->reverb_length[i] = (uint16_t)((c->reverb_length[i] + 1u) >> 1);
+        c->reverb_wet = br_fx_send_taper(s->reverb);   /* SEND to the shared reverb */
+        {
+            uint32_t gains = br_fx_pan_gains(br_fx_bound_ram(s->pan, 127u));
+            c->pan_left_q15 = (uint16_t)(gains >> 16);
+            c->pan_right_q15 = (uint16_t)gains;
         }
-#endif
-        c->reverb_slew_shift = 10u;
-#if BR_FX_HAS_REVERB_RATE
-        if (c->reverb_rate4) c->reverb_slew_shift = 8u;
-        else if (c->reverb_rate2) c->reverb_slew_shift = 9u;
-#endif
-        for (i = 0u; i < 4u; ++i)
-            c->reverb_size_delay[i] = (uint16_t)((c->reverb_length[i] *
-                (127u + c->reverb_space) + 127u) / 254u);
-        if (reverb_decay_refresh) {
-            uint32_t reference_length = 0u;
-            for (i = 0u; i < 4u; ++i)
-                if (c->reverb_length[i] > reference_length)
-                    reference_length = c->reverb_length[i];
-            for (i = 0u; i < 4u; ++i)
-                c->reverb_feedback_line[i] = (uint16_t)
-                    br_fx_reverb_feedback_for_length(c->reverb_feedback,
-                        c->reverb_size_delay[i], reference_length);
-            if (c->reverb_engine == BR_REVERB_SPACE)
-                for (i = 0u; i < 4u; ++i)
-                    c->reverb_feedback_line[i] = (uint16_t)
-                        ((c->reverb_feedback_line[i] * 23170u + 16384u) >> 15);
-        }
-#if BR_FX_REVERB_FLOAT_Q15
-        /* Q15 fractions are exactly representable as binary32. */
-        c->reverb_alpha_float = (float)c->reverb_alpha * (1.0f / 32768.0f);
-        for (i = 0u; i < 4u; ++i)
-            c->reverb_feedback_line_float[i] =
-                (float)c->reverb_feedback_line[i] * (1.0f / 32768.0f);
-#endif
         c->mod_engine = br_fx_bound_ram(cfg->mod_engine, BR_MOD_COUNT - 1u);
+        c->mod_feedback = br_fx_bound_ram(br_part_pending[p].mod_feedback, 127u);
         c->mod_depth = br_fx_bound_ram(cfg->mod_depth, 127u);
         c->mod_mix = br_fx_bound_ram(cfg->mod_mix, 127u);
 #if BR_FX_Q15_MIX_GAIN
@@ -3062,19 +3133,14 @@ br_fx_prepare_track_controls(uint32_t p, const br_sound_t *s,
             (float)c->mod_mix * (1.0f / 127.0f);
 #endif
         c->mod_lfo_inc = br_fx_rate_phase(
-            4096u + br_fx_bound_ram(cfg->mod_rate, 127u) * 6144u);
-        if (c->mod_engine == BR_MOD_FLANGE) {
-            c->mod_base_q8 = 24u * 256u;
-            c->mod_span = 1u + c->mod_depth * 4u;
-        } else if (c->mod_engine == BR_MOD_VIBRATO) {
-            c->mod_base_q8 = 48u * 256u;
-            c->mod_span = 8u + c->mod_depth * 7u;
-        } else {
-            c->mod_base_q8 = 320u * 256u;
-            c->mod_span = 1u + c->mod_depth * 4u;
+            BR_FX_PREPARE_INVOKE(br_mod_rate_inc, br_fx_bound_ram(cfg->mod_rate, 127u)));
+        c->mod_base_q8 = br_fx_rate_q8(br_mod_base(c->mod_engine) * 256u);
+        c->mod_span = br_fx_rate_samples(BR_FX_PREPARE_INVOKE(br_mod_depth_span,
+            c->mod_engine, c->mod_depth, br_fx_bound_ram(cfg->mod_rate, 127u)));
+        {   /* Keep the deepest read (and its interpolation partner) inside the line. */
+            uint32_t room = BR_FX_MOD_REACH - (c->mod_base_q8 >> 8);
+            if (c->mod_span > room) c->mod_span = room;
         }
-        c->mod_base_q8 = br_fx_rate_q8(c->mod_base_q8);
-        c->mod_span = br_fx_rate_samples(c->mod_span);
 }
 
 static BR_FX_PREPARE_CODE void br_fx_prepare_block(uint32_t n)
@@ -3106,7 +3172,8 @@ static BR_FX_PREPARE_CODE void br_fx_prepare_block(uint32_t n)
         br_fx_job_enabled[p] = BR_FX_PREPARE_INVOKE(br_fx_any_enabled, s, br_fx_config_at(p));
         br_fx_job_pan[p] = br_fx_bound_ram(s->pan, 127u);
         br_fx_job_kit[p] = br_fx_is_kit(s->preset);
-        if (br_fx_job_enabled[p] || br_fx_track[p].tail_samples || br_fx_job_pan[p] != 64u)
+        if (br_fx_job_enabled[p] || br_fx_track[p].tail_samples || br_fx_job_pan[p] != 64u ||
+            br_fx_pan_prev[p] || br_fx_track[p].drive_send)
             br_fx_dry_center = 0u;
     }
 #if BR_FX_GLOBAL_REVERB
@@ -3124,177 +3191,40 @@ static BR_FX_PREPARE_CODE void br_fx_prepare_block(uint32_t n)
         const br_fx_config_t *cfg = br_fx_config_at(p);
         br_fx_controls_t *c = &br_fx_controls[p];
 #if BR_FX_STABLE_CONTROL_CACHE
-        uint32_t key[14] = {
-            s->delay, s->reverb, s->space, s->pan,
-            cfg->delay_engine, cfg->delay_time, cfg->delay_feedback,
-            cfg->reverb_engine, cfg->reverb_tone,
-            cfg->mod_engine, cfg->mod_depth, cfg->mod_mix, cfg->mod_rate, bpm
+        uint32_t key[11] = {
+            s->delay, s->reverb, s->pan,
+            cfg->delay_engine | ((uint32_t)br_part_pending[p].delay_tone << 8), cfg->delay_time | ((uint32_t)br_part_pending[p].delay_short << 8), cfg->delay_feedback,
+            cfg->mod_engine | ((uint32_t)br_part_pending[p].mod_feedback << 8), cfg->mod_depth, cfg->mod_mix, cfg->mod_rate, bpm
         };
         uint32_t key_index = 0u;
         if (br_fx_control_key_valid & (1u << p)) {
-            for (; key_index < 14u; ++key_index)
+            for (; key_index < 11u; ++key_index)
                 if (key[key_index] != br_fx_control_key[p][key_index]) break;
-            if (key_index == 14u) {
-                uint32_t bit = 1u << p;
-                if (br_fx_warm_pending & bit) {
-                    uint32_t engine = br_fx_reverb_engine_of(cfg->reverb_engine);
-                    if (!(br_fx_track[p].reverb_output_scale > 0.0f)) {
-                        br_fx_track[p].reverb_output_scale = c->reverb_output_scale;
-                        br_fx_track[p].reverb_output_unity =
-                            c->reverb_output_scale == 32.0f;
-                    }
-                    if (br_fx_warm_baseline[p].engine != engine) {
-                        br_fx_clear32((br_fx_clear_word_t *)
-                            br_fx_track[p].room_feedback, 4u);
-                        br_fx_track[p].reverb_send_lp = 0;
-                    }
-                    br_fx_warm_pending &= ~bit;
-                }
-                continue;
-            }
+            if (key_index == 11u) continue;
         }
-        for (key_index = 0u; key_index < 14u; ++key_index)
+        for (key_index = 0u; key_index < 11u; ++key_index)
             br_fx_control_key[p][key_index] = key[key_index];
         br_fx_control_key_valid |= 1u << p;
-        if (br_fx_warm_pending & (1u << p)) {
-            c->reverb_engine = br_fx_warm_baseline[p].engine;
-            c->reverb_space = br_fx_warm_baseline[p].space;
-            c->reverb_feedback = br_fx_warm_baseline[p].feedback;
-            memcpy(c->reverb_feedback_line,
-                   br_fx_warm_baseline[p].feedback_line,
-                   sizeof br_fx_warm_baseline[p].feedback_line);
-        }
 #endif
         BR_FX_PREPARE_INVOKE(br_fx_prepare_track_controls, p, s, cfg, c, bpm);
-#if BR_FX_STABLE_CONTROL_CACHE
-        br_fx_warm_pending &= ~(1u << p);
-#endif
     }
-#if BR_FX_REVERB_FLOAT_Q15 && BR_FX_GENERIC_FEEDBACK_STABLE_CACHE
-    /* Per-block cache, including raw-control-key hits. A zero feedback state
-     * is the lazy-init sentinel. In-flight nonzero changes keep the exact
-     * per-sample loop-gain helper until a later block is stable. */
-    for (p = 0; p < BR_PARTS; ++p) {
-        const br_fx_controls_t *c = &br_fx_controls[p];
-        uint32_t line, stable = 1u;
-        for (line = 0u; line < 4u; ++line) {
-            uint32_t current = br_fx_track[p].room_feedback[line];
-            if (current && current != c->reverb_feedback_line[line])
-                stable = 0u;
-        }
-        br_fx_controls[p].reverb_feedback_stable = (uint8_t)stable;
-    }
-#endif
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE && !BR_FX_GLOBAL_REVERB
-    /* Accept only zero/lazy or settled delays. Invalid positions and zero
-     * delays are normalized at the original first-read point, not here. */
-    for (p = 0; p < BR_PARTS; ++p) {
-        const br_fx_controls_t *c = &br_fx_controls[p];
-        uint32_t line, stable = 1u;
-        uint8_t init_mask = 0u;
-        for (line = 0u; line < 4u; ++line) {
-            uint32_t target = (uint32_t)c->reverb_size_delay[line] << 8u;
-            uint32_t current = br_fx_track[p].room_delay_q8[line];
-            uint32_t length = c->reverb_length[line];
-            uint32_t pos = br_fx_track[p].room_pos[line];
-            uint32_t index;
-            uint8_t bit = (uint8_t)(1u << line);
-            if (current && current != target) stable = 0u;
-            if (!current && target) init_mask |= bit;
-            if (pos >= length) {
-                pos = 0u;
-                init_mask |= bit;
-            }
-            index = pos + length - c->reverb_size_delay[line];
-            if (index >= length) index -= length;
-            br_fx_reverb_read_cursor[p][line] = (uint16_t)index;
-            br_fx_reverb_read_ring[p][line] =
-                &br_room_line[p][c->reverb_start[line]];
-        }
-        br_fx_reverb_read_cursor_stable[p] = (uint8_t)stable;
-        br_fx_reverb_read_cursor_init_mask[p] = init_mask;
-    }
-#endif
 #if BR_FX_GLOBAL_REVERB
-    /* The shared reverb runs as "track 0" of the kernels' per-track caches: no
-     * track uses its own reverb any more, so slot 0 is rebuilt from its state. */
     if (br_gr_wanted) {
-        br_fx_controls_t *c = &br_gr_controls;
-        br_fx_track_t *st = &br_gr_state;
-        uint32_t line;
+        if (br_gr_lfo_frames < FS / 20u) br_gr_lfo_frames += n;
         br_gr_prepare();
-#if BR_FX_REVERB_FLOAT_Q15 && BR_FX_GENERIC_FEEDBACK_STABLE_CACHE
-        {
-            uint32_t stable = 1u;
-            for (line = 0u; line < 4u; ++line) {
-                uint32_t current = st->room_feedback[line];
-                if (current && current != c->reverb_feedback_line[line]) stable = 0u;
-            }
-            c->reverb_feedback_stable = (uint8_t)stable;
-        }
-#endif
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE
-        {
-            uint32_t stable = 1u;
-            uint8_t init_mask = 0u;
-            for (line = 0u; line < 4u; ++line) {
-                uint32_t target = (uint32_t)c->reverb_size_delay[line] << 8u;
-                uint32_t current = st->room_delay_q8[line];
-                uint32_t length = c->reverb_length[line];
-                uint32_t pos = st->room_pos[line];
-                uint32_t index;
-                uint8_t bit = (uint8_t)(1u << line);
-                if (current && current != target) stable = 0u;
-                if (!current && target) init_mask |= bit;
-                if (pos >= length) { pos = 0u; init_mask |= bit; }
-                index = pos + length - c->reverb_size_delay[line];
-                if (index >= length) index -= length;
-                br_fx_reverb_read_cursor[0][line] = (uint16_t)index;
-                br_fx_reverb_read_ring[0][line] = &br_room_line[0][c->reverb_start[line]];
-            }
-            br_fx_reverb_read_cursor_stable[0] = (uint8_t)stable;
-            br_fx_reverb_read_cursor_init_mask[0] = init_mask;
-        }
-#endif
-        (void)st; (void)line;
     }
 #endif
 }
 
 /* Call only after session/effective snapshots are rebuilt, under the app's
  * quiescent transaction. The stopped+quiet check prevents state advancement.
- * Cache/control writes are retained; track-state initializer side effects
- * are restored until the first real block. */
-BR_AUDIO_API void br_fx_warm_controls_quiescent(void)
+ * Cache/control writes are retained; the shared reverb's coefficients are
+ * designed here (no DSP state advances), not in the first audio block. */
+BR_POLY_COLD BR_AUDIO_API void br_fx_warm_controls_quiescent(void)
 {
 #if BR_FX_STABLE_CONTROL_CACHE
     if (br_playing || !br_engine_quiet() || !br_fx_quiet()) return;
-    uint32_t p, keep_original = br_fx_warm_pending != 0u;
-    for (p = 0u; p < BR_PARTS; ++p) {
-        br_fx_warm_saved[p].output_scale = br_fx_track[p].reverb_output_scale;
-        memcpy(br_fx_warm_saved[p].room_feedback, br_fx_track[p].room_feedback,
-               sizeof br_fx_warm_saved[p].room_feedback);
-        br_fx_warm_saved[p].reverb_send_lp = br_fx_track[p].reverb_send_lp;
-        br_fx_warm_saved[p].output_unity = br_fx_track[p].reverb_output_unity;
-        if (!keep_original) {
-            br_fx_warm_baseline[p].engine = br_fx_controls[p].reverb_engine;
-            br_fx_warm_baseline[p].space = br_fx_controls[p].reverb_space;
-            br_fx_warm_baseline[p].feedback = br_fx_controls[p].reverb_feedback;
-            memcpy(br_fx_warm_baseline[p].feedback_line,
-                   br_fx_controls[p].reverb_feedback_line,
-                   sizeof br_fx_warm_baseline[p].feedback_line);
-        }
-    }
     br_fx_prepare_block(0u);
-    if (br_fx_dry_center && !br_fx_comp_active) return;
-    for (p = 0u; p < BR_PARTS; ++p) {
-        br_fx_track[p].reverb_output_scale = br_fx_warm_saved[p].output_scale;
-        memcpy(br_fx_track[p].room_feedback, br_fx_warm_saved[p].room_feedback,
-               sizeof br_fx_warm_saved[p].room_feedback);
-        br_fx_track[p].reverb_send_lp = br_fx_warm_saved[p].reverb_send_lp;
-        br_fx_track[p].reverb_output_unity = br_fx_warm_saved[p].output_unity;
-    }
-    br_fx_warm_pending = (1u << BR_PARTS) - 1u;
 #endif
 }
 
@@ -3331,7 +3261,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_
         uint32_t wow_time = (uint32_t)((int32_t)time + wow);
         if (wow_time < 1u) wow_time = 1u;
         read_pos = (st->delay_pos - wow_time) & (BR_FX_DELAY_SAMPLES - 1u);
-        echo = br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]);
+        echo = br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]);
         echo = br_fx_delay_softclip(echo);
         st->delay_lp = br_fx_pole_bounded(st->delay_lp, echo, br_fx_tape_alpha_full());
         echo = st->delay_lp;
@@ -3344,9 +3274,9 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_
             uint32_t d = c->delay_tap[tap - 1u];
             read_pos = (st->delay_pos - d) & (BR_FX_DELAY_SAMPLES - 1u);
 #if BR_FX_MULTITAP_COMBINED_DIV
-            weighted_sum += (int32_t)br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]) * (int32_t)(5u - tap);
+            weighted_sum += (int32_t)br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]) * (int32_t)(5u - tap);
 #else
-            sum += br_fx_div10((int32_t)br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]) * (int32_t)(5u - tap));
+            sum += br_fx_div10((int32_t)br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]) * (int32_t)(5u - tap));
 #endif
         }
 #if BR_FX_MULTITAP_COMBINED_DIV
@@ -3355,7 +3285,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_
         echo = sum;
     } else {
         read_pos = (st->delay_pos - time) & (BR_FX_DELAY_SAMPLES - 1u);
-        echo = br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]);
+        echo = br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]);
         if (engine == BR_DELAY_GLITCH) {
             uint32_t hold = c->glitch_hold;
             if (st->glitch_count == 0u) {
@@ -3368,11 +3298,12 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_
         }
     }
     if (engine == BR_DELAY_TAPE) echo = br_fx_clip_ram(echo, -32767, 32767);
-    write = send + br_fx_delay_feedback_q15(echo, feedback);
-    if (engine == BR_DELAY_GLITCH) write = send + br_fx_delay_feedback_q15(echo, (feedback * 3u) >> 2);
+    if (engine == BR_DELAY_GLITCH) feedback = (feedback * 3u) >> 2;
+    write = br_fx_delay_write_sat(send + br_fx_delay_feedback_q15(
+        br_fx_delay_loop_hp(&st->delay_hp, echo, c->delay_hp_alpha), feedback));
     /* Drop quantization residue instead of letting feedback hold a DC tick forever. */
     if (br_fx_abs(write) <= 2) write = 0;
-    br_delay_line[p][st->delay_pos] = br_fx_reverb_compress16_fast(write);
+    BR_POLY_DELAY_LINE(p)[st->delay_pos] = br_fx_reverb_compress16_fast(write);
     st->delay_pos = (st->delay_pos + 1u) & (BR_FX_DELAY_SAMPLES - 1u);
     if (send > 2 || send < -2 ||
         ((feedback || c->delay_tail_hold > BR_FX_TAIL_SAMPLES) &&
@@ -3390,7 +3321,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_
             st->tail_samples = c->delay_tail_hold;
 #endif
     }
-    return input + BR_FX_BLEND127(echo, amount, c->delay_amount_gain);
+    return input + echo;
 }
 #else
 /* Keep the live input and wet-return mix at full rate. Only the delay loop
@@ -3407,52 +3338,73 @@ br_fx_delay_rate2_read(uint32_t p, uint32_t delay_pos, uint32_t delay_q8,
     uint32_t read_pos = (delay_pos - (delay_q8 >> 8)) &
         (BR_FX_DELAY_SAMPLES - 1u);
     uint32_t fraction = delay_q8 & 255u;
-    int32_t a = br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]);
+    int32_t a = br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]);
     if (!fraction) return a;
-    int32_t b = br_fx_reverb_decompress16_fast(br_delay_line[p][(read_pos - 1u) &
+    int32_t b = br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[(read_pos - 1u) &
         (BR_FX_DELAY_SAMPLES - 1u)]);
     return br_fx_reverb_lerp_q8_companded(a, b, fraction);
 }
 
-static BR_FX_RAM_AUDIO int32_t br_fx_delay_rate2_step(br_fx_track_t *st,
+/* A smooth LFO from a phase: 4x(1 - |x|), Q15. Its slope (the pitch it
+ * gives a delay read) is a triangle, so the pitch glides without corners. */
+static inline __attribute__((always_inline)) int32_t br_fx_delay_parabola(uint32_t phase)
+{
+    int32_t x = (int32_t)phase >> 16;
+    int32_t y = (x * (32768 - (x < 0 ? -x : x))) >> 13;
+    return y > 32767 ? 32767 : y;
+}
+
+/* One storage sample of the engine's loop: read, per-pass processing, write. */
+static inline __attribute__((always_inline)) int32_t br_fx_delay_loop(br_fx_track_t *st,
     uint32_t p, int32_t send, const br_fx_controls_t *c)
 {
     uint32_t engine = c->delay_engine;
     uint32_t shift = c->delay_storage_shift;
     uint32_t time_q8 = (c->delay_time * 128u) >> shift;
     uint32_t feedback = c->delay_feedback;
-    uint32_t tap;
-    int32_t echo, write;
+    uint32_t tap, wide_bit = 0u;
+    int32_t echo, out, write;
     if (engine == BR_DELAY_TAPE) {
-        int32_t wow_time_q8 = (int32_t)(c->delay_time * 256u) +
-            br_fx_tape_wow_q8(st->lfo_phase);
-        if (wow_time_q8 < 256) wow_time_q8 = 256;
-        echo = br_fx_delay_rate2_read(p, st->delay_pos,
-            (uint32_t)wow_time_q8 >> (shift + 1u), st->delay_valid_samples);
-        echo = br_fx_delay_softclip(echo);
-        uint32_t alpha = c->delay_tape_alpha;
-        if (!alpha) alpha = 1u;
-        st->delay_lp = br_fx_pole_bounded(st->delay_lp, echo, alpha);
-        echo = st->delay_lp;
+        /* Wow and flutter: two parabolic LFOs (smooth delay, triangle pitch)
+         * move a Q12 read between storage samples, linearly interpolated. */
+        uint32_t wow_phase = st->delay_wow_phase += c->delay_wow_inc;
+        uint32_t flutter_phase = st->delay_flutter_phase += c->delay_flutter_inc;
+        int32_t read_q12 = (int32_t)((c->delay_time << 11) >> shift) +
+            ((br_fx_delay_parabola(wow_phase) * (int32_t)c->delay_wow_depth_q8 +
+              br_fx_delay_parabola(flutter_phase) * (int32_t)c->delay_flutter_depth_q8) >> 11);
+        uint32_t whole, fraction;
+        if (read_q12 < 4096) read_q12 = 4096;
+        whole = (uint32_t)read_q12 >> 12;
+        fraction = (uint32_t)read_q12 & 4095u;
+        if (whole >= BR_FX_DELAY_SAMPLES - 1u || st->delay_valid_samples <= whole) {
+            echo = 0;
+        } else {
+            uint32_t at = (st->delay_pos - whole) & (BR_FX_DELAY_SAMPLES - 1u);
+            int32_t a = br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[at]);
+            int32_t b = br_fx_reverb_decompress16_fast(
+                BR_POLY_DELAY_LINE(p)[(at - 1u) & (BR_FX_DELAY_SAMPLES - 1u)]);
+            echo = a + ((b - a) * (int32_t)fraction >> 12);
+        }
+        /* Each pass loses highs (3.5 kHz pole at TONE open); the loop's 120 Hz
+         * high-pass takes a little low end from each repeat. No clip on the
+         * read: the write's knee bounds the line (the rational curve that sat
+         * here took 2.4 dB even from a -24 dBFS echo). */
+        st->delay_lp = br_fx_pole_bounded(st->delay_lp, echo, c->delay_tape_alpha);
+        echo = br_fx_clip_ram(st->delay_lp, -32767, 32767);
+        out = echo;
     } else if (engine == BR_DELAY_MULTITAP) {
-        int32_t sum = 0;
-#if BR_FX_MULTITAP_COMBINED_DIV
         int32_t weighted_sum = 0;
-#endif
         for (tap = 1u; tap <= 4u; ++tap) {
             int32_t tap_echo = br_fx_delay_rate2_read(p, st->delay_pos,
                 BR_FX_DELAY_GRID_Q8((c->delay_tap[tap - 1u] * 128u) >> shift),
                 st->delay_valid_samples);
-#if BR_FX_MULTITAP_COMBINED_DIV
             weighted_sum += tap_echo * (int32_t)(5u - tap);
-#else
-            sum += br_fx_div10(tap_echo * (int32_t)(5u - tap));
-#endif
         }
-#if BR_FX_MULTITAP_COMBINED_DIV
-        sum = br_fx_div10(weighted_sum);
-#endif
-        echo = sum;
+        /* The loop hears the taps at 4:3:2:1 / 10 (unity at DC); the output
+         * plays them at 1, 3/4, 1/2 and 1/4, so the first tap lands at the
+         * send level instead of 8 dB under it. */
+        echo = br_fx_div10(weighted_sum);
+        out = br_fx_div_pow2(weighted_sum, 2u);
     } else if (engine == BR_DELAY_GLITCH) {
         /* Only the held value is heard: read the line just to capture a new one. */
         if (st->glitch_count == 0u) {
@@ -3466,69 +3418,166 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay_rate2_step(br_fx_track_t *st,
             st->glitch_hold = br_fx_glitch_quantize(echo, (uint32_t)step);
             st->glitch_count = hold;
         }
-        echo = st->glitch_hold;
+        out = echo = st->glitch_hold;
         --st->glitch_count;
+        feedback = (feedback * 3u) >> 2;
     } else {
         echo = br_fx_delay_rate2_read(p, st->delay_pos, time_q8,
                                       st->delay_valid_samples);
+        if (c->delay_tape_alpha)          /* TONE below open */
+            echo = st->delay_lp = br_fx_pole_bounded(st->delay_lp, echo, c->delay_tape_alpha);
+        out = echo;
     }
-    if (engine == BR_DELAY_TAPE) echo = br_fx_clip_ram(echo, -32767, 32767);
-    write = send + br_fx_delay_feedback_q15(echo, feedback);
-    if (engine == BR_DELAY_GLITCH)
-        write = send + br_fx_delay_feedback_q15(echo, (feedback * 3u) >> 2);
+    if ((engine == BR_DELAY_MULTITAP || engine == BR_DELAY_GLITCH) && c->delay_tape_alpha) {
+        echo = st->delay_lp = br_fx_pole_bounded(st->delay_lp, echo, c->delay_tape_alpha);
+        out = engine == BR_DELAY_MULTITAP ? echo + echo + br_fx_div_pow2(echo, 1u) : echo;
+    }
+    {
+        int32_t fed = br_fx_delay_feedback_q15(
+            br_fx_delay_loop_hp(&st->delay_hp, echo, c->delay_hp_alpha), feedback);
+        write = send + fed;
+        if (c->delay_width_q15) {
+            /* WIDTH: each line sample carries, in its lowest bit, which side its
+             * echo plays on: what the send writes plays left on its first
+             * repeat, and every pass flips it. Where send and feedback overlap
+             * the louder one decides. Silence (a zero code) carries no side.
+             * An echo that starts from near silence takes its side at once; a
+             * flip in the middle of a sound pans over about 3 ms instead of
+             * clicking. */
+            int32_t code = BR_POLY_DELAY_LINE(p)[
+                (st->delay_pos - (c->delay_time >> (shift + 1u))) & (BR_FX_DELAY_SAMPLES - 1u)];
+            uint32_t read_bit = (uint32_t)code & 1u;
+            wide_bit = br_fx_abs(send) >= br_fx_abs(fed) ? 0u : read_bit ^ 1u;
+            if (code) {
+                int32_t sigma = st->delay_pan_sigma, step = (int32_t)(1024u << shift);
+                int32_t target = read_bit ? -32767 : 32767;
+                if (br_fx_abs(echo) < 256) sigma = target;
+                else sigma = sigma < target ? (sigma + step < target ? sigma + step : target) :
+                                              (sigma - step > target ? sigma - step : target);
+                st->delay_pan_sigma = sigma;
+                st->delay_side_q14 = (sigma * (int32_t)c->delay_width_q15) >> 16;
+            }
+        }
+    }
+    if (engine == BR_DELAY_TAPE) {
+        /* Tape compresses rather than clips: the same knee driven 6 dB hotter
+         * (x 2 in, x 1/2 out), unity below -12 dBFS. */
+        write = br_fx_delay_write_sat(br_fx_clip_ram(write, -65535, 65535) * 2);
+        write = br_fx_div_pow2(write, 1u);
+    } else {
+        write = br_fx_delay_write_sat(write);
+    }
     if (br_fx_abs(write) <= 2) write = 0;
-    br_delay_line[p][st->delay_pos] = br_fx_reverb_compress16_fast(write);
+    if (write) st->delay_ring = BR_FX_DELAY_SAMPLES;
+    else if (st->delay_ring) --st->delay_ring;
+    {
+        int16_t code = br_fx_reverb_compress16_fast(write);
+        if (c->delay_width_q15 && write) code = (int16_t)((code & ~1) | (int32_t)wide_bit);
+        BR_POLY_DELAY_LINE(p)[st->delay_pos] = code;
+    }
     st->delay_pos = (st->delay_pos + 1u) & (BR_FX_DELAY_SAMPLES - 1u);
     if (st->delay_valid_samples < BR_FX_DELAY_SAMPLES) ++st->delay_valid_samples;
-    return echo;
+    return out;
 }
 
+/* The wet path's half-band, used at every rate change of the send (decimate
+ * by 2) and once on the way back (interpolate by 2). 11 taps in Q13: centre
+ * 4096 and three odd taps (the even ones are zero). As a 44.1 kHz decimator it
+ * is flat to 7 kHz (-0.08 dB) and at least 40.3 dB down from 15.05 kHz, so
+ * nothing folds into the band below 7 kHz above -40 dB; the binomial filter
+ * it replaces was -3 dB at 4.1 kHz with linear interpolation on top. */
+#define BR_FX_DELAY_HB1 2498
+#define BR_FX_DELAY_HB3 616
+#define BR_FX_DELAY_HB5 166
+#define BR_FX_DELAY_HB(h, pos, mask) \
+    (4096 * (int32_t)(h)[((pos) - 5u) & (mask)] + \
+     BR_FX_DELAY_HB1 * ((int32_t)(h)[((pos) - 4u) & (mask)] + (int32_t)(h)[((pos) - 6u) & (mask)]) - \
+     BR_FX_DELAY_HB3 * ((int32_t)(h)[((pos) - 2u) & (mask)] + (int32_t)(h)[((pos) - 8u) & (mask)]) + \
+     BR_FX_DELAY_HB5 * ((int32_t)(h)[(pos) & (mask)] + (int32_t)(h)[((pos) - 10u) & (mask)]))
+
 #if BR_FX_DELAY_MAX_SHIFT
-/* Further powers-of-two decimation for long wet delays. Each stage uses the
- * same seven-tap binomial half-band used by the existing rate-2 path. */
+/* Further powers-of-two decimation for long wet delays: the same half-band at
+ * every level. The int16 rings hold half the line value, which leaves room for
+ * the filter's overshoot above the line's full scale. */
 static BR_FX_RAM_AUDIO uint32_t br_fx_delay_long_decimate(br_fx_track_t *st,
     int32_t input, uint32_t levels, int32_t *output)
 {
     uint32_t level;
     int32_t sample = input;
     for (level = 0u; level < levels; ++level) {
-        uint32_t pos = st->delay_long_pos[level];
-        uint32_t d1 = (pos - 1u) & 7u, d2 = (pos - 2u) & 7u;
-        uint32_t d3 = (pos - 3u) & 7u, d4 = (pos - 4u) & 7u;
-        uint32_t d5 = (pos - 5u) & 7u, d6 = (pos - 6u) & 7u;
-        int32_t *history = st->delay_long_history[level];
-        history[pos] = sample;
-        st->delay_long_pos[level] = (pos + 1u) & 7u;
-        if (!st->delay_long_phase[level]) {
-            st->delay_long_phase[level] = 1u;
-            return 0u;
-        }
-        st->delay_long_phase[level] = 0u;
-        sample = br_fx_div_pow2(history[pos] + 6 * history[d1] +
-            15 * history[d2] + 20 * history[d3] + 15 * history[d4] +
-            6 * history[d5] + history[d6], 6u);
+        uint32_t pos = (st->delay_long_pos[level] + 1u) & 15u;
+        int16_t *history = st->delay_long_history[level];
+        history[pos] = (int16_t)br_fx_clip_ram(sample >> 1, -32767, 32767);
+        st->delay_long_pos[level] = (uint8_t)pos;
+        if ((st->delay_long_phase[level] ^= 1u) != 0u) return 0u;
+        sample = (BR_FX_DELAY_HB(history, pos, 15u) + 2048) >> 12;
     }
     *output = sample;
     return 1u;
 }
 #endif
 
-static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_delay_storage_reset(br_fx_track_t *st,
-                                                        uint32_t shift)
+/* One storage-rate tick, out of line so the per-sample loop stays small:
+ * the send half-band (bus/4 in, line units out) and the send level, further
+ * halvings for long times, the engine's loop, and the wet half-band's two
+ * outputs. At FS/2 storage it returns the centre and leaves the odd output in
+ * delay_rate2_previous_echo; below FS/2 it sets the output ramp's points. */
+static BR_FX_RAM_AUDIO __attribute__((noinline)) int32_t br_fx_delay_rate2_step(
+    br_fx_track_t *st, uint32_t p, const br_fx_controls_t *c)
+{
+    const int32_t *history = st->delay_rate2_send_history;
+    uint32_t pos = st->delay_rate2_history_pos, e;
+    int32_t send = br_fx_clip_ram((BR_FX_DELAY_HB(history, pos, 15u) + 4096) >> 13, -65535, 65535);
+    int32_t *echoes = st->delay_echo_history, centre, odd;
+    send = (send * (int32_t)(c->delay_amount * 258u)) >> 15;     /* amount / 127, Q15 */
+#if BR_FX_DELAY_MAX_SHIFT
+    if (c->delay_storage_shift &&
+        !br_fx_delay_long_decimate(st, send, c->delay_storage_shift, &send))
+        return st->delay_long_echo;
+#endif
+    e = (st->delay_echo_pos + 1u) & 7u;
+    st->delay_echo_pos = e;
+    echoes[e] = br_fx_delay_loop(st, p, send, c);
+    centre = echoes[(e - 3u) & 7u];
+    odd = (BR_FX_DELAY_HB1 * (centre + echoes[(e - 2u) & 7u]) -
+           BR_FX_DELAY_HB3 * (echoes[(e - 4u) & 7u] + echoes[(e - 1u) & 7u]) +
+           BR_FX_DELAY_HB5 * (echoes[(e - 5u) & 7u] + echoes[e]) + 2048) >> 12;
+#if BR_FX_DELAY_MAX_SHIFT
+    if (c->delay_storage_shift) {
+        st->delay_long_previous_echo = st->delay_long_odd;
+        st->delay_long_echo = centre;
+        st->delay_long_odd = odd;
+        st->delay_long_interp_phase = 0u;
+        return centre;
+    }
+#endif
+    st->delay_rate2_previous_echo = odd;
+    return centre;
+}
+
+/* Runs only when the delay storage length changes or a line is cleared:
+ * cold, so it shares the prepare placement; RAM callers use BR_FX_PREPARE_INVOKE. */
+static BR_FX_PREPARE_CODE __attribute__((noinline)) void br_fx_delay_storage_reset(br_fx_track_t *st,
+                                                           uint32_t shift)
 {
     st->delay_storage_shift = shift;
     st->delay_pos = 0u;
-    st->delay_valid_samples = 0u;
+    st->delay_valid_samples = 0u;   /* reads return zero until rewritten */
+    st->delay_ring = 0u;
     st->delay_rate2_phase = 0u;
     st->delay_rate2_history_pos = 0u;
     st->delay_rate2_previous_echo = 0;
-    st->delay_long_previous_echo = st->delay_long_echo = 0;
+    st->delay_echo_pos = 0u;
+    st->delay_long_previous_echo = st->delay_long_echo = st->delay_long_odd = 0;
     st->delay_long_interp_phase = 0u;
     st->delay_lp = 0;
+    st->delay_hp = 0;
     st->glitch_count = 0u;
     st->glitch_hold = 0;
     br_fx_clear32((br_fx_clear_word_t *)st->delay_rate2_send_history,
                   sizeof st->delay_rate2_send_history / sizeof(uint32_t));
+    br_fx_clear32((br_fx_clear_word_t *)st->delay_echo_history,
+                  sizeof st->delay_echo_history / sizeof(uint32_t));
 #if BR_FX_DELAY_MAX_SHIFT
     br_fx_clear32((br_fx_clear_word_t *)st->delay_long_history,
                   sizeof st->delay_long_history / sizeof(uint32_t));
@@ -3539,83 +3588,127 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_delay_storage_reset(
 #endif
 }
 
-static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_t input,
-    const br_fx_controls_t *c BR_FX_TAIL_EVENT_PARAM)
+/* The per-sample loop, specialised for WIDTH 0 and on (a block-level branch,
+ * so WIDTH 0 pays nothing for it). */
+static inline __attribute__((always_inline)) void br_fx_delay_rate2_run(
+    br_fx_track_t *st, uint32_t p, uint32_t sample_base, uint32_t progress_core,
+    const int32_t *input, uint32_t n, const br_fx_controls_t *c, int32_t (*stereo)[2],
+    const uint32_t wide)
 {
-    uint32_t amount = c->delay_amount;
-    uint32_t shift = c->delay_storage_shift;
-    uint32_t history_pos = st->delay_rate2_history_pos;
-    int32_t send = amount ? br_fx_div127(input * (int32_t)amount) : 0;
-    int32_t echo = st->delay_rate2_previous_echo;
-    int32_t wet_echo;
+    uint32_t i;
+    const uint32_t shift = c->delay_storage_shift;
+    /* Tail event: the line has held something nonzero within one line length
+     * (any nonzero write, from the send or the feedback, re-arms delay_ring).
+     * Taken once per block: the tail hold only needs the last event of a block. */
+    const int32_t event = st->delay_ring != 0u;
+    int32_t *const history = st->delay_rate2_send_history;
+    uint32_t pos = st->delay_rate2_history_pos;
     uint32_t phase = st->delay_rate2_phase;
-    uint32_t long_write = 0u;
-    uint32_t d1 = (history_pos - 1u) & 7u;
-    uint32_t d2 = (history_pos - 2u) & 7u;
-    uint32_t d3 = (history_pos - 3u) & 7u;
-    uint32_t d4 = (history_pos - 4u) & 7u;
-    uint32_t d5 = (history_pos - 5u) & 7u;
-    uint32_t d6 = (history_pos - 6u) & 7u;
-    if (shift != st->delay_storage_shift || c->delay_time != st->delay_last_time) {
+    int32_t wet = st->delay_rate2_previous_echo, out = 0;
+    (void)sample_base; (void)progress_core;
+    for (i = 0u; i < n; ++i) {
+        int32_t sample = input[i];
+        br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
+                             BR_FX_PROGRESS_DELAY);
+        pos = (pos + 1u) & 15u;
+        history[pos] = sample >> 2;            /* line units; the level is applied per tick */
+        if (phase) {
+            st->delay_rate2_history_pos = pos;
+            wet = br_fx_delay_rate2_step(st, p, c);
+        } else {
+            wet = st->delay_rate2_previous_echo;
+        }
+#if BR_FX_DELAY_MAX_SHIFT
+        if (shift) {
+            /* Two ramps per storage sample: odd -> centre -> odd. */
+            uint32_t k = st->delay_long_interp_phase, half = 1u << shift;
+            if (k < 2u * half) ++k;
+            st->delay_long_interp_phase = k;
+            wet = k <= half ?
+                st->delay_long_previous_echo + ((st->delay_long_echo -
+                    st->delay_long_previous_echo) * (int32_t)k >> shift) :
+                st->delay_long_echo + ((st->delay_long_odd - st->delay_long_echo) *
+                    (int32_t)(k - half) >> shift);
+        }
+#endif
+        out = wet * 4;
+        stereo[i][0] = sample + out;
+        /* WIDTH: the side (L = mono + side, R = mono - side) rides above the
+         * event bit; at 0 only the event is written. */
+        if (wide)
+            stereo[i][1] = (int32_t)((uint32_t)((wet * st->delay_side_q14) >> 12) << 1) | event;
+        else
+            stereo[i][1] = event;
+        phase ^= 1u;
+    }
+    if (n) st->delay_output_last = out;
+    st->delay_rate2_history_pos = pos;
+    st->delay_rate2_phase = phase;
+}
+
+/* The rate-2 delay for a run of samples whose controls are fixed: the send
+ * goes through a half-band to the line's storage rate (halved again for long
+ * times), the engine's loop runs once per storage sample, and the wet comes
+ * back through the same half-band to FS/2 (at FS/2 storage directly, below it
+ * through a linear ramp between the interpolated points). The line holds a
+ * quarter of the track bus (its soft knee starts at -6 dBFS and holds at
+ * 0 dBFS), so the wet is scaled back up by 4. stereo[i][1] is the delay's
+ * tail event. */
+static BR_FX_RAM_AUDIO void br_fx_stage_delay_rate2_tape_block(
+    br_fx_track_t *st, uint32_t p, uint32_t sample_base, uint32_t progress_core, uint32_t lfo_start,
+    uint32_t lfo_inc, uint32_t lfo_final, const int32_t *input, uint32_t n,
+    const br_fx_controls_t *c, int32_t (*stereo)[2])
+{
+    if (c->delay_width_q15)
+        br_fx_delay_rate2_run(st, p, sample_base, progress_core, input, n, c, stereo, 1u);
+    else
+        br_fx_delay_rate2_run(st, p, sample_base, progress_core, input, n, c, stereo, 0u);
+    (void)lfo_start; (void)lfo_inc;
+#if defined(BR_FX_TEST_LONG_TAPE_BLOCK)
+    ++br_fx_test_long_tape_block_calls;
+#endif
+    st->lfo_phase = lfo_final;
+}
+
+/* A TIME or storage-rate change: the wet output fades over 64 frames from
+ * its last value (and a new storage rate without a converted tail resets). */
+static inline __attribute__((always_inline)) void
+br_fx_delay_begin(br_fx_track_t *st, const br_fx_controls_t *c)
+{
+    if (c->delay_storage_shift != st->delay_storage_shift ||
+        c->delay_time != st->delay_last_time) {
         st->delay_output_xfade_from = st->delay_output_last;
         st->delay_output_xfade_left = BR_FX_DELAY_XFADE_FRAMES;
         st->delay_last_time = c->delay_time;
-        if (shift != st->delay_storage_shift)
-            br_fx_delay_storage_reset(st, shift);
+        if (c->delay_storage_shift != st->delay_storage_shift)
+            BR_FX_PREPARE_INVOKE(br_fx_delay_storage_reset, st, c->delay_storage_shift);
     }
-    history_pos = st->delay_rate2_history_pos;
-    phase = st->delay_rate2_phase;
-    st->delay_rate2_send_history[history_pos] = send;
-    if (phase == 1u) {
-        int32_t weighted = st->delay_rate2_send_history[history_pos] +
-            6 * st->delay_rate2_send_history[d1] +
-            15 * st->delay_rate2_send_history[d2] +
-            20 * st->delay_rate2_send_history[d3] +
-            15 * st->delay_rate2_send_history[d4] +
-            6 * st->delay_rate2_send_history[d5] +
-            st->delay_rate2_send_history[d6];
-        int32_t downsampled_send = br_fx_div_pow2(weighted, 6u);
-        if (!shift) {
-            echo = br_fx_delay_rate2_step(st, p, downsampled_send, c);
-            wet_echo = br_fx_div_pow2(st->delay_rate2_previous_echo + echo, 1u);
-            st->delay_rate2_previous_echo = echo;
-        } else {
-#if BR_FX_DELAY_MAX_SHIFT
-            int32_t long_send;
-            if (br_fx_delay_long_decimate(st, downsampled_send, shift, &long_send)) {
-                echo = br_fx_delay_rate2_step(st, p, long_send, c);
-                st->delay_long_previous_echo = st->delay_long_echo;
-                st->delay_long_echo = echo;
-                st->delay_long_interp_phase = 1u;
-                long_write = 1u;
-            }
-#endif
-        }
+}
+
+static inline __attribute__((always_inline)) void
+br_fx_delay_fade(br_fx_track_t *st, const int32_t *input, uint32_t n, int32_t (*stereo)[2])
+{
+    uint32_t i;
+    for (i = 0u; i < n && st->delay_output_xfade_left; ++i) {
+        uint32_t elapsed = BR_FX_DELAY_XFADE_FRAMES - st->delay_output_xfade_left + 1u;
+        int32_t from = st->delay_output_xfade_from;
+        int32_t wet = stereo[i][0] - input[i];
+        stereo[i][0] = input[i] + from + br_fx_div_pow2((wet - from) * (int32_t)elapsed, 6u);
+        --st->delay_output_xfade_left;
     }
-    if (shift) {
-#if BR_FX_DELAY_MAX_SHIFT
-        uint32_t period = 2u << shift;
-        if (!long_write && st->delay_long_interp_phase < period)
-            ++st->delay_long_interp_phase;
-        if (st->delay_long_interp_phase > period)
-            st->delay_long_interp_phase = period;
-        wet_echo = st->delay_long_previous_echo +
-            (st->delay_long_echo - st->delay_long_previous_echo) *
-            (int32_t)st->delay_long_interp_phase / (int32_t)period;
-#else
-        wet_echo = 0;
-#endif
-    } else if (phase != 1u) {
-        wet_echo = echo;
-    }
-    st->delay_rate2_history_pos = (history_pos + 1u) & 7u;
-    st->delay_rate2_phase = phase ^ 1u;
-    if (send > 2 || send < -2 ||
-        ((c->delay_feedback || c->delay_tail_hold > BR_FX_TAIL_SAMPLES) &&
-         (wet_echo > 2 || wet_echo < -2))) {
+    if (i && n) st->delay_output_last = stereo[n - 1u][0] - input[n - 1u];
+}
+
+static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_t input,
+    const br_fx_controls_t *c BR_FX_TAIL_EVENT_PARAM)
+{
+    int32_t out[1][2];
+    br_fx_delay_begin(st, c);
+    br_fx_stage_delay_rate2_tape_block(st, p, 0u, 0u, st->lfo_phase, 0u, st->lfo_phase,
+                                       &input, 1u, c, out);
+    br_fx_delay_fade(st, &input, 1u, out);
+    if (out[0][1]) {
 #if BR_FX_BLOCK_STAGE_ONLY_BUILD
-        /* Stage-only callers always provide an event slot; the staged emitter
-         * owns the tail counter update after the delay pass. */
         *tail_event = 1;
 #elif BR_FX_BLOCK_STAGE_PIPELINE
         if (tail_event) *tail_event = 1;
@@ -3626,570 +3719,7 @@ static BR_FX_RAM_AUDIO int32_t br_fx_delay(br_fx_track_t *st, uint32_t p, int32_
             st->tail_samples = c->delay_tail_hold;
 #endif
     }
-    if (st->delay_output_xfade_left) {
-        uint32_t elapsed = BR_FX_DELAY_XFADE_FRAMES - st->delay_output_xfade_left + 1u;
-        wet_echo = st->delay_output_xfade_from +
-            (wet_echo - st->delay_output_xfade_from) * (int32_t)elapsed /
-            (int32_t)BR_FX_DELAY_XFADE_FRAMES;
-        --st->delay_output_xfade_left;
-    }
-    st->delay_output_last = wet_echo;
-    return input + BR_FX_BLEND127(wet_echo, amount, c->delay_amount_gain);
-}
-#endif
-
-/* Fixed maximum rings retain their history during SIZE changes. Fractional
- * read taps and feedback gains settle over about 32 ms at each wet cadence;
- * the stable-control path needs neither interpolation nor a slew multiply. */
-static BR_FX_RAM_AUDIO __attribute__((noinline)) int32_t br_fx_reverb_tap(br_fx_track_t *st,
-    uint32_t p, uint32_t line, const br_fx_controls_t *c)
-{
-    uint32_t target = (uint32_t)c->reverb_size_delay[line] << 8;
-    uint32_t current = st->room_delay_q8[line];
-    uint32_t length = c->reverb_length[line], pos, index, fraction;
-    int32_t a;
-    const br_fx_room_sample_t *ring = &br_room_line[p][c->reverb_start[line]];
-    if (!current) current = target;
-    if (current != target) {
-        int32_t delta = (int32_t)target - (int32_t)current;
-        int32_t step = br_fx_div_pow2(delta, c->reverb_slew_shift);
-        current += step ? step : delta > 0 ? 1 : -1;
-        if (current > (length << 8)) current = length << 8;
-    }
-    st->room_delay_q8[line] = current;
-    pos = st->room_pos[line];
-    if (pos >= length) pos = st->room_pos[line] = 0u;
-    index = pos + length - (current >> 8);
-    if (index >= length) index -= length;
-    a = br_fx_reverb_decompress16_inline(
-        ring[index]);
-    fraction = current & 255u;
-    if (fraction) {
-        int32_t b;
-        index = index ? index - 1u : length - 1u;
-        b = br_fx_reverb_decompress16_inline(
-            ring[index]);
-        a = br_fx_reverb_lerp_q8_companded(a, b, fraction);
-    }
-    return a;
-}
-
-/* Unchanged knobs use an integer tap without entering the interpolation
- * leaf or saving its transition registers on every comb traversal. */
-static inline __attribute__((always_inline)) int32_t br_fx_reverb_read(
-    br_fx_track_t *st, uint32_t p, uint32_t line, const br_fx_controls_t *c,
-    uint32_t inline_decode, uint32_t cursor_stable)
-{
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE
-    if (cursor_stable) {
-        uint8_t bit = (uint8_t)(1u << line);
-        if (br_fx_reverb_read_cursor_init_mask[p] & bit) {
-            if (!st->room_delay_q8[line])
-                st->room_delay_q8[line] =
-                    (uint32_t)c->reverb_size_delay[line] << 8u;
-            if (st->room_pos[line] >= c->reverb_length[line])
-                st->room_pos[line] = 0u;
-            br_fx_reverb_read_cursor_init_mask[p] &= (uint8_t)~bit;
-        }
-        br_fx_room_sample_t stored = br_fx_reverb_read_ring[p][line]
-            [br_fx_reverb_read_cursor[p][line]];
-        if (inline_decode) return br_fx_reverb_decompress16_inline(stored);
-        return br_fx_reverb_decompress16_fast(stored);
-    }
-#else
-    (void)cursor_stable;
-#endif
-    uint32_t delay = c->reverb_size_delay[line];
-    if (st->room_delay_q8[line] == (delay << 8)) {
-        uint32_t length = c->reverb_length[line];
-        uint32_t pos = st->room_pos[line], index;
-        if (pos >= length) pos = st->room_pos[line] = 0u;
-        index = pos + length - delay;
-        if (index >= length) index -= length;
-        br_fx_room_sample_t stored = br_room_line[p][c->reverb_start[line] + index];
-        if (inline_decode) return br_fx_reverb_decompress16_inline(stored);
-        return br_fx_reverb_decompress16_fast(stored);
-    }
-    return br_fx_reverb_tap(st, p, line, c);
-}
-
-static BR_FX_RAM_AUDIO uint32_t br_fx_reverb_loop_gain(br_fx_track_t *st,
-    uint32_t line, const br_fx_controls_t *c)
-{
-    uint32_t target = c->reverb_feedback_line[line];
-    uint32_t current = st->room_feedback[line];
-    if (!current) current = target;
-    if (current != target) {
-        int32_t delta = (int32_t)target - (int32_t)current;
-        int32_t step = br_fx_div_pow2(delta, c->reverb_slew_shift);
-        current += step ? step : delta > 0 ? 1 : -1;
-    }
-    st->room_feedback[line] = current;
-    return current;
-}
-
-static BR_FX_RAM_AUDIO int32_t br_fx_reverb(br_fx_track_t *st, uint32_t p, int32_t input,
-    const br_fx_controls_t *c, int32_t *left, int32_t *right BR_FX_TAIL_EVENT_PARAM)
-{
-    uint32_t engine = c->reverb_engine;
-    uint32_t wet = c->reverb_wet;
-    uint32_t i;
-    uint32_t read_cursor_stable = 0u;
-    int32_t delayed[4], filtered[4], feedback[4];
-    int32_t sum_left = 0, sum_right = 0, send;
-    send = br_fx_div127(input * (int32_t)wet);
-    if (!wet) {
-        for (i = 0; i < 4u; ++i) {
-            uint32_t len = c->reverb_length[i];
-            if (++st->room_pos[i] >= len) st->room_pos[i] = 0;
-        }
-        *left = 0;
-        *right = 0;
-        return 0;
-    }
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE
-    read_cursor_stable = br_fx_reverb_read_cursor_stable[p];
-#endif
-    if (engine == BR_REVERB_SPACE) {
-        /* Shape the first reflection too, rather than damping only its
-         * recirculation. The general pole retains the wide-send bounds. */
-        st->reverb_send_lp = br_fx_pole(st->reverb_send_lp, send, c->reverb_alpha);
-        send = st->reverb_send_lp;
-    }
-    /* Gather all four taps and update their one-pole states before feedback
-     * writes. The antisymmetric pair rotation below is therefore independent
-     * of line iteration order. */
-    for (i = 0; i < 4u; ++i) {
-        delayed[i] = br_fx_reverb_read(st, p, i, c,
-            BR_FX_REVERB_Q2_INLINE_DECODE ? 1u : 0u, read_cursor_stable);
-#if BR_FX_REVERB_FLOAT_Q15
-        st->room_lp[i] = br_fx_pole_reverb_float(
-            st->room_lp[i], delayed[i], c->reverb_alpha_float);
-#else
-        st->room_lp[i] = br_fx_pole_reverb(st->room_lp[i], delayed[i], c->reverb_alpha);
-#endif
-        filtered[i] = st->room_lp[i];
-        if (i & 1u) sum_right += delayed[i];
-        else sum_left += delayed[i];
-    }
-    /* U=[[0,1],[-1,0]] for lines 0/1 and its opposite orientation for 2/3.
-     * This preserves pair energy while ensuring neither side owns the longer
-     * feedback pole. */
-    feedback[0] = filtered[1];
-    feedback[1] = -filtered[0];
-    feedback[2] = -filtered[3];
-    feedback[3] = filtered[2];
-    if (engine == BR_REVERB_SPACE) {
-        /* Dense skew-orthogonal rotation. 1/sqrt(2) is folded into cached
-         * line gains, so diffusion adds no per-sample multiply. */
-        feedback[0] = filtered[2] + filtered[3];
-        feedback[1] = filtered[2] - filtered[3];
-        feedback[2] = -filtered[0] - filtered[1];
-        feedback[3] = filtered[1] - filtered[0];
-    }
-    for (i = 0; i < 4u; ++i) {
-        uint32_t len = c->reverb_length[i];
-        uint32_t loop_gain;
-#if BR_FX_REVERB_FLOAT_Q15 && BR_FX_GENERIC_FEEDBACK_STABLE_CACHE
-        if (c->reverb_feedback_stable) {
-            loop_gain = c->reverb_feedback_line[i];
-            /* Match the legacy helper's zero-state initialization at the
-             * same feedback-write point, without its per-sample slew test. */
-            st->room_feedback[i] = loop_gain;
-        } else {
-            loop_gain = br_fx_reverb_loop_gain(st, i, c);
-        }
-#elif BR_FX_REVERB_FLOAT_Q15
-        loop_gain = br_fx_reverb_loop_gain(st, i, c);
-#endif
-#if BR_FX_REVERB_FLOAT_Q15
-        float coefficient = loop_gain == c->reverb_feedback_line[i]
-            ? c->reverb_feedback_line_float[i]
-            : (float)loop_gain * (1.0f / 32768.0f);
-        int32_t write = send + br_fx_mul_q15_reverb_float(feedback[i], coefficient);
-#else
-        loop_gain = br_fx_reverb_loop_gain(st, i, c);
-        int32_t write = send + br_fx_mul_q15(feedback[i], loop_gain);
-#endif
-        if (br_fx_abs(write) <= 2) write = 0;
-        br_room_line[p][c->reverb_start[i] + st->room_pos[i]] = br_fx_reverb_compress16_fast(write);
-#if BR_FX_GENERIC_REVERB_READ_CURSOR_CACHE
-        if (read_cursor_stable) {
-            uint32_t cursor = (uint32_t)br_fx_reverb_read_cursor[p][i] + 1u;
-            if (cursor >= len) cursor = 0u;
-            br_fx_reverb_read_cursor[p][i] = (uint16_t)cursor;
-        }
-#endif
-        if (++st->room_pos[i] >= len) st->room_pos[i] = 0;
-    }
-    *left = br_fx_div_pow2(sum_left, 2u);
-    *right = br_fx_div_pow2(sum_right, 2u);
-    if (send > 2 || send < -2) {
-#if BR_FX_BLOCK_STAGE_PIPELINE
-        if (tail_event) *tail_event = 1;
-        else if (st->tail_samples < c->reverb_tail_hold)
-            st->tail_samples = c->reverb_tail_hold;
-#else
-        if (st->tail_samples < c->reverb_tail_hold)
-            st->tail_samples = c->reverb_tail_hold;
-#endif
-    }
-    return (int32_t)wet;
-}
-
-#if BR_FX_HAS_REVERB_RATE2
-/* Anti-alias the wet send before processing the selected comb engines at half
- * rate. */
-static BR_FX_RAM_AUDIO void br_fx_reverb_rate2(br_fx_track_t *st, uint32_t p,
-    int32_t input, const br_fx_controls_t *c, int32_t *left, int32_t *right
-    BR_FX_TAIL_EVENT_PARAM)
-{
-    int32_t current_l = 0, current_r = 0;
-    uint32_t phase = st->reverb_rate2_phase;
-    if (c->reverb_wet) {
-        int32_t bounded_input = br_fx_clip_ram(input, -16000000, 16000000);
-#if BR_FX_REVERB_RATE2_MIRROR
-        /* Six previous inputs, oldest first from pos, mirrored so no index wraps:
-         * two stores per sample instead of shifting six words. Room and Hall never
-         * run together, so the half-rate path borrows Hall's ring. */
-        int32_t *ring = st->reverb_hall_q4_full_history_mirror;
-        uint32_t ring_pos = st->reverb_hall_q4_full_history_pos;
-        if (!st->reverb_hall_q4_history_valid) {
-            br_fx_clear32((br_fx_clear_word_t *)ring, 12u);
-            ring_pos = 0u;
-            st->reverb_hall_q4_history_valid = 1u;
-        }
-#endif
-#if BR_FX_REVERB_SEND_EVENT_PRODUCT
-        int32_t send_product = bounded_input * (int32_t)c->reverb_wet;
-        if (br_fx_reverb_send_event_from_product(send_product)) {
-#else
-        int32_t full_rate_send = br_fx_div127(
-            bounded_input * (int32_t)c->reverb_wet);
-        if (full_rate_send > 2 || full_rate_send < -2) {
-#endif
-#if BR_FX_BLOCK_STAGE_PIPELINE
-            if (tail_event) *tail_event = 1;
-            else if (st->tail_samples < c->reverb_tail_hold)
-                st->tail_samples = c->reverb_tail_hold;
-#else
-            if (st->tail_samples < c->reverb_tail_hold)
-                st->tail_samples = c->reverb_tail_hold;
-#endif
-        }
-        if (phase == 1u) {
-#if BR_FX_REVERB_RATE2_MIRROR
-            int32_t weighted = bounded_input + ring[ring_pos] + 6 * ring[ring_pos + 1u] +
-                15 * ring[ring_pos + 2u] + 20 * ring[ring_pos + 3u] +
-                15 * ring[ring_pos + 4u] + 6 * ring[ring_pos + 5u];
-#else
-            int32_t weighted = bounded_input + 6 * st->reverb_rate2_input_hist[0] +
-                15 * st->reverb_rate2_input_hist[1] +
-                20 * st->reverb_rate2_input_hist[2] +
-                15 * st->reverb_rate2_input_hist[3] +
-                6 * st->reverb_rate2_input_hist[4] +
-                st->reverb_rate2_input_hist[5];
-#endif
-            int32_t downsampled = br_fx_div_pow2(weighted, 6u);
-            (void)br_fx_reverb(st, p, downsampled, c, &current_l, &current_r
-                               BR_FX_TAIL_EVENT_ARG(tail_event));
-            *left = br_fx_div_pow2(st->reverb_rate2_previous_l + current_l, 1u);
-            *right = br_fx_div_pow2(st->reverb_rate2_previous_r + current_r, 1u);
-            st->reverb_rate2_previous_l = current_l;
-            st->reverb_rate2_previous_r = current_r;
-        } else {
-            *left = st->reverb_rate2_previous_l;
-            *right = st->reverb_rate2_previous_r;
-        }
-        {
-#if BR_FX_REVERB_RATE2_MIRROR
-            ring[ring_pos] = bounded_input;
-            ring[ring_pos + 6u] = bounded_input;
-            st->reverb_hall_q4_full_history_pos = ring_pos == 5u ? 0u : ring_pos + 1u;
-#else
-            st->reverb_rate2_input_hist[5] = st->reverb_rate2_input_hist[4];
-            st->reverb_rate2_input_hist[4] = st->reverb_rate2_input_hist[3];
-            st->reverb_rate2_input_hist[3] = st->reverb_rate2_input_hist[2];
-            st->reverb_rate2_input_hist[2] = st->reverb_rate2_input_hist[1];
-            st->reverb_rate2_input_hist[1] = st->reverb_rate2_input_hist[0];
-            st->reverb_rate2_input_hist[0] = bounded_input;
-#endif
-        }
-    } else {
-        /* Clear the delayed filter input so a later enable cannot replay a
-         * stale wet event through the half-rate interpolation endpoint. */
-        if (phase == 1u)
-            (void)br_fx_reverb(st, p, 0, c, &current_l, &current_r
-                               BR_FX_TAIL_EVENT_ARG(tail_event));
-        {
-#if BR_FX_REVERB_RATE2_MIRROR
-            st->reverb_hall_q4_full_history_pos = 0u;
-            st->reverb_hall_q4_history_valid = 0u;
-#endif
-            st->reverb_rate2_input_hist[0] = 0;
-            st->reverb_rate2_input_hist[1] = 0;
-            st->reverb_rate2_input_hist[2] = 0;
-            st->reverb_rate2_input_hist[3] = 0;
-            st->reverb_rate2_input_hist[4] = 0;
-            st->reverb_rate2_input_hist[5] = 0;
-        }
-        st->reverb_rate2_previous_l = 0;
-        st->reverb_rate2_previous_r = 0;
-        *left = 0;
-        *right = 0;
-    }
-    st->reverb_rate2_phase = phase ^ 1u;
-}
-#endif
-
-#if BR_FX_HAS_REVERB_RATE4 && BR_FX_REVERB_RATE4_HALL_HALF_BAND
-/* Symmetric 7-tap half-band low-pass: [-1, 0, 9, 16, 9, 0, -1] / 32.
- * Inputs are bounded to +/-16M; the first-stage weighted sum is at most
- * 576M and the second at most 648M, so signed 32-bit math is safe. */
-static inline __attribute__((always_inline)) int32_t br_fx_reverb_hall_halfband7(
-    int32_t current, const int32_t history[6])
-{
-    int32_t weighted = -(current + history[5]) +
-                       9 * (history[1] + history[3]) + 16 * history[2];
-    return br_fx_div_pow2(weighted, 5u);
-}
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-/* The duplicated six-slot ring keeps the six prior samples contiguous from
- * `next` through `next + 5`: oldest first, newest last. */
-static inline __attribute__((always_inline)) int32_t
-br_fx_reverb_hall_halfband7_mirror6(int32_t current, const int32_t history[12],
-                                    uint32_t next)
-{
-    int32_t weighted = -(current + history[next]) +
-        9 * (history[next + 4u] + history[next + 2u]) +
-        16 * history[next + 3u];
-    return br_fx_div_pow2(weighted, 5u);
-}
-#endif
-#endif
-
-#if BR_FX_HAS_REVERB_RATE4
-/* Quarter-rate selected ROOM/HALL engines independently. Two cascaded 7-tap
- * halfband stages attenuate content above the new Nyquist limit; the chosen
- * engine's recursive lines and damping then advance once per four inputs.
- * Unselected models keep the half-rate path. */
-static BR_FX_RAM_AUDIO void br_fx_reverb_rate4(br_fx_track_t *st, uint32_t p,
-    int32_t input, const br_fx_controls_t *c, int32_t *left, int32_t *right
-    BR_FX_TAIL_EVENT_PARAM)
-{
-    uint32_t phase = st->reverb_rate4_phase;
-    int32_t bounded_input = br_fx_clip_ram(input, -16000000, 16000000);
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-    uint32_t full_history_pos = st->reverb_hall_q4_full_history_pos;
-    uint32_t half_history_pos = st->reverb_hall_q4_half_history_pos;
-#endif
-#if BR_FX_REVERB_SEND_EVENT_PRODUCT
-    if (c->reverb_wet && br_fx_reverb_send_event_from_product(
-            bounded_input * (int32_t)c->reverb_wet)) {
-#else
-    int32_t full_rate_send = c->reverb_wet ? br_fx_div127(
-        bounded_input * (int32_t)c->reverb_wet) : 0;
-
-    if (full_rate_send > 2 || full_rate_send < -2) {
-#endif
-#if BR_FX_BLOCK_STAGE_PIPELINE
-        if (tail_event) *tail_event = 1;
-        else if (st->tail_samples < c->reverb_tail_hold)
-            st->tail_samples = c->reverb_tail_hold;
-#else
-        if (st->tail_samples < c->reverb_tail_hold)
-            st->tail_samples = c->reverb_tail_hold;
-#endif
-    }
-
-    if (!c->reverb_wet) {
-        if (phase == 2u) {
-            int32_t unused_l, unused_r;
-            (void)br_fx_reverb(st, p, 0, c, &unused_l, &unused_r
-                               BR_FX_TAIL_EVENT_ARG(tail_event));
-        }
-        br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate2_input_hist, 6u);
-        br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate4_input_hist, 6u);
-        st->reverb_rate2_previous_l = 0;
-        st->reverb_rate2_previous_r = 0;
-        st->reverb_rate4_from_l = 0;
-        st->reverb_rate4_from_r = 0;
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-        st->reverb_hall_q4_full_history_pos = 0u;
-        st->reverb_hall_q4_half_history_pos = 0u;
-        st->reverb_hall_q4_history_valid = 0u;
-        full_history_pos = 0u;
-        half_history_pos = 0u;
-#endif
-        *left = 0;
-        *right = 0;
-    } else {
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-        if (c->reverb_engine == BR_REVERB_HALL &&
-            !st->reverb_hall_q4_history_valid) {
-            br_fx_clear32((br_fx_clear_word_t *)st->reverb_hall_q4_full_history_mirror,
-                          sizeof st->reverb_hall_q4_full_history_mirror / sizeof(uint32_t));
-            br_fx_clear32((br_fx_clear_word_t *)st->reverb_hall_q4_half_history_mirror,
-                          sizeof st->reverb_hall_q4_half_history_mirror / sizeof(uint32_t));
-            full_history_pos = 0u;
-            half_history_pos = 0u;
-            st->reverb_hall_q4_history_valid = 1u;
-        }
-#endif
-        int32_t first_stage = 0;
-        int32_t current_l = st->reverb_rate2_previous_l;
-        int32_t current_r = st->reverb_rate2_previous_r;
-        uint32_t weight = ((phase + 2u) & 3u) + 1u;
-
-        if ((phase & 1u) == 0u) {
-#if BR_FX_REVERB_RATE4_HALL_COMPACT
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-            first_stage = br_fx_reverb_hall_halfband7_mirror6(
-                bounded_input, st->reverb_hall_q4_full_history_mirror, full_history_pos);
-#else
-            first_stage = br_fx_reverb_hall_halfband7(
-                bounded_input, st->reverb_rate2_input_hist);
-#endif
-#else
-#if BR_FX_REVERB_RATE4_HALL_HALF_BAND
-            if (c->reverb_engine == BR_REVERB_HALL) {
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-                first_stage = br_fx_reverb_hall_halfband7_mirror6(
-                    bounded_input, st->reverb_hall_q4_full_history_mirror, full_history_pos);
-#else
-                first_stage = br_fx_reverb_hall_halfband7(
-                    bounded_input, st->reverb_rate2_input_hist);
-#endif
-            } else
-#endif
-            {
-                int32_t weighted = bounded_input +
-                    6 * st->reverb_rate2_input_hist[0] +
-                    15 * st->reverb_rate2_input_hist[1] +
-                    20 * st->reverb_rate2_input_hist[2] +
-                    15 * st->reverb_rate2_input_hist[3] +
-                    6 * st->reverb_rate2_input_hist[4] +
-                    st->reverb_rate2_input_hist[5];
-                first_stage = br_fx_div_pow2(weighted, 6u);
-            }
-#endif
-
-            if (phase == 0u) {
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-                if (c->reverb_engine == BR_REVERB_HALL) {
-                    st->reverb_hall_q4_half_history_mirror[half_history_pos] = first_stage;
-                    st->reverb_hall_q4_half_history_mirror[half_history_pos + 6u] = first_stage;
-                    half_history_pos = half_history_pos == 5u ? 0u : half_history_pos + 1u;
-                } else
-#endif
-                {
-                st->reverb_rate4_input_hist[5] = st->reverb_rate4_input_hist[4];
-                st->reverb_rate4_input_hist[4] = st->reverb_rate4_input_hist[3];
-                st->reverb_rate4_input_hist[3] = st->reverb_rate4_input_hist[2];
-                st->reverb_rate4_input_hist[2] = st->reverb_rate4_input_hist[1];
-                st->reverb_rate4_input_hist[1] = st->reverb_rate4_input_hist[0];
-                st->reverb_rate4_input_hist[0] = first_stage;
-                }
-            } else {
-                int32_t downsampled;
-#if BR_FX_REVERB_RATE4_HALL_COMPACT
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-                downsampled = br_fx_reverb_hall_halfband7_mirror6(
-                    first_stage, st->reverb_hall_q4_half_history_mirror, half_history_pos);
-#else
-                downsampled = br_fx_reverb_hall_halfband7(
-                    first_stage, st->reverb_rate4_input_hist);
-#endif
-#else
-#if BR_FX_REVERB_RATE4_HALL_HALF_BAND
-                if (c->reverb_engine == BR_REVERB_HALL) {
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-                    downsampled = br_fx_reverb_hall_halfband7_mirror6(
-                        first_stage, st->reverb_hall_q4_half_history_mirror, half_history_pos);
-#else
-                    downsampled = br_fx_reverb_hall_halfband7(
-                        first_stage, st->reverb_rate4_input_hist);
-#endif
-                } else
-#endif
-                {
-                    int32_t weighted2 = first_stage +
-                        6 * st->reverb_rate4_input_hist[0] +
-                        15 * st->reverb_rate4_input_hist[1] +
-                        20 * st->reverb_rate4_input_hist[2] +
-                        15 * st->reverb_rate4_input_hist[3] +
-                        6 * st->reverb_rate4_input_hist[4] +
-                        st->reverb_rate4_input_hist[5];
-                    downsampled = br_fx_div_pow2(weighted2, 6u);
-                }
-#endif
-                st->reverb_rate4_from_l = current_l;
-                st->reverb_rate4_from_r = current_r;
-                /* The two half-band stages can overshoot the bounded input.
-                 * Keep the downstream signed send multiply inside its contract. */
-                downsampled = br_fx_clip_ram(downsampled, -16000000, 16000000);
-                (void)br_fx_reverb(st, p, downsampled, c, &current_l, &current_r
-                                   BR_FX_TAIL_EVENT_ARG(tail_event));
-                st->reverb_rate2_previous_l = current_l;
-                st->reverb_rate2_previous_r = current_r;
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-                if (c->reverb_engine == BR_REVERB_HALL) {
-                    st->reverb_hall_q4_half_history_mirror[half_history_pos] = first_stage;
-                    st->reverb_hall_q4_half_history_mirror[half_history_pos + 6u] = first_stage;
-                    half_history_pos = half_history_pos == 5u ? 0u : half_history_pos + 1u;
-                } else
-#endif
-                {
-                st->reverb_rate4_input_hist[5] = st->reverb_rate4_input_hist[4];
-                st->reverb_rate4_input_hist[4] = st->reverb_rate4_input_hist[3];
-                st->reverb_rate4_input_hist[3] = st->reverb_rate4_input_hist[2];
-                st->reverb_rate4_input_hist[2] = st->reverb_rate4_input_hist[1];
-                st->reverb_rate4_input_hist[1] = st->reverb_rate4_input_hist[0];
-                st->reverb_rate4_input_hist[0] = first_stage;
-                }
-            }
-        }
-
-        *left = st->reverb_rate4_from_l + br_fx_div_pow2(
-            (current_l - st->reverb_rate4_from_l) * (int32_t)weight, 2u);
-        *right = st->reverb_rate4_from_r + br_fx_div_pow2(
-            (current_r - st->reverb_rate4_from_r) * (int32_t)weight, 2u);
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-        if (c->reverb_engine == BR_REVERB_HALL) {
-            st->reverb_hall_q4_full_history_mirror[full_history_pos] = bounded_input;
-            st->reverb_hall_q4_full_history_mirror[full_history_pos + 6u] = bounded_input;
-            full_history_pos = full_history_pos == 5u ? 0u : full_history_pos + 1u;
-        } else
-#endif
-        {
-            st->reverb_rate2_input_hist[5] = st->reverb_rate2_input_hist[4];
-            st->reverb_rate2_input_hist[4] = st->reverb_rate2_input_hist[3];
-            st->reverb_rate2_input_hist[3] = st->reverb_rate2_input_hist[2];
-            st->reverb_rate2_input_hist[2] = st->reverb_rate2_input_hist[1];
-            st->reverb_rate2_input_hist[1] = st->reverb_rate2_input_hist[0];
-            st->reverb_rate2_input_hist[0] = bounded_input;
-        }
-    }
-#if BR_FX_REVERB_RATE4_HALL_HALF_BAND_MAKEUP_73_64
-#if BR_FX_REVERB_RATE4_HALL_COMPACT
-    /* The guarded compact selector makes Hall the only possible Q4 caller. */
-    *left = br_fx_div_pow2(*left * 73, 6u);
-    *right = br_fx_div_pow2(*right * 73, 6u);
-#else
-    if (c->reverb_engine == BR_REVERB_HALL) {
-        /* Small wet-return-only lift for half-band Q4: 73/64 ~= +1.17 dB.
-         * It does not alter excitation, feedback, tails, or dry level. The
-         * Hall return is <16384 per channel, so the product fits int32. */
-        *left = br_fx_div_pow2(*left * 73, 6u);
-        *right = br_fx_div_pow2(*right * 73, 6u);
-    }
-#endif
-#endif
-    st->reverb_rate4_phase = (phase + 1u) & 3u;
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-    st->reverb_hall_q4_full_history_pos = full_history_pos;
-    st->reverb_hall_q4_half_history_pos = half_history_pos;
-#endif
+    return out[0][0];
 }
 #endif
 
@@ -4258,11 +3788,12 @@ static BR_FX_RAM_AUDIO BR_FX_MOD_STAGE_NOINLINE_ATTR void br_fx_stage_mod_rate2_
             read_pos = (mod_pos - (delay_q8 >> 8)) &
                 (BR_FX_MOD_SAMPLES - 1u);
             frac = delay_q8 & 255u;
-            br_mod_line[p][mod_pos] = br_fx_clip16_ram(filtered_input);
+            br_mod_line[p][mod_pos] = br_fx_clip16_ram(filtered_input + ((st->mod_feedback_last * (int32_t)c->mod_feedback) >> 8));
             sample_a = br_mod_line[p][read_pos];
             sample_b = br_mod_line[p][(read_pos - 1u) &
                 (BR_FX_MOD_SAMPLES - 1u)];
             wet = br_fx_interp_q8_i16(sample_a, sample_b, frac);
+            st->mod_feedback_last = wet;
             if (engine == BR_MOD_FLANGE)
                 wet -= br_fx_div_pow2(filtered_input, 1u);
             mod_pos = (mod_pos + 1u) & (BR_FX_MOD_SAMPLES - 1u);
@@ -4345,6 +3876,7 @@ static BR_FX_RAM_AUDIO BR_FX_MOD_STAGE_NOINLINE_ATTR void br_fx_stage_mod_block(
                 (5000u + depth * 110u)) >> 16);
             uint32_t j;
             st->lfo_phase += inc;
+            wet = br_fx_clip_ram(wet + ((st->mod_feedback_last * (int32_t)c->mod_feedback) >> 8), -65535, 65535);
             for (j = 0u; j < 4u; ++j) {
                 int32_t y = st->phase_state[j] -
                     br_fx_mul_q15_phaser_selected(wet, (uint32_t)a);
@@ -4352,6 +3884,7 @@ static BR_FX_RAM_AUDIO BR_FX_MOD_STAGE_NOINLINE_ATTR void br_fx_stage_mod_block(
                     wet + br_fx_mul_q15_phaser_selected(y, (uint32_t)a), -65535, 65535);
                 wet = y;
             }
+            st->mod_feedback_last = br_fx_clip_ram(wet, -65535, 65535);
             output[i] = mix ? input[i] + BR_FX_BLEND127((wet - input[i]), mix, c->mod_mix_gain) : input[i];
         }
     } else if (engine == BR_MOD_FLANGE && mix) {
@@ -4417,151 +3950,21 @@ static BR_FX_RAM_AUDIO BR_FX_MOD_STAGE_NOINLINE_ATTR void br_fx_stage_mod_block(
 #endif
 
 #if BR_FX_BLOCK_STAGE_SPECIALIZE_DELAY
-#if BR_FX_DELAY_RATE2
-/* The block path hoists engine/control dispatch while retaining the same
- * decimation, wow read, feedback write, and wet interpolation at each rate.
- * TAPE reads inline; the other engines share the half-rate step. */
-static BR_FX_RAM_AUDIO void br_fx_stage_delay_rate2_tape_block(
-    br_fx_track_t *st, uint32_t p, uint32_t sample_base, uint32_t progress_core, uint32_t lfo_start,
-    uint32_t lfo_inc, uint32_t lfo_final, const int32_t *input, uint32_t n,
-    const br_fx_controls_t *c, int32_t (*stereo)[2])
-{
-#if defined(BR_FX_TEST_LONG_TAPE_BLOCK)
-    ++br_fx_test_long_tape_block_calls;
-#endif
-    uint32_t i;
-    uint32_t amount = c->delay_amount;
-    uint32_t feedback = c->delay_feedback;
-    uint32_t time = c->delay_time;
-    uint32_t storage_shift = c->delay_storage_shift;
-    uint32_t long_period = 2u << storage_shift;
-    uint32_t phase = lfo_start;
-    uint32_t delay_pos = st->delay_pos;
-    uint32_t delay_valid = st->delay_valid_samples;
-    uint32_t history_pos = st->delay_rate2_history_pos;
-    uint32_t rate2_phase = st->delay_rate2_phase;
-    int32_t history[8];
-    int32_t previous_echo = st->delay_rate2_previous_echo;
-    int32_t delay_lp = st->delay_lp;
-    int32_t last_echo = 0;
-    for (i = 0u; i < 8u; ++i)
-        history[i] = st->delay_rate2_send_history[i];
-
-    for (i = 0u; i < n; ++i) {
-        int32_t sample = input[i];
-        int32_t send = amount ? br_fx_div127(sample * (int32_t)amount) : 0;
-        int32_t wet_echo = previous_echo;
-        uint32_t long_write = 0u;
-        phase += lfo_inc;
-        br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                             BR_FX_PROGRESS_DELAY);
-        history[history_pos] = send;
-        if (rate2_phase == 1u) {
-            uint32_t d1 = (history_pos - 1u) & 7u;
-            uint32_t d2 = (history_pos - 2u) & 7u;
-            uint32_t d3 = (history_pos - 3u) & 7u;
-            uint32_t d4 = (history_pos - 4u) & 7u;
-            uint32_t d5 = (history_pos - 5u) & 7u;
-            uint32_t d6 = (history_pos - 6u) & 7u;
-            int32_t weighted = history[history_pos] +
-                6 * history[d1] + 15 * history[d2] + 20 * history[d3] +
-                15 * history[d4] + 6 * history[d5] + history[d6];
-            int32_t downsampled_send = br_fx_div_pow2(weighted, 6u);
-            if (storage_shift) {
-                int32_t long_send;
-                if (br_fx_delay_long_decimate(st, downsampled_send,
-                                               storage_shift, &long_send)) {
-                    int32_t echo;
-                    st->delay_pos = delay_pos;
-                    st->delay_valid_samples = delay_valid;
-                    st->delay_lp = delay_lp;
-                    st->lfo_phase = phase;
-                    echo = br_fx_delay_rate2_step(st, p, long_send, c);
-                    delay_pos = st->delay_pos;
-                    delay_valid = st->delay_valid_samples;
-                    delay_lp = st->delay_lp;
-                    st->delay_long_previous_echo = st->delay_long_echo;
-                    st->delay_long_echo = echo;
-                    st->delay_long_interp_phase = 1u;
-                    long_write = 1u;
-                }
-            } else if (c->delay_engine != BR_DELAY_TAPE) {
-                /* Digital, multitap and glitch share the half-rate step; only the
-                 * per-sample call, edge checks and history indexing are hoisted. */
-                int32_t echo;
-                st->delay_pos = delay_pos;
-                st->delay_valid_samples = delay_valid;
-                echo = br_fx_delay_rate2_step(st, p, downsampled_send, c);
-                delay_pos = st->delay_pos;
-                delay_valid = st->delay_valid_samples;
-                wet_echo = br_fx_div_pow2(previous_echo + echo, 1u);
-                previous_echo = echo;
-            } else {
-                int32_t wow_time_q8 = (int32_t)(time * 256u) +
-                    br_fx_tape_wow_q8(phase);
-                int32_t echo, write;
-                if (wow_time_q8 < 256) wow_time_q8 = 256;
-                echo = br_fx_delay_rate2_read(p, delay_pos,
-                    (uint32_t)wow_time_q8 >> 1, delay_valid);
-                echo = br_fx_delay_softclip(echo);
-                delay_lp = br_fx_pole_bounded(delay_lp, echo, br_fx_tape_alpha_rate2());
-                echo = br_fx_clip_ram(delay_lp, -32767, 32767);
-                write = downsampled_send +
-                    br_fx_delay_feedback_q15(echo, feedback);
-                if (br_fx_abs(write) <= 2) write = 0;
-                br_delay_line[p][delay_pos] = br_fx_reverb_compress16_fast(write);
-                delay_pos = (delay_pos + 1u) & (BR_FX_DELAY_SAMPLES - 1u);
-                if (delay_valid < BR_FX_DELAY_SAMPLES) ++delay_valid;
-                wet_echo = br_fx_div_pow2(previous_echo + echo, 1u);
-                previous_echo = echo;
-            }
-        }
-        if (storage_shift) {
-            uint32_t interp = st->delay_long_interp_phase;
-            if (!long_write && interp < long_period) ++interp;
-            if (interp > long_period) interp = long_period;
-            st->delay_long_interp_phase = interp;
-            wet_echo = st->delay_long_previous_echo +
-                (st->delay_long_echo - st->delay_long_previous_echo) *
-                (int32_t)interp / (int32_t)long_period;
-        }
-        stereo[i][0] = sample +
-            BR_FX_BLEND127(wet_echo, amount, c->delay_amount_gain);
-        stereo[i][1] = send > 2 || send < -2 ||
-            ((feedback || c->delay_tail_hold > BR_FX_TAIL_SAMPLES) &&
-             (wet_echo > 2 || wet_echo < -2));
-        last_echo = wet_echo;
-        history_pos = (history_pos + 1u) & 7u;
-        rate2_phase ^= 1u;
-    }
-    if (n) st->delay_output_last = last_echo;
-
-    st->lfo_phase = lfo_final;
-    st->delay_pos = delay_pos;
-    st->delay_valid_samples = delay_valid;
-    st->delay_rate2_history_pos = history_pos;
-    st->delay_rate2_phase = rate2_phase;
-    st->delay_rate2_previous_echo = previous_echo;
-    st->delay_lp = delay_lp;
-    for (i = 0u; i < 8u; ++i)
-        st->delay_rate2_send_history[i] = history[i];
-}
-#endif
 
 static inline __attribute__((always_inline)) int32_t br_fx_stage_delay_finish(
     br_fx_track_t *st, uint32_t p, int32_t input, int32_t echo,
     int32_t send, const br_fx_controls_t *c, uint32_t feedback,
     int32_t *tail_event)
 {
-    uint32_t amount = c->delay_amount;
-    int32_t write = send + br_fx_delay_feedback_q15(echo, feedback);
+    int32_t write = br_fx_delay_write_sat(send + br_fx_delay_feedback_q15(
+        br_fx_delay_loop_hp(&st->delay_hp, echo, c->delay_hp_alpha), feedback));
     if (br_fx_abs(write) <= 2) write = 0;
-    br_delay_line[p][st->delay_pos] = br_fx_reverb_compress16_fast(write);
+    BR_POLY_DELAY_LINE(p)[st->delay_pos] = br_fx_reverb_compress16_fast(write);
     st->delay_pos = (st->delay_pos + 1u) & (BR_FX_DELAY_SAMPLES - 1u);
     if (send > 2 || send < -2 ||
         ((feedback || c->delay_tail_hold > BR_FX_TAIL_SAMPLES) &&
          (echo > 2 || echo < -2))) *tail_event = 1;
-    return input + BR_FX_BLEND127(echo, amount, c->delay_amount_gain);
+    return input + echo;
 }
 
 static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_delay_block(
@@ -4575,13 +3978,15 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_delay_block(
     uint32_t time = c->delay_time;
     uint32_t feedback = c->delay_feedback;
 #if BR_FX_STAGE_SKIP_IDLE && BR_FX_DELAY_RATE2
-    if (!amount && !st->delay_output_xfade_left) {
-        /* Send 0: the line was cleared on the falling edge and every write since is
-         * zero, so the stage adds nothing. Keep what a later enable reads. */
+    if (!amount && !st->delay_ring && !st->delay_output_xfade_left) {
+        /* Send 0 and a whole line of zero writes since the last nonzero one (or a
+         * reset): the line holds only zeros, so the stage adds nothing. A tail
+         * still ringing when MIX reaches 0 keeps running here until it has decayed.
+         * Keep what a later enable reads. */
         if (c->delay_storage_shift != st->delay_storage_shift)
-            br_fx_delay_storage_reset(st, c->delay_storage_shift);
+            BR_FX_PREPARE_INVOKE(br_fx_delay_storage_reset, st, c->delay_storage_shift);
         st->delay_last_time = c->delay_time;
-        st->delay_rate2_history_pos = (st->delay_rate2_history_pos + n) & 7u;
+        st->delay_rate2_history_pos = (st->delay_rate2_history_pos + n) & 15u;
         st->delay_rate2_phase ^= n & 1u;
         for (i = 0u; i < n; ++i) {
             stereo[i][0] = input[i];
@@ -4593,28 +3998,14 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_delay_block(
     }
 #endif
 #if BR_FX_DELAY_RATE2
-    if ((BR_FX_DELAY_BLOCK_ALL_ENGINES || engine == BR_DELAY_TAPE) &&
-        c->delay_storage_shift == st->delay_storage_shift &&
-        c->delay_time == st->delay_last_time &&
-        !st->delay_output_xfade_left) {
-        br_fx_stage_delay_rate2_tape_block(st, p, sample_base, progress_core, lfo_start,
-            lfo_inc, lfo_final, input, n, c, stereo);
-    } else {
-        uint32_t phase = lfo_start;
-        for (i = 0u; i < n; ++i) {
-            int32_t tail_event = 0;
-            phase += lfo_inc;
-            st->lfo_phase = phase;
-            br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                                 BR_FX_PROGRESS_DELAY);
-            stereo[i][0] = br_fx_delay(st, p, input[i], c
-                BR_FX_TAIL_EVENT_ARG(&tail_event));
-            stereo[i][1] = tail_event;
-        }
-        st->lfo_phase = lfo_final;
-    }
-    return;
-#endif
+    /* Every engine runs the block kernel; a TIME or rate change at the block
+     * start fades the wet output over its first 64 frames. */
+    (void)engine; (void)time; (void)feedback;
+    br_fx_delay_begin(st, c);
+    br_fx_stage_delay_rate2_tape_block(st, p, sample_base, progress_core, lfo_start,
+        lfo_inc, lfo_final, input, n, c, stereo);
+    if (st->delay_output_xfade_left) br_fx_delay_fade(st, input, n, stereo);
+#else
     if (engine == BR_DELAY_TAPE) {
         uint32_t phase = lfo_start;
         for (i = 0u; i < n; ++i) {
@@ -4629,7 +4020,7 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_delay_block(
             wow_time = (uint32_t)((int32_t)time + br_fx_div_pow2(br_fx_tape_wow_q8(phase), 8u));
             if (wow_time < 1u) wow_time = 1u;
             read_pos = (st->delay_pos - wow_time) & (BR_FX_DELAY_SAMPLES - 1u);
-            echo = br_fx_delay_softclip(br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]));
+            echo = br_fx_delay_softclip(br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]));
             st->delay_lp = br_fx_pole_bounded(st->delay_lp, echo, br_fx_tape_alpha_full());
             echo = st->delay_lp;
             stereo[i][1] = 0;
@@ -4650,9 +4041,9 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_delay_block(
                 uint32_t read_pos = (st->delay_pos - c->delay_tap[tap - 1u]) &
                     (BR_FX_DELAY_SAMPLES - 1u);
 #if BR_FX_MULTITAP_COMBINED_DIV
-                weighted_sum += (int32_t)br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]) * (int32_t)(5u - tap);
+                weighted_sum += (int32_t)br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]) * (int32_t)(5u - tap);
 #else
-                sum += br_fx_div10((int32_t)br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]) * (int32_t)(5u - tap));
+                sum += br_fx_div10((int32_t)br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]) * (int32_t)(5u - tap));
 #endif
             }
 #if BR_FX_MULTITAP_COMBINED_DIV
@@ -4670,7 +4061,7 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_delay_block(
                                  BR_FX_PROGRESS_DELAY);
             send = amount ? br_fx_div127(input[i] * (int32_t)amount) : 0;
             read_pos = (st->delay_pos - time) & (BR_FX_DELAY_SAMPLES - 1u);
-            echo = br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]);
+            echo = br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]);
             if (st->glitch_count == 0u) {
                 int32_t step = (int32_t)c->glitch_step;
                 st->glitch_hold = br_fx_glitch_quantize(echo, (uint32_t)step);
@@ -4690,13 +4081,14 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_delay_block(
                                  BR_FX_PROGRESS_DELAY);
             send = amount ? br_fx_div127(input[i] * (int32_t)amount) : 0;
             read_pos = (st->delay_pos - time) & (BR_FX_DELAY_SAMPLES - 1u);
-            echo = br_fx_reverb_decompress16_fast(br_delay_line[p][read_pos]);
+            echo = br_fx_reverb_decompress16_fast(BR_POLY_DELAY_LINE(p)[read_pos]);
             stereo[i][1] = 0;
             stereo[i][0] = br_fx_stage_delay_finish(st, p, input[i], echo, send,
                 c, feedback, &stereo[i][1]);
         }
     }
     st->lfo_phase = lfo_final;
+#endif
 }
 #endif
 
@@ -4723,29 +4115,13 @@ static inline __attribute__((always_inline)) void br_fx_stage_emit_frame(
     int32_t mod_direct, track_left, track_right;
     uint32_t wet_gain;
     (void)c;
-#if BR_FX_HAS_REVERB_RATE && !BR_FX_GLOBAL_REVERB
-    {
-        uint32_t ramp_frames = br_fx_reverb_ramp_frames();
-        if (st->reverb_rate2_ramp < ramp_frames) {
-#if BR_FX_NATIVE_RATE_CALIBRATION || BR_FX_NATIVE_RATE_48K
-            rv_l = (rv_l * (int32_t)st->reverb_rate2_ramp) / (int32_t)ramp_frames;
-            rv_r = (rv_r * (int32_t)st->reverb_rate2_ramp) / (int32_t)ramp_frames;
-#else
-            rv_l = br_fx_div_pow2(rv_l * (int32_t)st->reverb_rate2_ramp, 5u);
-            rv_r = br_fx_div_pow2(rv_r * (int32_t)st->reverb_rate2_ramp, 5u);
-#endif
-            ++st->reverb_rate2_ramp;
-        }
-    }
-#endif
+    (void)reverb_event;   /* the shared reverb keeps its own tail */
     if (cfg->mod_mix && (input > 2 || input < -2)) {
         uint32_t short_tail = FS / 2u;
         if (*tail_samples < short_tail) *tail_samples = short_tail;
     }
     if (delay_event && *tail_samples < c->delay_tail_hold)
         *tail_samples = c->delay_tail_hold;
-    if (reverb_event && *tail_samples < c->reverb_tail_hold)
-        *tail_samples = c->reverb_tail_hold;
 #if !BR_FX_STAGE_EMIT_CALLER_ZERO_REVERB
     if (!s->reverb) rv_l = rv_r = 0;
 #endif
@@ -4787,13 +4163,9 @@ static inline __attribute__((always_inline)) void br_fx_stage_emit_frame(
     delayed = mod_direct + br_fx_wet_gain(delayed - modded, wet_gain);
 #endif
 #endif
-#if !BR_FX_GLOBAL_REVERB
-    if (s->reverb) br_fx_reverb_output_diffuse(st, c, &rv_l, &rv_r);
-#endif
     if (*tail_samples) --*tail_samples;
     st->tail_samples = *tail_samples;
     st->previous_delay_wet = s->delay;
-    st->previous_reverb_wet = s->reverb;
     st->previous_mod_mix = cfg->mod_mix;
 
     /* Delay stays centred. The shared wet sum reaches both output allpasses,
@@ -4823,197 +4195,16 @@ static inline __attribute__((always_inline)) void br_fx_stage_emit_frame(
     br_fx_track_stereo[p][sample_base + i][1] = track_right;
 }
 
-#if !BR_FX_GLOBAL_REVERB
-#if BR_FX_HAS_REVERB_RATE4 && BR_FX_HAS_REVERB_RATE2 && \
-    BR_FX_BLOCK_STAGE_ONLY_BUILD && BR_FX_BLOCK_STAGE_PIPELINE && \
-    BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB && BR_FX_STAGE_REVERB_RATE_DISPATCH
-/* Cold zero-wet bookkeeping stays in XIP; the staged frame loop remains RAM-resident. */
-static BR_FX_PREPARE_CODE __attribute__((minsize, noinline)) void
-br_fx_reverb_rate4_zero_block(br_fx_track_t *st, const br_fx_controls_t *c, uint32_t n)
-{
-    uint32_t line;
-    uint32_t phase0 = st->reverb_rate4_phase;
-    uint32_t first = (2u - phase0) & 3u;
-    uint32_t advances = first < n ? 1u + ((n - 1u - first) >> 2u) : 0u;
-    for (line = 0u; line < 4u; ++line) {
-        uint32_t pos = st->room_pos[line];
-        uint32_t len = c->reverb_length[line];
-        if (advances) {
-            /* Q4 room lines are at least ceil(521 / 4) = 131 cells;
-             * no block can wrap them more than once. Preserve invalid-pos behavior. */
-            if (pos >= len) pos = advances - 1u;
-            else pos += advances;
-            if (pos >= len) pos -= len;
-            st->room_pos[line] = pos;
-        }
-    }
-    st->reverb_rate4_phase = (phase0 + n) & 3u;
-    br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate2_input_hist, 6u);
-    br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate4_input_hist, 6u);
-    st->reverb_rate2_previous_l = 0;
-    st->reverb_rate2_previous_r = 0;
-    st->reverb_rate4_from_l = 0;
-    st->reverb_rate4_from_r = 0;
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-    st->reverb_hall_q4_full_history_pos = 0u;
-    st->reverb_hall_q4_half_history_pos = 0u;
-    st->reverb_hall_q4_history_valid = 0u;
-#endif
-}
-#endif
-
-#if BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB
-
-static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_reverb_block(
-    br_fx_track_t *st, uint32_t p, uint32_t sample_base, uint32_t progress_core, uint32_t pan,
-    uint32_t lfo_start, uint32_t lfo_inc, uint32_t lfo_final,
-    const int32_t *input, const int32_t *mod, uint32_t n,
-    const br_sound_t *s, const br_fx_config_t *cfg, const br_fx_controls_t *c,
-    uint32_t *tail_samples, int32_t (*stereo)[2])
-{
-    uint32_t i;
-    uint32_t wet = c->reverb_wet;
-    uint32_t phase = lfo_start;
-
-    /* Q2 and Q4 have mutually exclusive per-track selections. Share one
-     * frame loop and output emitter so enabling both selected rates does not
-     * duplicate the large tail/mix/pan path in RAM. The mode is block-stable;
-     * the predictable branch chooses only which recursive kernel runs. */
-#if BR_FX_HAS_REVERB_RATE4 && BR_FX_HAS_REVERB_RATE2
-#if BR_FX_STAGE_REVERB_RATE_DISPATCH
-    if (c->reverb_rate4) {
-#if BR_FX_BLOCK_STAGE_ONLY_BUILD && BR_FX_BLOCK_STAGE_PIPELINE && \
-    BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB && BR_FX_STAGE_REVERB_RATE_DISPATCH
-        if (!wet && n) {
-            BR_FX_PREPARE_INVOKE(br_fx_reverb_rate4_zero_block, st, c, n);
-        }
-#endif
-        for (i = 0u; i < n; ++i) {
-            int32_t rv_l = 0, rv_r = 0, reverb_event = 0;
-            int32_t delayed = stereo[i][0];
-            phase += lfo_inc;
-            st->lfo_phase = phase;
-            br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                                 BR_FX_PROGRESS_REVERB);
-#if BR_FX_BLOCK_STAGE_ONLY_BUILD && BR_FX_BLOCK_STAGE_PIPELINE && \
-    BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB && BR_FX_STAGE_REVERB_RATE_DISPATCH
-            if (wet)
-#endif
-                br_fx_reverb_rate4(st, p, delayed, c, &rv_l, &rv_r
-                                   BR_FX_TAIL_EVENT_ARG(&reverb_event));
-            br_fx_stage_emit_frame(p, i, sample_base, progress_core, pan, st, s, cfg, c,
-                input[i], mod[i], delayed, rv_l, rv_r, stereo[i][1],
-                reverb_event, tail_samples);
-        }
-        st->lfo_phase = lfo_final;
-        return;
-    }
-    if (c->reverb_rate2) {
-        if (!wet && n) {
-            uint32_t line;
-            uint32_t phase0 = st->reverb_rate2_phase;
-            uint32_t advances = (n + phase0) >> 1u;
-            for (line = 0u; line < 4u; ++line) {
-                uint32_t pos = st->room_pos[line] + advances;
-                uint32_t len = c->reverb_length[line];
-                if (pos >= len) pos -= len;
-                st->room_pos[line] = pos;
-            }
-            st->reverb_rate2_phase = (phase0 + n) & 1u;
-            {
-                br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate2_input_hist,
-                    sizeof st->reverb_rate2_input_hist / sizeof(uint32_t));
-            }
-            st->reverb_rate2_previous_l = 0;
-            st->reverb_rate2_previous_r = 0;
-        }
-        for (i = 0u; i < n; ++i) {
-            int32_t rv_l = 0, rv_r = 0, reverb_event = 0;
-            int32_t delayed = stereo[i][0];
-            phase += lfo_inc;
-            st->lfo_phase = phase;
-            br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                                 BR_FX_PROGRESS_REVERB);
-            if (wet)
-                br_fx_reverb_rate2(st, p, delayed, c, &rv_l, &rv_r
-                                   BR_FX_TAIL_EVENT_ARG(&reverb_event));
-            br_fx_stage_emit_frame(p, i, sample_base, progress_core, pan, st, s, cfg, c,
-                input[i], mod[i], delayed, rv_l, rv_r, stereo[i][1],
-                reverb_event, tail_samples);
-        }
-        st->lfo_phase = lfo_final;
-        return;
-    }
-#else
-    if (c->reverb_rate4 || c->reverb_rate2) {
-        uint32_t use_rate4 = c->reverb_rate4;
-        for (i = 0u; i < n; ++i) {
-            int32_t rv_l = 0, rv_r = 0, reverb_event = 0;
-            int32_t delayed = stereo[i][0];
-            phase += lfo_inc;
-            st->lfo_phase = phase;
-            br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                                 BR_FX_PROGRESS_REVERB);
-            if (use_rate4)
-                br_fx_reverb_rate4(st, p, delayed, c, &rv_l, &rv_r
-                                   BR_FX_TAIL_EVENT_ARG(&reverb_event));
-            else
-                br_fx_reverb_rate2(st, p, delayed, c, &rv_l, &rv_r
-                                   BR_FX_TAIL_EVENT_ARG(&reverb_event));
-            br_fx_stage_emit_frame(p, i, sample_base, progress_core, pan, st, s, cfg, c,
-                input[i], mod[i], delayed, rv_l, rv_r, stereo[i][1],
-                reverb_event, tail_samples);
-        }
-        st->lfo_phase = lfo_final;
-        return;
-    }
-#endif
-#elif BR_FX_HAS_REVERB_RATE4
-    if (c->reverb_rate4) {
-        for (i = 0u; i < n; ++i) {
-            int32_t rv_l = 0, rv_r = 0, reverb_event = 0;
-            int32_t delayed = stereo[i][0];
-            phase += lfo_inc;
-            st->lfo_phase = phase;
-            br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                                 BR_FX_PROGRESS_REVERB);
-            br_fx_reverb_rate4(st, p, delayed, c, &rv_l, &rv_r
-                               BR_FX_TAIL_EVENT_ARG(&reverb_event));
-            br_fx_stage_emit_frame(p, i, sample_base, progress_core, pan, st, s, cfg, c,
-                input[i], mod[i], delayed, rv_l, rv_r, stereo[i][1],
-                reverb_event, tail_samples);
-        }
-        st->lfo_phase = lfo_final;
-        return;
-    }
-#elif BR_FX_HAS_REVERB_RATE2
-    if (c->reverb_rate2) {
-        for (i = 0u; i < n; ++i) {
-            int32_t rv_l = 0, rv_r = 0, reverb_event = 0;
-            int32_t delayed = stereo[i][0];
-            phase += lfo_inc;
-            st->lfo_phase = phase;
-            br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                                 BR_FX_PROGRESS_REVERB);
-            br_fx_reverb_rate2(st, p, delayed, c, &rv_l, &rv_r
-                               BR_FX_TAIL_EVENT_ARG(&reverb_event));
-            br_fx_stage_emit_frame(p, i, sample_base, progress_core, pan, st, s, cfg, c,
-                input[i], mod[i], delayed, rv_l, rv_r, stereo[i][1],
-                reverb_event, tail_samples);
-        }
-        st->lfo_phase = lfo_final;
-        return;
-    }
-#endif
-
-    st->lfo_phase = lfo_final;
-}
-#endif
-#endif /* !BR_FX_GLOBAL_REVERB */
 #if BR_FX_GLOBAL_REVERB
-#if !BR_FX_STAGE_EMIT_TAIL_BOUNDARY || !BR_FX_HAS_REVERB_RATE2
-#error "the shared reverb is written for the tail-boundary emit and the rate-2 kernel"
+#if !BR_FX_STAGE_EMIT_TAIL_BOUNDARY
+#error "the shared reverb send is written for the tail-boundary emit"
 #endif
+/* WIDTH: the side the delay stage returns above its tail-event bit. */
+static inline __attribute__((always_inline)) int32_t br_fx_delay_side_of(int32_t event)
+{
+    return event >> 1;
+}
+
 /* A track's reverb send: the post-delay signal at the track's send level. The
  * track keeps its own delay and modulation; the reverb itself is shared. */
 static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_send_block(
@@ -5035,7 +4226,8 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_send_block(
     const uint32_t pan_l = c->pan_left_q15, pan_r = c->pan_right_q15;
     uint32_t tail = *tail_samples, touched = 0u;
     (void)progress_core;
-    for (i = 0u; i < n; ++i) {
+    /* WIDTH 0 runs this loop; WIDTH on runs the one after it. */
+    for (i = 0u; i < (c->delay_width_q15 ? 0u : n); ++i) {
         int32_t in = input[i], modded = mod[i], delayed = stereo[i][0];
         int32_t mod_direct, centered, left, right;
         send[i] = wet ? br_fx_div127(br_fx_clip_ram(delayed, -16000000, 16000000) *
@@ -5054,17 +4246,51 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_send_block(
         centered = br_fx_stage_emit_div_pow2(mod_direct, 2u) +
             br_fx_stage_emit_div_pow2(delayed - mod_direct, 2u);
         left = right = centered;
-        if (pan != 64u)
-            br_fx_pan_stereo_cached_noncenter(centered, centered, pan, pan_l, pan_r,
-                                              &left, &right);
+        if (pan != 64u) {          /* mono here: out = x * gain on each side */
+            left = br_fx_pan_mul(centered, (int32_t)pan_l);
+            right = br_fx_pan_mul(centered, (int32_t)pan_r);
+        }
         stereo[i][0] = left;
         stereo[i][1] = right;
+    }
+    if (c->delay_width_q15) {
+        /* Delay WIDTH: the same frame as above, plus the echo's side (carried
+         * above the event bit) added to the left and subtracted from the
+         * right before PAN. A separate loop keeps WIDTH 0 at no cost. */
+        for (i = 0u; i < n; ++i) {
+            int32_t in = input[i], modded = mod[i], delayed = stereo[i][0];
+            int32_t event = stereo[i][1], side = br_fx_delay_side_of(event);
+            int32_t mod_direct, centered, left, right;
+            send[i] = wet ? br_fx_div127(br_fx_clip_ram(delayed, -16000000, 16000000) *
+                                         (int32_t)wet) : 0;
+            if (mod_on && (in > 2 || in < -2) && tail < FS / 2u) tail = FS / 2u;
+            if ((event & 1) && tail < delay_hold) tail = delay_hold;
+            touched |= tail;
+            if (tail >= FS / 4u) {
+                mod_direct = modded;
+            } else {
+                uint32_t g = br_fx_tail_gain_below_fade(tail);
+                mod_direct = in + br_fx_wet_gain(modded - in, g);
+                delayed = mod_direct + br_fx_wet_gain(delayed - modded, g);
+                side = br_fx_wet_gain(side, g);
+            }
+            if (tail) --tail;
+            centered = br_fx_stage_emit_div_pow2(mod_direct, 2u) +
+                br_fx_stage_emit_div_pow2(delayed - mod_direct, 2u);
+            side = br_fx_stage_emit_div_pow2(side, 2u);
+            left = centered + side;
+            right = centered - side;
+            if (pan != 64u)
+                br_fx_pan_stereo_cached_noncenter(centered + side, centered - side, pan,
+                                                  pan_l, pan_r, &left, &right);
+            stereo[i][0] = left;
+            stereo[i][1] = right;
+        }
     }
     if (touched) st->tail_storage = 1u;
     st->tail_samples = tail;
     *tail_samples = tail;
     st->previous_delay_wet = s->delay;
-    st->previous_reverb_wet = s->reverb;
     st->previous_mod_mix = cfg->mod_mix;
 #else
     for (i = 0u; i < n; ++i) {
@@ -5078,194 +4304,144 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_stage_send_block(
     st->lfo_phase = lfo_final;
 }
 
-/* Cold, once per block: derive the shared reverb's controls from track 1's
- * type, decay and size. The three values only matter when they change. */
+/* Cold, once per block: the shared reverb's TYPE, SIZE and DECAY are global
+ * (br_master.reverb_*), read here as single words. The coefficients are
+ * designed (rv2_design: about 5k float operations, from flash) only when one of the
+ * three or an override changes, and applied here, at the block start. rv2_apply
+ * slews the line lengths, so SIZE and DECAY changes do not click. A TYPE change
+ * switches the output taps at once (SPACE reads only lines 4-7), which clicks; while
+ * the reverb sounds, it is applied between a one-block fade-out and fade-in of the
+ * return instead (br_gr_duck), outside the reverb itself. */
 static BR_FX_PREPARE_CODE __attribute__((minsize, noinline)) void br_gr_prepare(void)
 {
-    const br_sound_t *s0 = br_fx_sound_at(0u);
-    const br_fx_config_t *cfg0 = br_fx_config_at(0u);
-    br_fx_controls_t *c = &br_gr_controls;
-    br_fx_track_t *st = &br_gr_state;
-    uint32_t engine = br_fx_reverb_engine_of(cfg0->reverb_engine);
-    uint32_t decay = br_fx_bound_ram(cfg0->reverb_tone, 127u);
-    uint32_t space = br_fx_bound_ram(s0->space, 127u);
-    uint32_t i, engine_changed, refresh;
-    float output_target = engine == BR_REVERB_SPACE ? 18.0f : 32.0f;
-    if (br_gr_key_valid && br_gr_key[0] == engine && br_gr_key[1] == decay &&
-        br_gr_key[2] == space) return;
-    br_gr_key[0] = engine; br_gr_key[1] = decay; br_gr_key[2] = space; br_gr_key_valid = 1u;
-    engine_changed = c->reverb_engine != engine;
-    refresh = !c->reverb_feedback_line[3] || engine_changed || c->reverb_space != space ||
-        c->reverb_feedback != 14000u + 130u * decay;
-    if (!(st->reverb_output_scale > 0.0f)) st->reverb_output_scale = output_target;
-    c->reverb_output_scale = output_target;
-    st->reverb_output_unity = st->reverb_output_scale == 32.0f && output_target == 32.0f;
-    if (engine_changed) {
-        br_fx_clear32((br_fx_clear_word_t *)st->room_feedback, 4u);
-        st->reverb_send_lp = 0;
-        st->reverb_hall_q4_history_valid = 0u;   /* Room and Hall share the input ring */
-        if (engine == BR_REVERB_SPACE || c->reverb_engine == BR_REVERB_SPACE) {
-            br_sp_clear();                       /* the two kinds keep separate memories */
-            memset(br_room_line[0], 0, sizeof br_room_line[0]);
-        }
-    }
-    c->reverb_engine = engine;
-    /* The engines return -6 to -18 dB below the dry signal at full send; bring each
-     * to about the dry level so the send knob has a useful range. */
+    uint32_t type = br_fx_reverb_engine_of(br_master.reverb_engine);   /* retired 2 -> 0, 4 -> 3 */
+    uint32_t decay = br_fx_bound_ram(br_master.reverb_decay, 127u);
+    uint32_t size = br_fx_bound_ram(br_master.reverb_size, 127u);
+    uint32_t lfo_active = br_master.global_lfo.depth &&
+        (br_master.global_lfo.target == BR_GLOBAL_TARGET_REVERB_SIZE || br_master.global_lfo.target == BR_GLOBAL_TARGET_REVERB_DECAY);
+#if !BR_AUDIO_FUSION_ONLY_BUILD
+    if (br_fx_pipeline_controls) {
+        size = br_fx_pipeline_controls->reverb_size;
+        decay = br_fx_pipeline_controls->reverb_decay;
+        lfo_active = br_fx_pipeline_controls->reverb_lfo_active;
+    } else
+#endif
     {
-        static const uint16_t makeup[BR_REVERB_COUNT] = {1536u, 614u, 768u, 140u, 819u};
-        c->reverb_return_q8 = makeup[engine];
+        size = br_global_lfo_value(BR_GLOBAL_TARGET_REVERB_SIZE, size, 127u);
+        decay = br_global_lfo_value(BR_GLOBAL_TARGET_REVERB_DECAY, decay, 127u);
     }
-    c->reverb_wet = 127u;
-    c->reverb_tone = 86u - (62u * space) / 127u;
-    c->reverb_space = space;
-    c->reverb_feedback = 14000u + 130u * decay;
-    c->reverb_tail_hold = FS * (2u + decay / 8u);
-    c->reverb_alpha = br_fx_reverb_alpha(c->reverb_tone);
-    {
-#if BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-        uint32_t packed_room_start = 0u;
-#endif
-        for (i = 0u; i < 4u; ++i) {
-#if BR_FX_REVERB_PACK_ALL_RATE2_ROOM
-            uint32_t packed_max = br_fx_rate_samples(br_room_length[BR_REVERB_SPACE][i]);
-            c->reverb_start[i] = (uint16_t)packed_room_start;
-            packed_room_start += (packed_max + 1u) >> 1;
-#else
-            c->reverb_start[i] = (uint16_t)br_fx_rate_samples(br_room_start[i]);
-#endif
-            c->reverb_length[i] = (uint16_t)br_fx_rate_samples(br_room_length[engine][i]);
-        }
+    uint32_t manual = br_master.reverb_manual;
+    rv2_coeffs_t co;
+    uint32_t sync = (manual & 32u) ? br_master.reverb_extra[0] : 0u;
+    uint32_t bpm = br_bpm < BR_BPM_MIN ? BR_BPM_MIN : br_bpm > BR_BPM_MAX ? BR_BPM_MAX : br_bpm;
+    static const uint8_t sync_ticks[12] = {0u, 8u, 12u, 16u, 18u, 24u, 32u, 36u, 48u, 64u, 72u, 96u};
+    uint32_t sync_key, total, base_pre, wanted_mode, changed_mode;
+    if (sync > 11u) sync = 0u;
+    total = sync ? (RV2_CORE_FS * 5u * sync_ticks[sync] + 8u * bpm) / (16u * bpm) : 0u;
+    base_pre = (RV2_CORE_FS * 60u * 68u + 63500u) / 127000u;
+    wanted_mode = total > base_pre + RV2_SYNC_PRE_LEN - 1u;
+    changed_mode = wanted_mode != br_gr_rv.sync_mode;
+    sync_key = sync ? (sync << 16) | bpm : 0u;
+    br_gr_overrides.pre = manual & 1u ? br_master.reverb_extra[0] & 127u : RV2_DERIVE;
+    if (sync) br_gr_overrides.pre = 68u; /* reserve about 32 ms for full-quality early taps */
+    br_gr_overrides.tone = manual & 2u ? br_master.reverb_extra[1] & 127u : RV2_DERIVE;
+    br_gr_overrides.mod = manual & 4u ? br_master.reverb_extra[2] & 127u : RV2_DERIVE;
+    br_gr_overrides.lowcut = manual & 8u ? br_master.reverb_extra[3] & 127u : RV2_DERIVE;
+    br_gr_overrides.width = manual & 16u ? br_master.reverb_extra[4] & 127u : RV2_DERIVE;
+    if (br_gr_duck == 2u) br_gr_duck = 0u;                 /* the fade-in has run */
+    if (br_gr_key_valid && br_gr_key[0] == type && br_gr_key[1] == decay &&
+        br_gr_key[2] == size &&
+        br_gr_sync_key == sync_key &&
+        !memcmp(&br_gr_key_overrides, &br_gr_overrides, sizeof br_gr_overrides)) return;
+    /* SIZE/DECAY redesign performs thousands of floating-point operations.
+     * Limit LFO-driven redesigns to 20 Hz; engine, sync and override changes
+     * still take effect immediately. rv2_apply slews the resulting line lengths. */
+    if (lfo_active && br_gr_key_valid && br_gr_key[0] == type &&
+        br_gr_sync_key == sync_key && !changed_mode &&
+        !memcmp(&br_gr_key_overrides, &br_gr_overrides, sizeof br_gr_overrides) &&
+        br_gr_lfo_frames < FS / 20u) return;
+    if (br_gr_key_valid && (br_gr_key[0] != type || changed_mode) && !br_gr_rv.idle && !br_gr_duck) {
+        br_gr_duck = 1u;                                    /* fade out first */
+        return;
     }
-    c->reverb_rate2 = BR_FX_PREPARE_INVOKE(br_fx_reverb_rate2_selected, engine);
-#if BR_FX_HAS_REVERB_RATE4
-    c->reverb_rate4 = br_fx_reverb_rate4_selected(engine);
-#else
-    c->reverb_rate4 = 0u;
-#endif
-    if (c->reverb_rate4) {
-        uint32_t q = 32768u - c->reverb_alpha;
-        uint32_t q2 = (q * q + 16384u) >> 15;
-        uint32_t q4 = (q2 * q2 + 16384u) >> 15;
-        c->reverb_alpha = 32768u - q4;
-        for (i = 0u; i < 4u; ++i)
-            c->reverb_length[i] = (uint16_t)((c->reverb_length[i] + 3u) >> 2);
-    } else if (c->reverb_rate2) {
-        c->reverb_alpha = 2u * c->reverb_alpha - ((c->reverb_alpha * c->reverb_alpha) >> 15);
-        for (i = 0u; i < 4u; ++i)
-            c->reverb_length[i] = (uint16_t)((c->reverb_length[i] + 1u) >> 1);
+    /* Tempo-only changes reuse the expensive room design; they adjust just the
+     * pre-delay and early-tap offsets instead of recalculating the whole FDN. */
+    if (br_gr_key_valid && br_gr_key[0] == type && br_gr_key[1] == decay &&
+        br_gr_key[2] == size &&
+        !memcmp(&br_gr_key_overrides, &br_gr_overrides, sizeof br_gr_overrides)) {
+        co = br_gr_design_cache;
+    } else {
+        br_gr_key[0] = type; br_gr_key[1] = decay; br_gr_key[2] = size;
+        br_gr_key_overrides = br_gr_overrides;
+        br_gr_lfo_frames = 0u;
+        rv2_design(type, size, decay, &br_gr_key_overrides, &co);
+        br_gr_design_cache = co;
     }
-    c->reverb_slew_shift = c->reverb_rate4 ? 8u : c->reverb_rate2 ? 9u : 10u;
-    for (i = 0u; i < 4u; ++i)
-        c->reverb_size_delay[i] = (uint16_t)((c->reverb_length[i] * (127u + space) + 127u) / 254u);
-    if (refresh) {
-        uint32_t reference_length = 0u;
-        for (i = 0u; i < 4u; ++i)
-            if (c->reverb_length[i] > reference_length) reference_length = c->reverb_length[i];
-        for (i = 0u; i < 4u; ++i)
-            c->reverb_feedback_line[i] = (uint16_t)br_fx_reverb_feedback_for_length(
-                c->reverb_feedback, c->reverb_size_delay[i], reference_length);
-        if (engine == BR_REVERB_SPACE)
-            for (i = 0u; i < 4u; ++i)
-                c->reverb_feedback_line[i] = (uint16_t)
-                    ((c->reverb_feedback_line[i] * 23170u + 16384u) >> 15);
+    if (sync) {
+        /* Divisions are measured in 192ths of a quarter note. */
+        uint32_t initial = total < (uint32_t)co.pre_target ? total : (uint32_t)co.pre_target;
+        int32_t adjust = (int32_t)initial - co.pre_target;
+        unsigned i;
+        co.pre_target = (int32_t)initial;
+        for (i = 0; i < 4u; ++i) co.er_t[i] += adjust;
+        br_gr_rv.sync_target = (uint16_t)(total - initial);
+    } else br_gr_rv.sync_target = 0u;
+    if (changed_mode) {
+        memset(br_gr_sync_pre, 0, sizeof br_gr_sync_pre);
+        memset(br_gr_rv.sync_hist, 0, sizeof br_gr_rv.sync_hist);
+        br_gr_rv.sync_pos = br_gr_rv.sync_phase = br_gr_rv.sync_pending = 0u;
+        br_gr_rv.sync_mode = (uint8_t)wanted_mode;
     }
-#if BR_FX_REVERB_FLOAT_Q15
-    c->reverb_alpha_float = (float)c->reverb_alpha * (1.0f / 32768.0f);
-    for (i = 0u; i < 4u; ++i)
-        c->reverb_feedback_line_float[i] = (float)c->reverb_feedback_line[i] * (1.0f / 32768.0f);
-#endif
-    c->reverb_output_ap0_base = br_reverb_output_ap0[0];
-    c->reverb_output_ap1_base = br_reverb_output_ap1[0];
-    {   /* a change of rate or engine restarts the filter histories, as it did per track */
-        uint32_t rate4 = c->reverb_rate4, previous4 = 0u;
-#if BR_FX_HAS_REVERB_RATE4
-        previous4 = st->previous_reverb_rate4;
-#endif
-        if (st->previous_reverb_rate2 != c->reverb_rate2 || previous4 != rate4 ||
-            (st->previous_reverb_engine != engine &&
-             (st->previous_reverb_rate2 || c->reverb_rate2 || previous4 || rate4))) {
-            for (i = 0u; i < 4u; ++i)
-                if (c->reverb_length[i]) st->room_pos[i] %= c->reverb_length[i];
-            st->reverb_rate2_phase = 0u; st->reverb_rate2_ramp = 0u;
-            st->reverb_rate2_previous_l = st->reverb_rate2_previous_r = 0;
-            br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate2_input_hist,
-                          sizeof st->reverb_rate2_input_hist / sizeof(uint32_t));
-#if BR_FX_HAS_REVERB_RATE4
-            st->reverb_rate4_phase = 0u;
-            st->reverb_rate4_from_l = st->reverb_rate4_from_r = 0;
-            br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate4_input_hist,
-                          sizeof st->reverb_rate4_input_hist / sizeof(uint32_t));
-#endif
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-            st->reverb_hall_q4_full_history_pos = st->reverb_hall_q4_half_history_pos = 0u;
-            st->reverb_hall_q4_history_valid = 0u;
-#endif
-        }
-        st->previous_reverb_rate2 = c->reverb_rate2;
-        st->previous_reverb_engine = engine;
-#if BR_FX_HAS_REVERB_RATE4
-        st->previous_reverb_rate4 = rate4;
-#endif
+    if (br_gr_rv.idle || changed_mode) br_gr_rv.sync_d = br_gr_rv.sync_target;
+    br_gr_sync_key = sync_key;
+    rv2_apply(&br_gr_rv, &co);
+    if (br_gr_rv.idle || changed_mode) {
+        unsigned i;
+        /* An idle tank does not process samples, so its delay lengths cannot
+         * slew to a new room until a note arrives. Start silent rooms at the
+         * new design; keep the existing slew for audible tails. */
+        if (br_gr_rv.idle) for (i = 0u; i < RV2_LINES; ++i)
+            br_gr_rv.base[i] = RV2_LN(&br_gr_rv, i, d) = br_gr_rv.target[i];
+        br_gr_rv.pre_d = co.pre_target;
+        for (i = 0; i < 4u; ++i) br_gr_rv.er_d[i] = co.er_t[i];
     }
-}
-
-/* Empty the lines once the tail has run out, so the next phrase starts clean. */
-static BR_FX_RAM_AUDIO void br_gr_clear(void)
-{
-    br_fx_track_t *st = &br_gr_state;
-    br_fx_clear32((br_fx_clear_word_t *)br_room_line[0], sizeof br_room_line[0] / 4u);
-    br_fx_clear32((br_fx_clear_word_t *)st->room_lp, sizeof st->room_lp / sizeof(uint32_t));
-    br_fx_reverb_output_ap_reset(0u, st);
-    st->reverb_rate2_phase = 0u; st->reverb_rate2_ramp = 0u;
-    st->reverb_rate2_previous_l = st->reverb_rate2_previous_r = 0;
-    br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate2_input_hist,
-                  sizeof st->reverb_rate2_input_hist / sizeof(uint32_t));
-#if BR_FX_HAS_REVERB_RATE4
-    st->reverb_rate4_phase = 0u;
-    st->reverb_rate4_from_l = st->reverb_rate4_from_r = 0;
-    br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate4_input_hist,
-                  sizeof st->reverb_rate4_input_hist / sizeof(uint32_t));
-#endif
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-    st->reverb_hall_q4_full_history_pos = st->reverb_hall_q4_half_history_pos = 0u;
-    st->reverb_hall_q4_history_valid = 0u;
-#endif
-    st->tail_storage = 0u;
-    br_fx_clear32((br_fx_clear_word_t *)br_gr_ap0, BR_GR_AP0_LEN);
-    br_fx_clear32((br_fx_clear_word_t *)br_gr_ap1, BR_GR_AP1_LEN);
-    br_fx_clear32((br_fx_clear_word_t *)br_gr_ap2, BR_GR_AP2_LEN);
-    br_fx_clear32((br_fx_clear_word_t *)br_gr_ap3, BR_GR_AP3_LEN);
-    br_gr_ap_pos[0] = br_gr_ap_pos[1] = br_gr_ap_pos[2] = br_gr_ap_pos[3] = 0u;
-    BR_FX_PREPARE_INVOKE(br_sp_clear);
+    br_gr_key_valid = 1u;
+    if (br_gr_duck == 1u) br_gr_duck = 2u;                 /* then fade in */
 }
 
 /* Once per block, before any job runs: swap the send buffers and decide whether
- * the reverb has the previous block's sends, or a tail, to work on. */
+ * the reverb has the previous block's sends, or a tail, to work on. The reverb
+ * reports idle (rv2_idle) once its tail has ended and its lines are clear. */
 static BR_FX_PREPARE_CODE void br_gr_plan(void)
 {
     uint32_t p, prev = br_gr_cur, present = 0u;
     for (p = 0u; p < BR_PARTS; ++p) present |= br_gr_have[prev][p];
     br_gr_cur = prev ^ 1u;
     for (p = 0u; p < BR_PARTS; ++p) br_gr_have[br_gr_cur][p] = 0u;
-    br_gr_run = present || br_gr_state.tail_samples;
+    br_gr_run = present || !br_gr_rv.idle;
 }
 
 /* ---- DRIVE: a guitar-pedal style stage ahead of the track's modulation and delay.
- * Three shapers (overdrive: smooth cubic saturation; distortion: a hard knee that
- * flattens at about 0.8 of full scale; fuzz: very high gain into an asymmetric
- * squarish clip), a tone low-pass after the shaper and a dry/wet mix (the SEND).
- * Stored in the existing fields: mode = drive_mode, gain = drive_gain, tone =
- * drive_tone, send = sound.drive. It runs from flash, once per block, and only for
- * a track whose send is above zero. */
+ * Three shapers (overdrive: smooth symmetric cubic, odd harmonics; distortion: a hard knee driven
+ * off centre, so it adds even harmonics as well; fuzz: high gain into an asymmetric squarish clip),
+ * a DC blocker after the two asymmetric ones and a tone low-pass that is fully open at 127.
+ * The SEND adds the driven signal to the dry one, which stays at unity: out = dry + s*M*T*wet.
+ * M matches the wet's RMS to the dry's (about 30 ms smoothing, within +-6 dB, held while the dry is
+ * near silence) and T is -3 dB, so a full send adds about +4.5 dB and never makes a track quieter.
+ * Turned to zero, the wet part fades out over one more block before the stage stops running.
+ * Stored in the existing fields: mode = drive_mode, gain = drive_gain, tone = drive_tone,
+ * send = sound.drive. The block setup runs from flash, the per-sample loop from RAM. */
 #define BR_DRIVE_FS 32768
+#define BR_DRIVE_DIST_BIAS 0.9f
+#define BR_DRIVE_DIST_CENTRE 0.375f       /* br_adaa_dist_f(BR_DRIVE_DIST_BIAS) */
 static const uint32_t br_drive_gain_q8[3][17] = {
     {256, 296, 341, 394, 455, 526, 607, 701, 810, 935, 1080, 1247, 1440, 1662, 1920, 2217, 2560},
     {1024, 1213, 1437, 1701, 2015, 2387, 2827, 3348, 3966, 4697, 5564, 6590, 7805, 9244, 10949, 12968, 15360},
-    {5120, 6064, 7183, 8507, 10076, 11934, 14135, 16742, 19830, 23487, 27818, 32948, 39025, 46222, 54746, 64842, 76800}
+    {512, 654, 835, 1066, 1361, 1739, 2220, 2835, 3620, 4623, 5904, 7539, 9627, 12294, 15699, 20047, 25600}
 };
+/* tone: one-pole coefficient, Q15, cutoffs log-spaced 400 Hz .. 16 kHz (TONE 0..120), then 0.987 at 127 (open) */
 static const uint32_t br_drive_gain_q15[17] = {
-    1815, 2251, 2787, 3443, 4241, 5209, 6371, 7753, 9378, 11261, 13400, 15775, 18337, 21001, 23648, 26134, 28310
+    1815, 2303, 2916, 3682, 4632, 5803, 7229, 8943, 10969, 13311, 15943, 18796, 21751, 24639, 27256, 29415, 32768
 };
 static uint32_t br_drive_lerp17(const uint32_t *t, uint32_t v)   /* v: 0..127 over 16 steps */
 {
@@ -5280,39 +4456,64 @@ static uint32_t br_drive_lerp17(const uint32_t *t, uint32_t v)   /* v: 0..127 ov
  * step falls back to f at the midpoint. All values are in units of full scale. */
 #define BR_ADAA_EPS (1.0f / 1024.0f)
 
-static BR_FX_PREPARE_CODE float br_adaa_od_f(float x)
+/* The shapers inline into the per-sample loop, which runs from RAM (br_fx_drive_run). */
+#define BR_ADAA_FN static inline __attribute__((always_inline))
+BR_ADAA_FN float br_adaa_od_f(float x)
 {
     return x >= 1.0f ? 2.0f / 3.0f : x <= -1.0f ? -2.0f / 3.0f : x - x * x * x * (1.0f / 3.0f);
 }
-static BR_FX_PREPARE_CODE float br_adaa_od_F(float x)       /* even */
+BR_ADAA_FN float br_adaa_od_F(float x)       /* even */
 {
     float ax = x < 0.0f ? -x : x;
     return ax <= 1.0f ? x * x * (0.5f - x * x * (1.0f / 12.0f)) : 5.0f / 12.0f + (2.0f / 3.0f) * (ax - 1.0f);
 }
-static BR_FX_PREPARE_CODE float br_adaa_dist_f(float x)
+BR_ADAA_FN float br_adaa_dist_f(float x)
 {
     float ax = x < 0.0f ? -x : x;
     float m = ax <= 0.3f ? ax : ax < 4.0f ? 0.3f + (ax - 0.3f) * 0.125f : 0.7625f;
     return x < 0.0f ? -m : m;
 }
-static BR_FX_PREPARE_CODE float br_adaa_dist_F(float x)     /* even */
+BR_ADAA_FN float br_adaa_dist_F(float x)     /* even */
 {
     float ax = x < 0.0f ? -x : x, t;
     if (ax <= 0.3f) return ax * ax * 0.5f;
     if (ax < 4.0f) { t = ax - 0.3f; return 0.045f + 0.3f * t + t * t * (1.0f / 16.0f); }
     return 2.010625f + 0.7625f * (ax - 4.0f);
 }
-static BR_FX_PREPARE_CODE float br_adaa_fuzz_f(float x)
+BR_ADAA_FN float br_adaa_fuzz_f(float x)
 {
     return x > 0.7f ? 0.7f : x < -0.45f ? -0.45f : x;
 }
-static BR_FX_PREPARE_CODE float br_adaa_fuzz_F(float x)
+BR_ADAA_FN float br_adaa_fuzz_F(float x)
 {
     if (x > 0.7f) return 0.7f * x - 0.245f;
     if (x < -0.45f) return -0.45f * x - 0.10125f;
     return x * x * 0.5f;
 }
-static BR_FX_PREPARE_CODE inline __attribute__((always_inline)) float br_adaa_step(uint32_t mode, float a, float b)
+/* The polynomial piece a sample sits on (distortion: 0..4, fuzz: 0..2); overdrive does not use it. */
+BR_ADAA_FN uint32_t br_adaa_piece(uint32_t mode, float x)
+{
+    if (mode == 1u)
+        return (uint32_t)(x > -4.0f) + (uint32_t)(x > -0.3f) + (uint32_t)(x > 0.3f) + (uint32_t)(x > 4.0f);
+    if (mode == 2u) return (uint32_t)(x > -0.45f) + (uint32_t)(x > 0.7f);
+    return 0u;
+}
+/* F(b) - F(a) for a step across a corner, with one copy of F for both ends: the loop is kept rolled,
+ * which keeps the distortion's long F out of RAM twice (corner samples only; same operations). */
+BR_ADAA_FN float br_adaa_F_diff(uint32_t mode, float a, float b)
+{
+    float fb = 0.0f, v = b, f;
+    uint32_t k;
+#pragma clang loop unroll(disable)
+    for (k = 0u; k < 2u; ++k) {
+        f = mode == 0u ? br_adaa_od_F(v) : mode == 1u ? br_adaa_dist_F(v) : br_adaa_fuzz_F(v);
+        if (k) break;
+        fb = f; v = a;
+    }
+    return fb - f;
+}
+/* ia, ib: the pieces of a and b; the loop carries b's piece on as the next sample's a. */
+BR_ADAA_FN float br_adaa_step(uint32_t mode, float a, float b, uint32_t ia, uint32_t ib)
 {
     float d = b - a;
     if (mode == 0u) {
@@ -5320,373 +4521,183 @@ static BR_FX_PREPARE_CODE inline __attribute__((always_inline)) float br_adaa_st
             float s = a + b;
             return s * (0.5f - (a * a + b * b) * (1.0f / 12.0f));
         }
-        if ((a >= 1.0f && b >= 1.0f) || (a <= -1.0f && b <= -1.0f)) return br_adaa_od_f(b);
-        if (d < BR_ADAA_EPS && d > -BR_ADAA_EPS) return br_adaa_od_f(0.5f * (a + b));
+        if ((a >= 1.0f && b >= 1.0f) || (a <= -1.0f && b <= -1.0f) ||   /* both clipped: f(b); */
+            (d < BR_ADAA_EPS && d > -BR_ADAA_EPS))                      /* a tiny step: f at the midpoint */
+            return br_adaa_od_f((a >= 1.0f && b >= 1.0f) || (a <= -1.0f && b <= -1.0f) ? b : 0.5f * (a + b));
         return (br_adaa_od_F(b) - br_adaa_od_F(a)) / d;
     }
     if (mode == 1u) {
-        uint32_t ia = (uint32_t)(a > -4.0f) + (uint32_t)(a > -0.3f) + (uint32_t)(a > 0.3f) + (uint32_t)(a > 4.0f);
-        uint32_t ib = (uint32_t)(b > -4.0f) + (uint32_t)(b > -0.3f) + (uint32_t)(b > 0.3f) + (uint32_t)(b > 4.0f);
         if (ia == ib || (d < BR_ADAA_EPS && d > -BR_ADAA_EPS)) return br_adaa_dist_f(0.5f * (a + b));
-        return (br_adaa_dist_F(b) - br_adaa_dist_F(a)) / d;
+        return br_adaa_F_diff(1u, a, b) / d;
     }
-    {
-        uint32_t ia = (uint32_t)(a > -0.45f) + (uint32_t)(a > 0.7f), ib = (uint32_t)(b > -0.45f) + (uint32_t)(b > 0.7f);
-        if (ia == ib || (d < BR_ADAA_EPS && d > -BR_ADAA_EPS)) return br_adaa_fuzz_f(0.5f * (a + b));
-        return (br_adaa_fuzz_F(b) - br_adaa_fuzz_F(a)) / d;
-    }
+    if (ia == ib || (d < BR_ADAA_EPS && d > -BR_ADAA_EPS)) return br_adaa_fuzz_f(0.5f * (a + b));
+    return (br_adaa_fuzz_F(b) - br_adaa_fuzz_F(a)) / d;
 }
-#ifndef BR_FX_DRIVE_UNSWITCH
-#define BR_FX_DRIVE_UNSWITCH 1
-#endif
-#if BR_FX_DRIVE_UNSWITCH
-/* floor(d * a / 2^15) for a < 2^15 and |d| < 2^30 in two 32-bit products: d = hi*2^15 + lo
- * with 0 <= lo < 2^15, so d*a = hi*a*2^15 + lo*a and the floor splits exactly. */
+/* floor(d * a / 2^15), low 32 bits, for 0 <= a <= 2^15: one 32x32->64 product and a pair shift.
+ * The same bits as the former two-product split (hi*a + (lo*a >> 15), d = hi*2^15 + lo), which wraps
+ * modulo 2^32 exactly as this truncation does. */
 static inline __attribute__((always_inline)) int32_t br_fx_mul_q15_split(int32_t d, int32_t a)
 {
-    return (d >> 15) * a + (int32_t)(((uint32_t)(d & 0x7fff) * (uint32_t)a) >> 15);
+    return (int32_t)(((int64_t)d * a) >> 15);
 }
+/* What the block setup (flash) hands the per-sample loop (RAM) and what comes back. */
+typedef struct {
+    float gx, prev, g, step, bias, centre;       /* in: input gain, last input (shaper units), wet gain and its ramp step */
+    float sd, sw;                  /* out: dry and wet energies of the block */
+    int32_t alpha, lp, dc, dc_enabled;         /* tone coefficient; tone and DC-blocker state (Q12), in and out */
+} br_drive_run_t;
+/* The wet path for one shaper (one copy per mode, so the choice is not tested per sample). */
 static inline __attribute__((always_inline)) void br_fx_drive_loop(uint32_t mode,
-    const int32_t *in, int32_t *out, uint32_t n, float gx, float out_scale, int32_t alpha,
-    int32_t send_step, int32_t *send_io, int32_t *lp_io, int32_t *dc_io, float prev)
+    const int32_t *in, int32_t *out, uint32_t n, br_drive_run_t *r, float bias, float centre, float out_scale)
 {
-    int32_t send_now = *send_io, lp = *lp_io, dc = *dc_io;
-    uint32_t i;
+    const float gx = r->gx;
+    float prev = r->prev;
+    uint32_t i, ia = br_adaa_piece(mode, prev);
     for (i = 0u; i < n; ++i) {
-        int32_t dry = in[i], y;
-        float x = (float)dry * gx;
-        y = (int32_t)(br_adaa_step(mode, prev, x) * out_scale);
-        prev = x;
-        if (mode == 2u) {                                   /* fuzz: DC removed */
-            dc += (y * 4096 - dc) >> 9;
-            y -= (dc + 2048) >> 12;
-        }
-        lp += br_fx_mul_q15_split(y * 4096 - lp, alpha);    /* tone */
-        y = (lp + 2048) >> 12;
-        send_now += send_step;                              /* the send ramps across the block */
-        out[i] = dry + (int32_t)(((int64_t)(y - dry) * send_now) >> 23);
+        const float x = (float)in[i] * gx + bias;
+        const uint32_t ib = br_adaa_piece(mode, x);
+        int32_t y = (int32_t)((br_adaa_step(mode, prev, x, ia, ib) - centre) * out_scale);
+        prev = x; ia = ib;
+        out[i] = y;
     }
-    *send_io = send_now; *lp_io = lp; *dc_io = dc;
 }
-#endif
-static BR_FX_PREPARE_CODE void br_fx_drive_block(uint32_t p, const int32_t *in, int32_t *out, uint32_t n)
+/* The per-sample work, from RAM and call-free. Returns 0 (out and r untouched) for a silent block. */
+static BR_FX_RAM_AUDIO __attribute__((noinline)) uint32_t br_fx_drive_run(uint32_t mode,
+    const int32_t *in, int32_t *out, uint32_t n, br_drive_run_t *r)
+{
+    uint32_t i;
+    for (i = 0u; i < n && !in[i]; ++i) {}
+    if (i == n) return 0u;
+    if (mode == 0u) br_fx_drive_loop(0u, in, out, n, r, r->bias, r->centre, (float)BR_DRIVE_FS * 0.5f);
+    else if (mode == 1u) br_fx_drive_loop(1u, in, out, n, r, r->bias, r->centre,
+                                          (float)BR_DRIVE_FS * 0.4f);
+    else br_fx_drive_loop(2u, in, out, n, r, r->bias, r->centre, (float)BR_DRIVE_FS * 0.5f);
+    {                                                   /* DC blocker and tone, shared by all shapers */
+        int32_t lp = r->lp, dc = r->dc, alpha = r->alpha;
+        uint32_t dc_enabled = mode != 0u || r->dc_enabled;
+        for (i = 0u; i < n; ++i) {
+            int32_t y = out[i];
+            if (dc_enabled) { dc += (y * 4096 - dc) >> 9; y -= (dc + 2048) >> 12; }
+            lp += br_fx_mul_q15_split(y * 4096 - lp, alpha);
+            out[i] = (lp + 2048) >> 12;
+        }
+        r->lp = lp; r->dc = dc;
+    }
+    {                                                   /* dry at unity plus the wet, its gain ramped */
+        float g = r->g, step = r->step, sd = 0.0f, sw = 0.0f;
+        for (i = 0u; i < n; ++i) {
+            float d = (float)in[i], w = (float)out[i];
+            sd += d * d; sw += w * w;
+            g += step;
+            out[i] = in[i] + (int32_t)(w * g);
+        }
+        r->sd = sd; r->sw = sw;
+    }
+    return 1u;
+}
+static BR_FX_PREPARE_CODE float br_drive_sqrt(float r)    /* r in [1/4, 4]: 1/sqrt by bit trick, two Newton steps */
+{
+    union { float f; uint32_t u; } v;
+    float y;
+    v.f = r; v.u = 0x5f3759dfu - (v.u >> 1); y = v.f;
+    y *= 1.5f - 0.5f * r * y * y;
+    y *= 1.5f - 0.5f * r * y * y;
+    return r * y;
+}
+/* The block setup, from flash; the samples go through br_fx_drive_run in RAM. Returns 0 (out untouched,
+ * use in) for a silent block, which costs one scan; a send turned to 0 while silent stops the stage there. */
+static BR_FX_PREPARE_CODE uint32_t br_fx_drive_block(uint32_t p, const int32_t *in, int32_t *out, uint32_t n)
 {
     br_fx_track_t *st = &br_fx_track[p];
     const br_sound_t *s = br_fx_sound_at(p);
     const br_fx_config_t *cfg = br_fx_config_at(p);
-    uint32_t mode = cfg->drive_mode > 2u ? 0u : cfg->drive_mode;
+    uint32_t mode = cfg->drive_mode > 2u ? 0u : cfg->drive_mode, send = s->drive > 127u ? 127u : s->drive;
     uint32_t gain = br_drive_lerp17(br_drive_gain_q8[mode], cfg->drive_gain > 127u ? 127u : cfg->drive_gain);
-    int32_t alpha = (int32_t)br_drive_lerp17(br_drive_gain_q15, cfg->drive_tone > 127u ? 127u : cfg->drive_tone);
-    int32_t send_to = (int32_t)(s->drive > 127u ? 127u : s->drive) * 258 * 256;   /* send / 127 in Q23 */
-    int32_t send_now = st->drive_send, send_step = n ? (send_to - send_now) / (int32_t)n : 0;
-    int32_t lp = st->drive_lp, dc = st->drive_dc;      /* Q12, so both settle to exactly zero */
+    br_drive_run_t r;
     const float gx = (float)gain * (1.0f / 8388608.0f);              /* gain / 256, in units of full scale */
-    const float out_scale = (float)BR_DRIVE_FS * (mode == 0u ? 1.25f : mode == 1u ? 0.875f : 1.0f);
-    float prev = (float)st->drive_prev * gx;
-#if BR_FX_DRIVE_UNSWITCH
-    /* One loop per shaper, so the shaper choice is not tested per sample. */
-    if (mode == 0u) br_fx_drive_loop(0u, in, out, n, gx, out_scale, alpha, send_step, &send_now, &lp, &dc, prev);
-    else if (mode == 1u) br_fx_drive_loop(1u, in, out, n, gx, out_scale, alpha, send_step, &send_now, &lp, &dc, prev);
-    else br_fx_drive_loop(2u, in, out, n, gx, out_scale, alpha, send_step, &send_now, &lp, &dc, prev);
-#else
-    uint32_t i;
-    for (i = 0u; i < n; ++i) {
-        int32_t dry = in[i], y;
-        float x = (float)dry * gx;
-        y = (int32_t)(br_adaa_step(mode, prev, x) * out_scale);
-        prev = x;
-        if (mode == 2u) {                                   /* fuzz: DC removed */
-            dc += (y * 4096 - dc) >> 9;
-            y -= (dc + 2048) >> 12;
-        }
-        lp += (int32_t)(((int64_t)(y * 4096 - lp) * alpha) >> 15);   /* tone */
-        y = (lp + 2048) >> 12;
-        send_now += send_step;                              /* the send ramps across the block */
-        out[i] = dry + (int32_t)(((int64_t)(y - dry) * send_now) >> 23);
+    float prev = (float)st->drive_prev * gx, g = st->drive_send ? st->drive_wet : 0.0f, m = st->drive_m, sd, sw;
+    const float g_to = (float)send * m * (0.70795f / 127.0f);       /* s * M * T, T = -3 dB */
+    r.alpha = (int32_t)br_drive_lerp17(br_drive_gain_q15, cfg->drive_tone > 127u ? 127u : cfg->drive_tone);
+    r.lp = st->drive_lp; r.dc = st->drive_dc;                       /* Q12, so both settle to exactly zero */
+    r.dc_enabled = br_part_pending[p].drive_bias != 0u;
+    r.bias = (mode == 1u ? BR_DRIVE_DIST_BIAS : 0.0f) + (float)br_fx_bound_ram(br_part_pending[p].drive_bias, 127u) * (0.8f / 127.0f);
+    r.centre = mode == 0u ? br_adaa_od_f(r.bias) : mode == 1u ? br_adaa_dist_f(r.bias) : br_adaa_fuzz_f(r.bias);
+    r.gx = gx; r.prev = prev + r.bias; r.g = g;
+    r.step = n ? (g_to - g) / (float)n : 0.0f;
+    if (!BR_FX_PREPARE_INVOKE(br_fx_drive_run, mode, in, out, n, &r)) {   /* silent (or empty) block */
+        if (!send) st->drive_send = 0;
+        return 0u;
     }
-#endif
-    st->drive_send = send_to;
-    if (n) st->drive_prev = in[n - 1u];
-    st->drive_lp = lp; st->drive_dc = dc;
-}
-
-/* ---- SPACE: a dark, slowly modulated plate in the manner of a "black hole" reverb.
- * Two cross-coupled branches (modulated allpass, long delay, damping, allpass, long
- * delay) run at a quarter of the sample rate (11 kHz), which gives the dark, huge
- * character; the decay control sets the loop gain, size the delay read points. The
- * modulation is two slow triangles (0.28 and 0.41 Hz) of +-10 samples. The whole
- * block runs from flash, called once per block, so it adds almost no RAM code. */
-/* Modulation: two slow triangles, phase steps per tank step (11,025 Hz): 0.28 and 0.41 Hz. */
-#define BR_SP_LFO_A_INC 109085u
-#define BR_SP_LFO_B_INC 159700u
-#define BR_SP_AP1A 216u
-#define BR_SP_AP1A_NOM 200u
-#define BR_SP_D1A 479u
-#define BR_SP_AP2A 151u
-#define BR_SP_D2A 367u
-#define BR_SP_AP1B 249u
-#define BR_SP_AP1B_NOM 233u
-#define BR_SP_D1B 431u
-#define BR_SP_AP2B 181u
-#define BR_SP_D2B 331u
-static int32_t br_sp_ap1a[BR_SP_AP1A] BR_POOL, br_sp_d1a[BR_SP_D1A] BR_POOL;
-static int32_t br_sp_ap2a[BR_SP_AP2A] BR_POOL, br_sp_d2a[BR_SP_D2A] BR_POOL;
-static int32_t br_sp_ap1b[BR_SP_AP1B] BR_POOL, br_sp_d1b[BR_SP_D1B] BR_POOL;
-static int32_t br_sp_ap2b[BR_SP_AP2B] BR_POOL, br_sp_d2b[BR_SP_D2B] BR_POOL;
-static uint8_t br_gr_ev[BR_BLOCK] BR_POOL;
-static struct {
-    uint16_t w[8];                       /* write positions of the eight buffers */
-    int32_t lp_a, lp_b, end_a, end_b;    /* damping filters and branch outputs */
-    int32_t dec_lp, acc, out_l, out_r;   /* decimation filter and sum, output filters */
-    int32_t prev_l, prev_r, cur_l, cur_r;
-    int32_t off[4];                      /* smoothed delay read points, Q8 */
-    uint32_t cnt, pa, pb;
-} br_sp;
-
-static BR_FX_PREPARE_CODE void br_sp_clear(void)
-{
-    memset(br_sp_ap1a, 0, sizeof br_sp_ap1a); memset(br_sp_d1a, 0, sizeof br_sp_d1a);
-    memset(br_sp_ap2a, 0, sizeof br_sp_ap2a); memset(br_sp_d2a, 0, sizeof br_sp_d2a);
-    memset(br_sp_ap1b, 0, sizeof br_sp_ap1b); memset(br_sp_d1b, 0, sizeof br_sp_d1b);
-    memset(br_sp_ap2b, 0, sizeof br_sp_ap2b); memset(br_sp_d2b, 0, sizeof br_sp_d2b);
-    memset(&br_sp, 0, sizeof br_sp);
-}
-
-static int32_t br_sp_mul(int32_t a, int32_t g) { return (int32_t)(((int64_t)a * g) >> 15); }
-static int32_t br_sp_tri(uint32_t phase)
-{
-    uint32_t t = phase >> 15, v = t & 65535u;
-    if (t & (1u << 16)) v = 65535u - v;
-    return (int32_t)v - 32768;
-}
-/* Delay line read, Q8 delay, linear interpolation; w is the next write position. */
-static int32_t br_sp_read(const int32_t *buf, uint32_t len, uint32_t w, int32_t delay_q8)
-{
-    uint32_t d = (uint32_t)delay_q8 >> 8, frac = (uint32_t)delay_q8 & 255u, i0, i1;
-    int32_t a, b;
-    if (d + 1u >= len) { d = len - 2u; frac = 0u; }
-    i0 = w + len - d; if (i0 >= len) i0 -= len;
-    i1 = i0 ? i0 - 1u : len - 1u;
-    a = buf[i0]; b = buf[i1];
-    return a + (int32_t)(((int64_t)(b - a) * (int32_t)frac) >> 8);
-}
-#define BR_SP_PUT(k, buf, len, value) { buf[br_sp.w[k]] = br_fx_clip_ram((value), -300000000, 300000000); \
-    if (++br_sp.w[k] == (len)) br_sp.w[k] = 0u; }
-
-/* One tank step on the decimated input x. g: loop gain Q15, damp: damping pole Q15. */
-static void br_sp_step(int32_t x, int32_t g, int32_t damp, uint32_t size)
-{
-    int32_t a, d, v, m, target;
-    static const int32_t LEN1[2] = {BR_SP_D1A, BR_SP_D1B}, LEN2[2] = {BR_SP_D2A, BR_SP_D2B};
-    uint32_t k;
-    br_sp.pa += BR_SP_LFO_A_INC; br_sp.pb += BR_SP_LFO_B_INC;                 /* 0.28 Hz and 0.41 Hz at 11,025 Hz */
-    for (k = 0u; k < 2u; ++k) {                                /* smooth the size-dependent read points */
-        target = (LEN1[k] * (int32_t)(127u + size) / 254 - 2) << 8;
-        br_sp.off[2u * k] += (target - br_sp.off[2u * k]) >> 6;
-        target = (LEN2[k] * (int32_t)(127u + size) / 254 - 2) << 8;
-        br_sp.off[2u * k + 1u] += (target - br_sp.off[2u * k + 1u]) >> 6;
+    sd = r.sd; sw = r.sw;
+    if (sd >= (float)n * 1024.0f) {                     /* M is held while the dry is below -60 dBFS */
+        float k = st->drive_send && st->drive_wet > 0.0f ? (float)n * (1.0f / 1323.0f) : 1.0f;   /* a fresh start primes */
+        float ed = st->drive_ed + (sd - st->drive_ed) * k, ew = st->drive_ew + (sw - st->drive_ew) * k;
+        st->drive_ed = ed; st->drive_ew = ew;
+        m = ew * 4.0f < ed ? 2.0f : ed * 4.0f < ew ? 0.5f : br_drive_sqrt(ed / ew);
     }
-    /* branch A */
-    a = x + br_sp.end_b;
-    m = (br_sp_tri(br_sp.pa) * (10 * 256)) >> 15;
-    d = br_sp_read(br_sp_ap1a, BR_SP_AP1A, br_sp.w[0], (int32_t)(BR_SP_AP1A_NOM << 8) + m);
-    v = a - br_sp_mul(d, 22938);               /* 0.70 */
-    BR_SP_PUT(0, br_sp_ap1a, BR_SP_AP1A, v)
-    a = d + br_sp_mul(v, 22938);
-    d = br_sp_read(br_sp_d1a, BR_SP_D1A, br_sp.w[1], br_sp.off[0]);
-    BR_SP_PUT(1, br_sp_d1a, BR_SP_D1A, a)
-    br_sp.lp_a += br_sp_mul(d - br_sp.lp_a, damp);
-    a = br_sp_mul(br_sp.lp_a, g);
-    d = br_sp_read(br_sp_ap2a, BR_SP_AP2A, br_sp.w[2], (int32_t)((BR_SP_AP2A - 4u) << 8));
-    v = a - br_sp_mul(d, 16384);               /* 0.50 */
-    BR_SP_PUT(2, br_sp_ap2a, BR_SP_AP2A, v)
-    a = d + br_sp_mul(v, 16384);
-    d = br_sp_read(br_sp_d2a, BR_SP_D2A, br_sp.w[3], br_sp.off[1]);
-    BR_SP_PUT(3, br_sp_d2a, BR_SP_D2A, a)
-    br_sp.end_a = d;
-    /* branch B */
-    a = x + br_sp.end_a;
-    m = (br_sp_tri(br_sp.pb) * (10 * 256)) >> 15;
-    d = br_sp_read(br_sp_ap1b, BR_SP_AP1B, br_sp.w[4], (int32_t)(BR_SP_AP1B_NOM << 8) + m);
-    v = a - br_sp_mul(d, 22938);
-    BR_SP_PUT(4, br_sp_ap1b, BR_SP_AP1B, v)
-    a = d + br_sp_mul(v, 22938);
-    d = br_sp_read(br_sp_d1b, BR_SP_D1B, br_sp.w[5], br_sp.off[2]);
-    BR_SP_PUT(5, br_sp_d1b, BR_SP_D1B, a)
-    br_sp.lp_b += br_sp_mul(d - br_sp.lp_b, damp);
-    a = br_sp_mul(br_sp.lp_b, g);
-    d = br_sp_read(br_sp_ap2b, BR_SP_AP2B, br_sp.w[6], (int32_t)((BR_SP_AP2B - 4u) << 8));
-    v = a - br_sp_mul(d, 16384);
-    BR_SP_PUT(6, br_sp_ap2b, BR_SP_AP2B, v)
-    a = d + br_sp_mul(v, 16384);
-    d = br_sp_read(br_sp_d2b, BR_SP_D2B, br_sp.w[7], br_sp.off[3]);
-    BR_SP_PUT(7, br_sp_d2b, BR_SP_D2B, a)
-    br_sp.end_b = d;
-    /* stereo taps from the long delays */
-    br_sp.prev_l = br_sp.cur_l; br_sp.prev_r = br_sp.cur_r;
-    br_sp.cur_l = (br_sp_read(br_sp_d1a, BR_SP_D1A, br_sp.w[1], (int32_t)(150u << 8)) +
-                   br_sp_read(br_sp_d2a, BR_SP_D2A, br_sp.w[3], (int32_t)(200u << 8)) -
-                   br_sp_read(br_sp_d1b, BR_SP_D1B, br_sp.w[5], (int32_t)(290u << 8))) >> 1;
-    br_sp.cur_r = (br_sp_read(br_sp_d1b, BR_SP_D1B, br_sp.w[5], (int32_t)(125u << 8)) +
-                   br_sp_read(br_sp_d2b, BR_SP_D2B, br_sp.w[7], (int32_t)(198u << 8)) -
-                   br_sp_read(br_sp_d1a, BR_SP_D1A, br_sp.w[1], (int32_t)(340u << 8))) >> 1;
+    st->drive_m = m; st->drive_wet = g_to; st->drive_send = (int32_t)send;
+    st->drive_prev = in[n - 1u];
+    st->drive_lp = r.lp; st->drive_dc = r.dc;
+    return 1u;
 }
 
-/* The SPACE reverb for one block: sums the previous block's sends, diffuses them,
- * runs the tank and leaves the stereo return in br_gr_wet. br_gr_ev flags the
- * frames loud enough to restart the tail. */
-static BR_FX_PREPARE_CODE void br_gr_space_block(uint32_t n)
+/* The shared reverb's block, from flash: sum the sends the tracks left last block
+ * into that block's first row (the send is in the domain the reverb is calibrated
+ * for: a held note at SEND 127 returns about +6 dB over its dry track, whose level
+ * per channel is a quarter of the send), run the reverb, and leave the stereo
+ * return in that block's next two rows. */
+static BR_FX_PREPARE_CODE __attribute__((noinline)) void br_gr_block(uint32_t n)
 {
-    const br_fx_controls_t *c = &br_gr_controls;
     const int32_t *row[BR_PARTS];
     uint32_t i, k, p, rows = 0u, prev = br_gr_cur ^ 1u;
-    int32_t g = 22282 + (int32_t)(br_gr_key[1] * 9800u / 127u);   /* branch gain 0.68 .. 0.98 */
-    int32_t damp = 16384;                                          /* loop damping, about 1.7 kHz at 11 kHz */
+    int32_t *in = br_gr_send[prev][BR_GR_IN_ROW];
+    int32_t *wet_l = br_gr_send[prev][BR_GR_WET_L_ROW], *wet_r = br_gr_send[prev][BR_GR_WET_R_ROW];
     for (p = 0u; p < BR_PARTS; ++p)
         if (br_gr_have[prev][p]) row[rows++] = br_gr_send[prev][p];
+    /* |send| <= 16,000,000 per track: the sum of four fits int32 (the reverb clips it). */
     for (i = 0u; i < n; ++i) {
-        int32_t in = 0, out;
-        for (k = 0u; k < rows; ++k) in += row[k][i];
-#define BR_GR_AP(buf, len, kk, gq) { int32_t dd = buf[br_gr_ap_pos[kk]]; int32_t vv = in - ((dd * (gq)) >> 12); \
-    buf[br_gr_ap_pos[kk]] = vv; in = dd + ((vv * (gq)) >> 12); if (++br_gr_ap_pos[kk] == (len)) br_gr_ap_pos[kk] = 0u; }
-        in = br_fx_clip_ram(in, -250000, 250000);
-        BR_GR_AP(br_gr_ap0, BR_GR_AP0_LEN, 0u, 3072)
-        BR_GR_AP(br_gr_ap1, BR_GR_AP1_LEN, 1u, 3072)
-        BR_GR_AP(br_gr_ap2, BR_GR_AP2_LEN, 2u, 2560)
-        BR_GR_AP(br_gr_ap3, BR_GR_AP3_LEN, 3u, 2560)
-#undef BR_GR_AP
-        in = (br_fx_clip_ram(in, -1000000, 1000000) * (int32_t)c->reverb_return_q8) >> 8;
-        br_gr_ev[i] = in > 3 || in < -3;
-        /* decimate by four through a one-pole low-pass */
-        br_sp.dec_lp += br_sp_mul(in - br_sp.dec_lp, 9830);
-        br_sp.acc += br_sp.dec_lp;
-        if (++br_sp.cnt == 4u) {
-            br_sp_step(br_sp.acc >> 2, g, damp, br_gr_key[2]);
-            br_sp.acc = 0; br_sp.cnt = 0u;
-        }
-        /* linear interpolation between the last two tank outputs, then a smoothing pole */
-        k = br_sp.cnt;                       /* 0..3 frames since the last step */
-        out = br_sp.prev_l + (int32_t)(((int64_t)(br_sp.cur_l - br_sp.prev_l) * (int32_t)(k + 1u)) >> 2);
-        br_sp.out_l += br_sp_mul(out - br_sp.out_l, 14746);
-        out = br_sp.prev_r + (int32_t)(((int64_t)(br_sp.cur_r - br_sp.prev_r) * (int32_t)(k + 1u)) >> 2);
-        br_sp.out_r += br_sp_mul(out - br_sp.out_r, 14746);
-        br_gr_wet[i][0] = br_sp.out_l;
-        br_gr_wet[i][1] = br_sp.out_r;
+        int32_t sum = 0;
+        for (k = 0u; k < rows; ++k) sum += row[k][i];
+        in[i] = sum;
     }
+    rv2_process(&br_gr_rv, in, wet_l, wet_r, n & ~1u);   /* the reverb runs frame pairs */
+    if (n & 1u) wet_l[n - 1u] = wet_r[n - 1u] = 0;      /* (never at the 256-frame block) */
+    if (br_gr_duck && n) {                              /* TYPE change: linear fade, |wet| <= 65,535 */
+        for (i = 0u; i < n; ++i) {
+            int32_t g = (int32_t)(br_gr_duck == 1u ? n - 1u - i : i + 1u);
+            wet_l[i] = wet_l[i] * g / (int32_t)n;
+            wet_r[i] = wet_r[i] * g / (int32_t)n;
+        }
+    }
+#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
+    for (i = 0u; i < n; ++i) {
+        uint32_t a = (uint32_t)(wet_l[i] < 0 ? -wet_l[i] : wet_l[i]);
+        if (a > br_gr_stats[4]) br_gr_stats[4] = a;
+    }
+#endif
 }
 
-/* The shared reverb for one block, run by the host track's job: sum the sends
- * the tracks left last block and write the stereo return for this block's mix. */
+/* The shared reverb for one block, run by the host track's job (or as its own job
+ * in a split graph). Only this entry is RAM code besides the reverb's per-sample
+ * core; an idle reverb returns before touching flash. */
 static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_gr_job(uint32_t n)
 {
-    br_fx_track_t *st = &br_gr_state;
-    br_fx_controls_t *c = &br_gr_controls;
-    const int32_t *row[BR_PARTS];
-    uint32_t i, k, p, rows = 0u, prev = br_gr_cur ^ 1u, tail = st->tail_samples;
 #if defined(FM1_DEVICE)
     uint32_t started = fm1_ticks();
 #endif
     if (!br_gr_run) return;
-    /* Never run on unprepared controls or out-of-range allpass positions. */
-    if (!br_gr_key_valid || st->reverb_output_ap_pos[0] >= BR_FX_REVERB_OUTPUT_AP0_LENGTH ||
-        st->reverb_output_ap_pos[1] >= BR_FX_REVERB_OUTPUT_AP1_LENGTH) {
+    /* Never run on undesigned coefficients. */
+    if (!br_gr_key_valid || !br_gr_rv.configured) {
 #if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
         ++br_gr_stats[1];
 #endif
-        st->reverb_output_ap_pos[0] = st->reverb_output_ap_pos[1] = 0u;
-        if (!br_gr_key_valid) return;
+        return;
     }
-    c->reverb_output_ap0_base = br_reverb_output_ap0[0];
-    c->reverb_output_ap1_base = br_reverb_output_ap1[0];
-    if (c->reverb_engine == BR_REVERB_SPACE) {
-        /* The SPACE tank runs from flash; only the tail gating is done here. */
-        BR_FX_PREPARE_INVOKE(br_gr_space_block, n);
-        for (i = 0u; i < n; ++i) {
-            if (br_gr_ev[i] && tail < c->reverb_tail_hold) tail = c->reverb_tail_hold;
-            if (tail) st->tail_storage = 1u;
-            if (tail < FS / 4u) {
-                uint32_t wet_gain = br_fx_tail_gain_below_fade(tail);
-                br_gr_wet[i][0] = br_fx_wet_gain(br_gr_wet[i][0], wet_gain);
-                br_gr_wet[i][1] = br_fx_wet_gain(br_gr_wet[i][1], wet_gain);
-            }
-            if (tail) --tail;
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
-            { uint32_t a = (uint32_t)(br_gr_wet[i][0] < 0 ? -br_gr_wet[i][0] : br_gr_wet[i][0]); if (a > br_gr_stats[4]) br_gr_stats[4] = a; }
-#endif
-        }
-        goto finished;
-    }
-    for (p = 0u; p < BR_PARTS; ++p)
-        if (br_gr_have[prev][p]) row[rows++] = br_gr_send[prev][p];
-    /* Allpass positions, the tail flag and the peak statistic live in locals for the
-     * block and are stored once after it. */
-    uint32_t ap_pos[4] = {br_gr_ap_pos[0], br_gr_ap_pos[1], br_gr_ap_pos[2], br_gr_ap_pos[3]};
-    uint32_t touched = 0u;
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
-    uint32_t peak = br_gr_stats[4];
-#endif
-    for (i = 0u; i < n; ++i) {
-        int32_t rv_l = 0, rv_r = 0, event = 0, in = 0;
-        for (k = 0u; k < rows; ++k) in += row[k][i];
-        {   /* four allpasses (Q12 gains 0.75, 0.75, 0.625, 0.625) */
-#define BR_GR_AP(buf, len, k, g) { int32_t d = buf[ap_pos[k]]; int32_t v = in - ((d * (g)) >> 12); \
-    buf[ap_pos[k]] = v; in = d + ((v * (g)) >> 12); if (++ap_pos[k] == (len)) ap_pos[k] = 0u; }
-            in = br_fx_clip_ram(in, -250000, 250000);
-            BR_GR_AP(br_gr_ap0, BR_GR_AP0_LEN, 0u, 3072)
-            BR_GR_AP(br_gr_ap1, BR_GR_AP1_LEN, 1u, 3072)
-            BR_GR_AP(br_gr_ap2, BR_GR_AP2_LEN, 2u, 2560)
-            BR_GR_AP(br_gr_ap3, BR_GR_AP3_LEN, 3u, 2560)
-#undef BR_GR_AP
-        }
-        /* Makeup gain goes in ahead of the reverb, not after it: the delay lines hold
-         * 16-bit companded values with a dead zone near zero, and a louder signal
-         * through them keeps that noise floor further below the tail. */
-        in = (br_fx_clip_ram(in, -1000000, 1000000) * (int32_t)c->reverb_return_q8) >> 8;
-#if BR_FX_HAS_REVERB_RATE4
-        if (c->reverb_rate4)
-            br_fx_reverb_rate4(st, 0u, in, c, &rv_l, &rv_r BR_FX_TAIL_EVENT_ARG(&event));
-        else
-#endif
-            br_fx_reverb_rate2(st, 0u, in, c, &rv_l, &rv_r BR_FX_TAIL_EVENT_ARG(&event));
-        {
-            uint32_t ramp_frames = br_fx_reverb_ramp_frames();
-            if (st->reverb_rate2_ramp < ramp_frames) {
-#if BR_FX_NATIVE_RATE_CALIBRATION || BR_FX_NATIVE_RATE_48K
-                rv_l = (rv_l * (int32_t)st->reverb_rate2_ramp) / (int32_t)ramp_frames;
-                rv_r = (rv_r * (int32_t)st->reverb_rate2_ramp) / (int32_t)ramp_frames;
-#else
-                rv_l = br_fx_div_pow2(rv_l * (int32_t)st->reverb_rate2_ramp, 5u);
-                rv_r = br_fx_div_pow2(rv_r * (int32_t)st->reverb_rate2_ramp, 5u);
-#endif
-                ++st->reverb_rate2_ramp;
-            }
-        }
-        if (event && tail < c->reverb_tail_hold) tail = c->reverb_tail_hold;
-        touched |= tail;
-        if (tail < FS / 4u) {
-            uint32_t wet_gain = br_fx_tail_gain_below_fade(tail);
-            rv_l = br_fx_wet_gain(rv_l, wet_gain);
-            rv_r = br_fx_wet_gain(rv_r, wet_gain);
-        }
-        br_fx_reverb_output_diffuse(st, c, &rv_l, &rv_r);
-        if (tail) --tail;
-        br_gr_wet[i][0] = rv_l;
-        br_gr_wet[i][1] = rv_r;
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
-        { uint32_t a = (uint32_t)(rv_l < 0 ? -rv_l : rv_l); if (a > peak) peak = a; }
-#endif
-    }
-    for (k = 0u; k < 4u; ++k) br_gr_ap_pos[k] = ap_pos[k];
-    if (touched) st->tail_storage = 1u;
-#if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
-    br_gr_stats[4] = peak;
-#endif
-finished:
-    st->tail_samples = tail;
-    if (!tail && st->tail_storage) br_gr_clear();
+    BR_FX_PREPARE_INVOKE(br_gr_block, n);
+    br_gr_out_seq = br_fx_block_seq;
 #if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
     ++br_gr_stats[0];
-    br_gr_stats[5] = c->reverb_engine; br_gr_stats[6] = (c->reverb_feedback - 14000u) / 130u; br_gr_stats[7] = c->reverb_space;
+    br_gr_stats[5] = br_gr_key[0]; br_gr_stats[6] = br_gr_key[1]; br_gr_stats[7] = br_gr_key[2];
 #endif
 #if defined(FM1_DEVICE)
     started = fm1_ticks() - started;
@@ -5700,14 +4711,16 @@ finished:
 #endif
 }
 
-/* Add the reverb return to the finished mix for frames [base, end). */
+/* Add the reverb return to the finished mix for frames [base, end): only when this
+ * block's reverb job wrote it (the rows hold sends otherwise). */
 static BR_FX_RAM_AUDIO void br_gr_add_range(int32_t *out, uint32_t base, uint32_t end)
 {
-    uint32_t i;
-    if (!br_gr_run) return;
+    uint32_t i, prev = br_gr_cur ^ 1u;
+    const int32_t *wet_l = br_gr_send[prev][BR_GR_WET_L_ROW], *wet_r = br_gr_send[prev][BR_GR_WET_R_ROW];
+    if (!br_gr_run || br_gr_out_seq != br_fx_block_seq) return;
     for (i = base; i < end; ++i) {
-        out[2u * i] += br_gr_wet[i][0];
-        out[2u * i + 1u] += br_gr_wet[i][1];
+        out[2u * i] += wet_l[i];
+        out[2u * i + 1u] += wet_r[i];
     }
 }
 #endif /* BR_FX_GLOBAL_REVERB */
@@ -5788,51 +4801,6 @@ static BR_FX_RAM_AUDIO int br_fx_process_track_job_staged_block(
 #if BR_FX_GLOBAL_REVERB
     br_fx_stage_send_block(st, p, sample_base, progress_core, pan, lfo_final,
         input_bus, mod_out, n, s, cfg, c, &tail_samples, stereo);
-#elif BR_FX_BLOCK_STAGE_SPECIALIZE_REVERB
-    br_fx_stage_reverb_block(st, p, sample_base, progress_core, pan, lfo_start,
-        c->mod_lfo_inc, lfo_final, input_bus, mod, n, s, cfg, c,
-        &tail_samples, stereo);
-#else
-    lfo_phase = lfo_start;
-    for (i = 0u; i < n; ++i) {
-        int32_t rv_l, rv_r, reverb_event = 0;
-        int32_t delayed;
-        lfo_phase += c->mod_lfo_inc;
-        st->lfo_phase = lfo_phase;
-        br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, sample_base + i,
-                             BR_FX_PROGRESS_REVERB);
-        delayed = stereo[i][0];
-#if BR_FX_HAS_REVERB_RATE4
-        if (c->reverb_rate4) {
-            br_fx_reverb_rate4(st, p, delayed, c, &rv_l, &rv_r
-                               BR_FX_TAIL_EVENT_ARG(&reverb_event));
-        }
-#if BR_FX_HAS_REVERB_RATE2
-        else if (c->reverb_rate2) {
-            br_fx_reverb_rate2(st, p, delayed, c, &rv_l, &rv_r
-                               BR_FX_TAIL_EVENT_ARG(&reverb_event));
-        }
-#endif
-        else {
-            (void)br_fx_reverb(st, p, delayed, c, &rv_l, &rv_r
-                               BR_FX_TAIL_EVENT_ARG(&reverb_event));
-        }
-#elif BR_FX_HAS_REVERB_RATE2
-        if (c->reverb_rate2) {
-            br_fx_reverb_rate2(st, p, delayed, c, &rv_l, &rv_r
-                               BR_FX_TAIL_EVENT_ARG(&reverb_event));
-        } else {
-            (void)br_fx_reverb(st, p, delayed, c, &rv_l, &rv_r
-                               BR_FX_TAIL_EVENT_ARG(&reverb_event));
-        }
-#else
-        (void)br_fx_reverb(st, p, delayed, c, &rv_l, &rv_r
-                           BR_FX_TAIL_EVENT_ARG(&reverb_event));
-#endif
-        br_fx_stage_emit_frame(p, i, sample_base, progress_core, pan, st, s, cfg, c,
-            input_bus[i], mod[i], delayed, rv_l, rv_r, stereo[i][1],
-            reverb_event, &tail_samples);
-    }
 #endif
     st->lfo_phase = lfo_final;
     return 1;
@@ -5844,47 +4812,23 @@ static inline __attribute__((always_inline)) void br_fx_stage_clear_memories(
 {
     if (clear_all) clear_delay = clear_reverb = clear_mod = 1u;
     if (clear_delay) {
-        br_fx_clear32((br_fx_clear_word_t *)br_delay_line[p],
+        br_fx_clear32((br_fx_clear_word_t *)BR_POLY_DELAY_LINE(p),
                       sizeof br_delay_line[p] / 4u);
 #if BR_FX_DELAY_RATE2
-        br_fx_delay_storage_reset(st, st->delay_storage_shift);
+        BR_FX_PREPARE_INVOKE(br_fx_delay_storage_reset, st, st->delay_storage_shift);
         st->delay_output_last = 0;
         st->delay_output_xfade_left = 0u;
         st->glitch_half_error = 0u;
 #else
         st->delay_lp = 0;
+        st->delay_hp = 0;
 #endif
     }
-    if (clear_reverb) {
-        br_fx_clear32((br_fx_clear_word_t *)br_room_line[p],
-                      sizeof br_room_line[p] / 4u);
-        br_fx_clear32((br_fx_clear_word_t *)st->room_lp,
-                      sizeof st->room_lp / sizeof(uint32_t));
-        br_fx_reverb_output_ap_reset(p, st);
-#if BR_FX_HAS_REVERB_RATE
-        st->reverb_rate2_phase = 0u;
-        st->reverb_rate2_ramp = 0u;
-        st->reverb_rate2_previous_l = 0;
-        st->reverb_rate2_previous_r = 0;
-        br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate2_input_hist,
-                      sizeof st->reverb_rate2_input_hist / sizeof(uint32_t));
-#if BR_FX_HAS_REVERB_RATE4
-        st->reverb_rate4_phase = 0u;
-        st->reverb_rate4_from_l = 0;
-        st->reverb_rate4_from_r = 0;
-        br_fx_clear32((br_fx_clear_word_t *)st->reverb_rate4_input_hist,
-                      sizeof st->reverb_rate4_input_hist / sizeof(uint32_t));
-#endif
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-        st->reverb_hall_q4_full_history_pos = 0u;
-        st->reverb_hall_q4_half_history_pos = 0u;
-        st->reverb_hall_q4_history_valid = 0u;
-#endif
-#endif
-    }
+    (void)clear_reverb;   /* the shared reverb has no per-track memory */
     if (clear_mod) {
         br_fx_clear32((br_fx_clear_word_t *)br_mod_line[p],
                       sizeof br_mod_line[p] / 4u);
+        st->mod_feedback_last = 0;
         br_fx_clear32((br_fx_clear_word_t *)st->phase_state,
                       sizeof st->phase_state / sizeof(uint32_t));
 #if BR_FX_MOD_RATE2
@@ -5945,17 +4889,15 @@ static BR_FX_RAM_AUDIO int br_fx_process_track_job_staged(
     const br_fx_controls_t *c = &br_fx_controls[p];
 #endif
     uint32_t i;
-    uint32_t transition_delay, transition_reverb, transition_mod;
+    uint32_t transition_reverb, transition_mod;
     uint32_t active_wet, restart_possible = 0u;
 
     if (!n) return 1;
     if (!input_bus || n > BR_BLOCK) return 0;
-    transition_delay = st->previous_delay_wet && !s->delay;
-#if BR_FX_GLOBAL_REVERB
-    transition_reverb = 0u;
-#else
-    transition_reverb = st->previous_reverb_wet && !s->reverb;
-#endif
+    /* DELAY MIX reaching 0 is not an edge: the send stops and the unity return lets
+     * the tail already in the line decay (the delay stage skips itself once the
+     * line holds only zeros). */
+    transition_reverb = 0u;   /* the shared reverb has no per-track edge */
     transition_mod = st->previous_mod_mix && !cfg->mod_mix;
     active_wet = s->delay || s->reverb || cfg->mod_mix;
     if (st->tail_storage && st->tail_samples < n && active_wet) {
@@ -5971,8 +4913,7 @@ static BR_FX_RAM_AUDIO int br_fx_process_track_job_staged(
     /* A silent block after the tail has run out produces no output worth
      * computing: emit silence and leave the storage for the existing
      * clear-on-next-input path. Effect transitions still take the full path. */
-    if (!st->tail_samples && !transition_delay && !transition_reverb &&
-        !transition_mod) {
+    if (!st->tail_samples && !transition_reverb && !transition_mod) {
         for (i = 0u; i < n && !input_bus[i]; ++i) {}
         if (i == n) {
             for (i = 0u; i < n; ++i)
@@ -5985,7 +4926,9 @@ static BR_FX_RAM_AUDIO int br_fx_process_track_job_staged(
         }
     }
 #endif
-    if (enabled && !transition_delay && !transition_reverb && !transition_mod &&
+    /* A disabled track whose tail outlasts this block cannot reach the bypass
+     * point inside it, so it is staged as one block like an enabled one. */
+    if ((enabled || st->tail_samples >= n) && !transition_reverb && !transition_mod &&
         !restart_possible) {
 #if BR_FX_STAGED_COMPACT_CALL_ABI
         return br_fx_process_track_job_staged_block(p, input_bus, n, 0u, pan,
@@ -6009,7 +4952,7 @@ static BR_FX_RAM_AUDIO int br_fx_process_track_job_staged(
      * once or more per sample. */
     for (i = 0u; i < n; ++i) {
         int32_t input = input_bus[i];
-        uint32_t clear_tail, clear_delay, clear_reverb, clear_mod;
+        uint32_t clear_tail, clear_reverb, clear_mod;
         if (!enabled && !st->tail_samples) {
             br_fx_stage_dry_sample(p, i, progress_core, pan,
 #if BR_FX_PAN_COEFF_CACHE
@@ -6021,17 +4964,12 @@ static BR_FX_RAM_AUDIO int br_fx_process_track_job_staged(
             continue;
         }
         clear_tail = !st->tail_samples && st->tail_storage && input && active_wet;
-        clear_delay = st->previous_delay_wet && !s->delay;
-#if BR_FX_GLOBAL_REVERB
         clear_reverb = 0u;
-#else
-        clear_reverb = st->previous_reverb_wet && !s->reverb;
-#endif
         clear_mod = st->previous_mod_mix && !cfg->mod_mix;
-        if (clear_tail || clear_delay || clear_reverb || clear_mod) {
-            br_fx_stage_clear_memories(p, st, clear_tail, clear_delay,
+        if (clear_tail || clear_reverb || clear_mod) {
+            br_fx_stage_clear_memories(p, st, clear_tail, 0u,
                                        clear_reverb, clear_mod);
-            if (!enabled && (clear_delay || clear_reverb || clear_mod))
+            if (!enabled && (clear_reverb || clear_mod))
                 st->tail_samples = 0u;
         }
 #if BR_FX_STAGED_COMPACT_CALL_ABI
@@ -6075,7 +5013,6 @@ BR_AUDIO_API __attribute__((minsize, noinline)) void br_fx_init(void)
 {
     uint32_t p;
 #if BR_FX_STABLE_CONTROL_CACHE
-    br_fx_warm_pending = 0u;
     br_fx_control_key_valid = 0u;
 #endif
 #if defined(BR_DIAGNOSTIC_TEST) && defined(BR_SPLIT_AUDIO)
@@ -6087,17 +5024,14 @@ BR_AUDIO_API __attribute__((minsize, noinline)) void br_fx_init(void)
         br_paced_clear_used = 1u;
         br_paced_clear_active = 1u;
         br_paced_clear_buffer(br_delay_line, sizeof br_delay_line);
-        br_paced_clear_buffer(br_room_line, sizeof br_room_line);
+        br_paced_clear_buffer(br_gr_pool16, sizeof br_gr_pool16);
         br_paced_clear_buffer(br_mod_line, sizeof br_mod_line);
     } else
 #endif
     {
         memset(br_delay_line, 0, sizeof br_delay_line);
-        memset(br_room_line, 0, sizeof br_room_line);
         memset(br_mod_line, 0, sizeof br_mod_line);
     }
-    memset(br_reverb_output_ap0, 0, sizeof br_reverb_output_ap0);
-    memset(br_reverb_output_ap1, 0, sizeof br_reverb_output_ap1);
 #if defined(FM1_DEVICE) || defined(BR_PACED_CLEAR_HOST_TEST)
     if (br_paced_clear_active) br_paced_clear_buffer(br_fx_track, sizeof br_fx_track);
     else
@@ -6105,32 +5039,22 @@ BR_AUDIO_API __attribute__((minsize, noinline)) void br_fx_init(void)
         memset(br_fx_track, 0, sizeof br_fx_track);
 #if BR_FX_GLOBAL_REVERB
     memset(&br_gf, 0, sizeof br_gf);
-    memset(&br_gr_state, 0, sizeof br_gr_state);
-    memset(&br_gr_controls, 0, sizeof br_gr_controls);
+    rv2_init(&br_gr_rv, br_gr_pool16, br_gr_pool32);   /* clears its pools; idle */
+    br_gr_rv.sync_pre = br_gr_sync_pre;
+    memset(br_gr_sync_pre, 0, sizeof br_gr_sync_pre);
+    br_gr_sync_key = 0xffffffffu;
     memset(br_gr_send, 0, sizeof br_gr_send);
-    memset(br_gr_wet, 0, sizeof br_gr_wet);
     memset(br_gr_have, 0, sizeof br_gr_have);
-    memset(br_gr_ap0, 0, sizeof br_gr_ap0); memset(br_gr_ap1, 0, sizeof br_gr_ap1);
-    memset(br_gr_ap2, 0, sizeof br_gr_ap2); memset(br_gr_ap3, 0, sizeof br_gr_ap3);
-    memset(br_gr_ap_pos, 0, sizeof br_gr_ap_pos);
-    br_gr_key_valid = br_gr_wanted = br_gr_run = br_gr_cur = 0u;
+    br_gr_key_valid = br_gr_wanted = br_gr_run = br_gr_cur = br_gr_duck = br_gr_lfo_frames = 0u;
+    br_gr_out_seq = br_fx_block_seq - 1u;
 #if !defined(FM1_DEVELOPMENT_DIAGNOSTICS) || FM1_DEVELOPMENT_DIAGNOSTICS
     memset((void *)br_gr_stats, 0, sizeof br_gr_stats);
 #else
     br_gr_cost_ticks = 0u;
 #endif
-    br_gr_state.reverb_rate2_ramp = br_fx_reverb_ramp_frames();
 #endif
     br_fx_fusion_pending = 0u;
-    for (p = 0; p < BR_PARTS; ++p) {
-        br_fx_fusion_done[p] = 0u;
-        br_fx_controls[p].reverb_output_ap0_base = br_reverb_output_ap0[p];
-        br_fx_controls[p].reverb_output_ap1_base = br_reverb_output_ap1[p];
-    }
-#if BR_FX_HAS_REVERB_RATE
-    for (p = 0u; p < BR_PARTS; ++p)
-        br_fx_track[p].reverb_rate2_ramp = br_fx_reverb_ramp_frames();
-#endif
+    for (p = 0; p < BR_PARTS; ++p) br_fx_fusion_done[p] = 0u;
 #if BR_FX_MOD_RATE2
     for (p = 0u; p < BR_PARTS; ++p) br_fx_track[p].mod_rate2_phase = 2u;
 #endif
@@ -6169,73 +5093,22 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_process_track_job_im
 #if BR_FX_GLOBAL_REVERB
     br_gr_have[br_gr_cur][p] = br_fx_controls[p].reverb_wet != 0u;   /* silent tracks clear it */
 #endif
-    if (br_fx_sound_at(p)->drive) {          /* DRIVE comes first in the chain */
-        uint32_t k;
-        for (k = 0u; k < n && !input_bus[k]; ++k) {}   /* a silent track costs nothing */
-        if (k < n) {
-            BR_FX_PREPARE_INVOKE(br_fx_drive_block, p, input_bus, br_fx_drive_buf[p], n);
-            input_bus = br_fx_drive_buf[p];
-        }
-    }
+    if ((br_fx_sound_at(p)->drive || br_fx_track[p].drive_send) &&   /* DRIVE first; at send 0 one more block fades it */
+        BR_FX_PREPARE_INVOKE(br_fx_drive_block, p, input_bus, br_fx_drive_buf[p], n))
+        input_bus = br_fx_drive_buf[p];
     br_fx_progress_store(br_fx_progress_retained.words, progress_core, p, 0u, BR_FX_PROGRESS_ENTRY);
     const uint32_t enabled = br_fx_job_enabled[p];
-    const uint32_t pan = br_fx_job_pan[p];
     st = &br_fx_track[p];
     s = br_fx_sound_at(p);
     cfg = br_fx_config_at(p);
     c = &br_fx_controls[p];
-#if BR_FX_HAS_REVERB_RATE
-    {
-        uint32_t rate2_transition = st->previous_reverb_rate2 != c->reverb_rate2;
-        uint32_t engine_transition = st->previous_reverb_engine != c->reverb_engine;
-#if BR_FX_HAS_REVERB_RATE4
-        uint32_t rate4_transition = st->previous_reverb_rate4 != c->reverb_rate4;
-        uint32_t rate4_active = st->previous_reverb_rate4 || c->reverb_rate4;
-#else
-        uint32_t rate4_transition = 0u;
-        uint32_t rate4_active = 0u;
-#endif
-        if (rate2_transition || rate4_transition ||
-            (engine_transition && (st->previous_reverb_rate2 || c->reverb_rate2 ||
-                                   rate4_active))) {
-            uint32_t line;
-            for (line = 0u; line < 4u; ++line)
-                if (c->reverb_length[line])
-                    st->room_pos[line] %= c->reverb_length[line];
-            st->reverb_rate2_phase = 0u;
-            st->reverb_rate2_ramp = 0u;
-            st->reverb_rate2_previous_l = 0;
-            st->reverb_rate2_previous_r = 0;
-            st->reverb_rate2_input_hist[0] = 0;
-            st->reverb_rate2_input_hist[1] = 0;
-            st->reverb_rate2_input_hist[2] = 0;
-            st->reverb_rate2_input_hist[3] = 0;
-            st->reverb_rate2_input_hist[4] = 0;
-            st->reverb_rate2_input_hist[5] = 0;
-#if BR_FX_HAS_REVERB_RATE4
-            st->reverb_rate4_phase = 0u;
-            st->reverb_rate4_from_l = 0;
-            st->reverb_rate4_from_r = 0;
-            st->reverb_rate4_input_hist[0] = 0;
-            st->reverb_rate4_input_hist[1] = 0;
-            st->reverb_rate4_input_hist[2] = 0;
-            st->reverb_rate4_input_hist[3] = 0;
-            st->reverb_rate4_input_hist[4] = 0;
-            st->reverb_rate4_input_hist[5] = 0;
-            st->previous_reverb_rate4 = c->reverb_rate4;
-#if BR_FX_HALL_FIR_MIRROR_HISTORY
-            st->reverb_hall_q4_full_history_pos = 0u;
-            st->reverb_hall_q4_half_history_pos = 0u;
-            st->reverb_hall_q4_history_valid = 0u;
-#endif
-#endif
-        }
-        st->previous_reverb_rate2 = c->reverb_rate2;
-        st->previous_reverb_engine = c->reverb_engine;
-    }
-#endif
+    /* A PAN change: run this block at centre, then ramp (br_fx_pan_ramp). */
+    const uint32_t pan_to = ((uint32_t)c->pan_left_q15 << 16 | c->pan_right_q15) ^ 0x80008000u;
+    const uint32_t pan_from = br_fx_pan_prev[p];
+    const uint32_t pan = pan_from != pan_to ? 64u : br_fx_job_pan[p];
 #if BR_FX_MOD_RATE2
     if (st->previous_mod_engine != c->mod_engine) {
+        st->mod_feedback_last = 0;
         st->mod_rate2_phase = 2u;
         st->mod_rate2_previous_output = 0;
         st->mod_rate2_input_history[0] = 0;
@@ -6295,11 +5168,12 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_process_track_job_im
         }
         if (!st->tail_samples && st->tail_storage && input &&
             (s->delay || s->reverb || cfg->mod_mix)) {
-            br_fx_clear32((br_fx_clear_word_t *)br_delay_line[p], sizeof br_delay_line[p] / 4u);
+            br_fx_clear32((br_fx_clear_word_t *)BR_POLY_DELAY_LINE(p), sizeof br_delay_line[p] / 4u);
             br_fx_clear32((br_fx_clear_word_t *)br_room_line[p], sizeof br_room_line[p] / 4u);
             br_fx_clear32((br_fx_clear_word_t *)br_mod_line[p], sizeof br_mod_line[p] / 4u);
             br_fx_reverb_output_ap_reset(p, st);
             br_fx_clear32((br_fx_clear_word_t *)st->room_lp, sizeof st->room_lp / 4u);
+            st->mod_feedback_last = 0;
             br_fx_clear32((br_fx_clear_word_t *)st->phase_state, sizeof st->phase_state / 4u);
 #if BR_FX_MOD_RATE2
             br_fx_clear32((br_fx_clear_word_t *)st->mod_rate2_input_history,
@@ -6308,27 +5182,17 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_process_track_job_im
             st->mod_rate2_phase = 2u;
 #endif
 #if BR_FX_DELAY_RATE2
-            br_fx_delay_storage_reset(st, st->delay_storage_shift);
+            BR_FX_PREPARE_INVOKE(br_fx_delay_storage_reset, st, st->delay_storage_shift);
             st->delay_output_last = 0;
             st->delay_output_xfade_left = 0u;
             st->glitch_half_error = 0u;
 #else
             st->delay_lp = 0;
+            st->delay_hp = 0;
 #endif
             st->tail_storage = 0;
         }
-        if (st->previous_delay_wet && !s->delay) {
-            br_fx_clear32((br_fx_clear_word_t *)br_delay_line[p], sizeof br_delay_line[p] / 4u);
-#if BR_FX_DELAY_RATE2
-            br_fx_delay_storage_reset(st, st->delay_storage_shift);
-            st->delay_output_last = 0;
-            st->delay_output_xfade_left = 0u;
-            st->glitch_half_error = 0u;
-#else
-            st->delay_lp = 0;
-#endif
-            if (!enabled) st->tail_samples = 0;
-        }
+        /* DELAY MIX reaching 0 keeps the line: its tail decays through the unity return. */
         if (st->previous_reverb_wet && !s->reverb) {
             br_fx_clear32((br_fx_clear_word_t *)br_room_line[p], sizeof br_room_line[p] / 4u);
             br_fx_clear32((br_fx_clear_word_t *)st->room_lp, sizeof st->room_lp / 4u);
@@ -6365,6 +5229,7 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_process_track_job_im
         }
         if (st->previous_mod_mix && !cfg->mod_mix) {
             br_fx_clear32((br_fx_clear_word_t *)br_mod_line[p], sizeof br_mod_line[p] / 4u);
+            st->mod_feedback_last = 0;
             br_fx_clear32((br_fx_clear_word_t *)st->phase_state, sizeof st->phase_state / 4u);
 #if BR_FX_MOD_RATE2
             br_fx_clear32((br_fx_clear_word_t *)st->mod_rate2_input_history,
@@ -6462,6 +5327,10 @@ static BR_FX_RAM_AUDIO __attribute__((noinline)) void br_fx_process_track_job_im
 #endif
 #if BR_FX_BLOCK_STAGE_PIPELINE
 track_job_complete:
+    if (pan_from != pan_to) {
+        BR_FX_PREPARE_INVOKE(br_fx_pan_ramp, br_fx_track_stereo[p], n, pan_from, pan_to);
+        br_fx_pan_prev[p] = pan_to;
+    }
 #endif
 #if BR_FX_GLOBAL_REVERB
     if (p == BR_GR_HOST && n && br_gr_separate_seq != br_fx_block_seq) br_gr_job(n);
@@ -6505,6 +5374,18 @@ BR_FX_RAM_AUDIO void br_fx_fusion_process_track(uint32_t p,
     uint32_t core = fm1_fault_diag_read_cpu_id();
     if (!br_fx_fusion_pending || p >= BR_PARTS || core > 1u ||
         (n && !input) || n != br_fx_job_n) return;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+    if (br_fx_poly_mode && p != br_fx_poly_part) {
+        memset(br_fx_track_stereo[p], 0, n * sizeof br_fx_track_stereo[p][0]);
+        br_fx_track_silent_seq[p] = br_fx_block_seq;
+#if BR_FX_GLOBAL_REVERB
+        br_gr_have[br_gr_cur][p] = 0u;
+        if (p == BR_GR_HOST && n && br_gr_separate_seq != br_fx_block_seq) br_gr_job(n);
+#endif
+        br_fx_fusion_done[p] = 1u;
+        return;
+    }
+#endif
     if (core == 1u) br_fx_process_track_input_cpu1(p, input, n
                                                    );
     else br_fx_process_track_job_impl(p, input, n
@@ -6542,7 +5423,8 @@ uint32_t br_fx_shared_reverb_cost(void) { return 0u; }
 void br_fx_fusion_shared_reverb(uint32_t n) { (void)n; }
 #endif
 
-BR_FX_RAM_AUDIO uint32_t br_fx_fusion_prepare(
+/* Once per block; calls only the (XIP) prepare, so it shares its placement. */
+BR_FX_PREPARE_CODE uint32_t br_fx_fusion_prepare(
     int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n)
 {
     uint32_t p;
@@ -6692,8 +5574,11 @@ static inline __attribute__((always_inline)) void br_fx_scale_q12_clip_range(
 BR_AUDIO_API int16_t *br_fx_echo_line(uint32_t part, uint32_t *samples)
 {
     if (part >= BR_PARTS) return 0;
+#if defined(BR_POLY_SCHEDULER_EXPERIMENT) && BR_POLY_SCHEDULER_EXPERIMENT
+    if (br_fx_poly_loaned) { *samples = 0u; return 0; }
+#endif
     *samples = BR_FX_DELAY_SAMPLES;
-    return br_delay_line[part];
+    return BR_POLY_DELAY_LINE(part);
 }
 
 BR_FX_RAM_AUDIO BR_AUDIO_API uint32_t br_fx_worker_track_batch(void *opaque_batch)
@@ -6723,16 +5608,8 @@ BR_FX_RAM_AUDIO BR_AUDIO_API uint32_t br_fx_worker_track_batch(void *opaque_batc
 #if BR_FX_GLOBAL_REVERB
         gr_active = br_gr_run;
 #endif
-        if (!master_active && !br_fx_finish_stream_job.scale
-#if BR_FX_GLOBAL_REVERB
-            && !gr_active
-#endif
-            ) {
-#if defined(BR_SOURCE_QUEUE_TEST) && defined(BR_FX_STREAM_TEST_CLOCK)
-            br_fx_stream_test_done();
-#endif
-            return 1u;
-        }
+        /* No early return when nothing is active: the master limiter below
+         * needs the whole block. */
         while (base < br_fx_finish_stream_job.n) {
             uint32_t end = base + 16u;
             if (end > br_fx_finish_stream_job.n) end = br_fx_finish_stream_job.n;
@@ -6768,17 +5645,20 @@ BR_FX_RAM_AUDIO BR_AUDIO_API uint32_t br_fx_worker_track_batch(void *opaque_batc
                 br_fx_master_work_ticks += fm1_ticks() - master_started;
 #endif
             }
-#if BR_FX_STREAM_OUTPUT_SCALE
-            if (br_fx_finish_stream_job.scale)
-                br_fx_scale_q12_clip_range(br_fx_finish_stream_job.out + 2u * base,
-                                           2u * (end - base),
-                                           (uint32_t)br_fx_finish_stream_job.gain_q12);
-#endif
 #if defined(BR_SOURCE_QUEUE_TEST) && defined(BR_FX_STREAM_TEST_CLOCK)
             br_fx_stream_test_after_range(end);
 #endif
             base = end;
         }
+        /* Master limiter over the whole block, then master volume (which
+         * therefore no longer runs per slice). */
+        br_master_limit_block(br_fx_finish_stream_job.out, br_fx_finish_stream_job.n);
+#if BR_FX_STREAM_OUTPUT_SCALE
+        if (br_fx_finish_stream_job.scale)
+            br_fx_scale_q12_clip_range(br_fx_finish_stream_job.out,
+                                       2u * br_fx_finish_stream_job.n,
+                                       (uint32_t)br_fx_finish_stream_job.gain_q12);
+#endif
 #if defined(BR_SOURCE_QUEUE_TEST) && defined(BR_FX_STREAM_TEST_CLOCK)
         br_fx_stream_test_done();
 #endif
@@ -6975,6 +5855,28 @@ static void br_fx_meter_capture(int32_t bus[BR_PARTS][BR_BLOCK], uint32_t n, uin
     RING_PUBLISH();
 }
 
+#if defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO) && defined(BR_SPLIT_AUDIO)
+/* CPU0's wait for the streamed master FX, from flash (called through the RAM
+ * finish block's volatile pointer): at least min_ticks, otherwise until the
+ * half's source deadline (audio_deadline.h br_audio_stream_wait_ticks). A failure
+ * is recorded for 0xB2: site, and the budget waited (bit 31: CPU1 itself gave up,
+ * a 17,415-tick stall waiting for one of CPU0's mix slices). */
+static __attribute__((noinline)) uint32_t br_fx_stream_wait(uint32_t sequence, uint32_t min_ticks,
+                                                             uint32_t *result)
+{
+    uint32_t budget = br_audio_stream_wait_ticks(br_pipeline_source_deadline_valid,
+                                                 br_pipeline_source_deadline_tick, fm1_ticks());
+    uint32_t status;
+    if (budget < min_ticks) budget = min_ticks;
+    status = fm1_cpu1_worker_wait(sequence, budget, result);
+    if (status != FM1_CPU1_WORKER_OK || *result != 1u) {
+        BR_AUDIO_FAULT_SITE(BR_AUDIO_FAULT_STREAM);
+        br_audio_fault_site[2] = budget | (status == FM1_CPU1_WORKER_OK ? 0x80000000u : 0u);
+    }
+    return status;
+}
+#endif
+
 static BR_FX_RAM_AUDIO void br_fx_finish_block(
     int32_t bus[BR_PARTS][BR_BLOCK], int32_t *out, uint32_t n,
     uint32_t comp_active
@@ -7003,7 +5905,11 @@ static BR_FX_RAM_AUDIO void br_fx_finish_block(
     uint32_t (* volatile stream_submit_fn)(void *, uint32_t *) =
         fm1_cpu1_worker_submit_fx_batch;
     uint32_t (* volatile stream_wait_fn)(uint32_t, uint32_t, uint32_t *) =
+#if defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO) && defined(BR_SPLIT_AUDIO)
+        br_fx_stream_wait;   /* XIP: budget to the deadline, fault record */
+#else
         fm1_cpu1_worker_wait;
+#endif
     uint32_t (* volatile stream_abort_fn)(void) = fm1_cpu1_worker_abort_hold_reset;
 #if defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO)
     uint32_t on_c0 = fm1_fault_diag_read_cpu_id() == 0u;
@@ -7246,11 +6152,11 @@ static BR_FX_RAM_AUDIO void br_fx_finish_block(
 #if BR_FX_FINISH_MASTER_STREAM && \
     ((defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO)) || defined(BR_SOURCE_QUEUE_TEST))
     if (stream_active) {
-        /* Diagnostic: permit 1,000 extra T4 ticks (41.7 us at 24 MHz) for
-         * streamed master FX completion. The prior cold key press timed out
-         * at 17,417 ticks against the old 17,415-tick limit. This only changes
-         * the wait guard; successful DSP output and controls are unchanged. */
-        uint32_t stream_status = stream_wait_fn(stream_sequence, 18415u, &stream_result);
+        /* At least 18,415 ticks, on the unit until the half's source deadline
+         * (br_fx_stream_wait). Only the wait guard changes; successful DSP
+         * output and controls are unchanged. */
+        uint32_t stream_status = stream_wait_fn(stream_sequence,
+            BR_AUDIO_STREAM_WAIT_MIN_TICKS, &stream_result);
         if (stream_status != FM1_CPU1_WORKER_OK || stream_result != 1u) {
             br_audio_source_worker_fault = 1u;
             (void)stream_abort_fn();
@@ -7272,6 +6178,10 @@ static BR_FX_RAM_AUDIO void br_fx_finish_block(
 #if !BR_FX_FINISH_MASTER_FUSE
     br_master_fx_process(out, n);
 #endif
+#if BR_FX_FINISH_MASTER_STREAM
+    if (!stream_active) /* the stream job limits on CPU1 */
+#endif
+        br_master_limit_block(out, n);
 }
 
 static BR_FX_RAM_AUDIO void br_fx_mute_block(int32_t *out, uint32_t n)
@@ -7318,7 +6228,7 @@ static BR_FX_RAM_AUDIO void br_fx_process_ram(int32_t bus[BR_PARTS][BR_BLOCK], i
 #if BR_FX_MASTER_FRAME_INLINE_FINISH
     if (dry_center && !comp_active) {
         /* Preserve detector reset before the dry-center block finishes. */
-        if (n) br_comp_reset_detector();
+        if (n) BR_FX_PREPARE_INVOKE(br_comp_reset_detector);
         br_fx_finish_block(bus, out, n, 0u, 1u);
         return;
     }
@@ -7326,7 +6236,7 @@ static BR_FX_RAM_AUDIO void br_fx_process_ram(int32_t bus[BR_PARTS][BR_BLOCK], i
     if (dry_center && !comp_active) {
         /* Keep each track's signed division before summing: combining the
          * divisions would change truncation for negative or quiet samples. */
-        if (n) br_comp_reset_detector();
+        if (n) BR_FX_PREPARE_INVOKE(br_comp_reset_detector);
 #if BR_FX_FINISH_MASTER_FUSE
         {
         uint32_t master_active = BR_FX_MASTER_PREPARE_TARGET(
@@ -7387,6 +6297,7 @@ static BR_FX_RAM_AUDIO void br_fx_process_ram(int32_t bus[BR_PARTS][BR_BLOCK], i
                 }
                 if (!cpu0_ok || status != FM1_CPU1_WORKER_OK || worker_result != 1u) {
                     br_audio_source_worker_fault = 1u;
+                    BR_AUDIO_FAULT_SITE(BR_AUDIO_FAULT_FX_BATCH);
                     (void)abort_fn();
                     /* This routine runs from .ram_audio. Read the HAL's
                      * sticky ownership word directly so the uncontained
@@ -7420,9 +6331,9 @@ BR_AUDIO_API void br_fx_process(int32_t bus[BR_PARTS][BR_BLOCK], int32_t *out, u
 {
     if (n > BR_BLOCK) n = BR_BLOCK;
 #if defined(FM1_DEVICE) && defined(BR_CPU1_AUDIO)
-    extern volatile uint32_t fm1_cpu1_worker_fault;
     uint32_t i;
-    if (fm1_cpu1_worker_fault || br_audio_source_worker_fault) {
+    /* Only this half's failure mutes; a contained (held) C1 is not one. */
+    if (br_audio_source_worker_fault) {
         for (i = 0; i < n; ++i) {
             out[2u * i] = 0;
             out[2u * i + 1u] = 0;
@@ -7623,7 +6534,8 @@ BR_AUDIO_API int br_fx_quiet(void)
     uint32_t p;
     for (p = 0; p < BR_PARTS; ++p) if (br_fx_track[p].tail_samples) return 0;
 #if BR_FX_GLOBAL_REVERB
-    if (br_gr_state.tail_samples) return 0;
+    if (!br_gr_rv.idle) return 0;
 #endif
+    /* filter_tail also covers the master ladder (see br_master_ladder_frame). */
     return br_master_state.filter_tail == 0u && br_master_state.wow_tail == 0u;
 }

@@ -6,11 +6,11 @@ static int flash_worker_park(void) { return 0; }
 static int flash_worker_resume(void) { return 0; }
 static int st_read(uint32_t off,void *dst,uint32_t n) {
     if(host_project_fail==3 || !FL_IN(off,n,0x97000u,0xb1000u))return -1;
-    memcpy(dst,host_project_flash+off-0x97000u,n);return 0;
+    memcpy(dst,host_project_flash+(off-0x97000u),n);return 0;
 }
 static int fl_erase4k(uint32_t off,uint32_t *took) {
     if(host_project_fail==1 || (off&4095u) || !FL_IN(off,4096u,0x97000u,0xb1000u))return -1;
-    memset(host_project_flash+off-0x97000u,0xff,4096);*took=1;return 0;
+    memset(host_project_flash+(off-0x97000u),0xff,4096);*took=1;return 0;
 }
 static int fl_write(uint32_t off,const uint8_t *src,uint32_t n) {
     uint32_t i;

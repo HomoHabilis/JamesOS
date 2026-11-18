@@ -4,13 +4,15 @@
 
   tools/release_tag.py [--tag TAG] [--commit SHA]
 
-Tags look like v1.0a-midi-2150: the JamesOS version, then the build number,
-which is also the package identity (FM-1_926 + build, here FM-1_9262150).
+Tags look like v1.0b-midi-2151: the upstream JamesOS version this fork is
+based on (VERSION), then the build number, which is also the package identity
+(FM-1_926 + build, here FM-1_9262151). Upstream 1.0b uses FM-1_967 + its own
+build numbers, so the fork's identities never collide with upstream's.
 
 - With --tag: an existing tag is released as it is (its own commit); a new one
   is created on --commit (default HEAD).
-- Without --tag: a release tag already on --commit is reused; otherwise the next
-  build after the highest existing one (at least 2150, above upstream's 2108).
+- Without --tag: a release tag already on --commit is reused; otherwise VERSION
+  with the next build after the highest existing one (at least 2150).
 
 Prints key=value lines for $GITHUB_OUTPUT: tag, version, build, product, commit, create.
 """
@@ -21,7 +23,7 @@ import sys
 
 TAG = re.compile(r"v(?P<version>\d+\.\d+[a-z]?)-midi-(?P<build>\d{4})")
 FIRST_BUILD = 2150
-DEFAULT_VERSION = "1.0a"
+VERSION = "1.0b"                # upstream JamesOS release this source is based on
 
 
 def git(*args):
@@ -43,7 +45,7 @@ def pick(requested, commit, tags):
     """The release to make: (tag, commit, create)."""
     if requested:
         if not TAG.fullmatch(requested):
-            raise ValueError(f"tag {requested!r} does not look like v1.0a-midi-2150")
+            raise ValueError(f"tag {requested!r} does not look like v{VERSION}-midi-2150")
         if requested in tags:
             return requested, tags[requested], False
         build = TAG.fullmatch(requested)["build"]
@@ -54,15 +56,10 @@ def pick(requested, commit, tags):
     here = sorted((t for t, c in tags.items() if c == commit), key=lambda t: int(TAG.fullmatch(t)["build"]))
     if here:
         return here[-1], commit, False
-    if tags:
-        latest = max(tags, key=lambda t: int(TAG.fullmatch(t)["build"]))
-        build = max(FIRST_BUILD, int(TAG.fullmatch(latest)["build"]) + 1)
-        version = TAG.fullmatch(latest)["version"]
-    else:
-        build, version = FIRST_BUILD, DEFAULT_VERSION
+    build = max([FIRST_BUILD] + [int(TAG.fullmatch(t)["build"]) + 1 for t in tags])
     if build > 9999:
         raise ValueError("no build numbers left")
-    return f"v{version}-midi-{build}", commit, True
+    return f"v{VERSION}-midi-{build}", commit, True
 
 
 def main():

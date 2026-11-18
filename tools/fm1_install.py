@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
-"""Install a Felucca package (.fwsc) on an FM-1 over USB-MIDI.
+"""Install a Felucca package (.fwsc) on an FM-1 or an SMK-37 Pro over USB-MIDI.
 
 The same update as the web installer (web/fm1ota.js): step 1, the
 running firmware reads parts of the package and starts the update loader;
@@ -12,11 +12,19 @@ the FM-1 restarts and the installed identity is checked.
   fm1_install.py PACKAGE.fwsc [--port NAME] [--yes] [--force]
   fm1_install.py --info [--port NAME]
 
-If the FM-1 is still in update mode (an earlier install was cut off), the
+The device is the one whose model (FM-1, SMK-37 Pro) matches the package: every
+candidate port answers the identity handshake first, and a package is never
+offered to a device of the other model. --port picks the port: a port whose
+name is exactly NAME (ignoring case and a trailing Windows port number) wins
+over ports that merely contain NAME, so "--port FM-1" means the FM-1 even when
+an SMK-37 Pro port called "FM-1 JamesOS" is also connected. --info lists every
+device that answers.
+
+If the device is still in update mode (an earlier install was cut off), the
 install finishes the write. Needs mido with python-rtmidi.
 
-Exit codes: 0 done, 1 cancelled or other error, 2 bad arguments or package,
-3 FM-1 not found, 4 connection lost or the device stopped, 5 timeout (no
+Exit codes: 0 done, 1 cancelled or other error, 2 bad arguments or package, or
+several devices of the package's model (choose one with --port), 3 FM-1 not found, 4 connection lost or the device stopped, 5 timeout (no
 loader / no restart), 6 wrong model, another identity after the install, or the
 FM-1 is in another firmware's update mode. An update-mode device is resumed only
 when its loader identity exactly matches the loader independently verified in
@@ -40,14 +48,14 @@ UPGRADE = bytes([0xF0, 0x22, 0x24, 0x35, 0x7F, 0xF7])
 FINISH_CHECK, FINISH_WRITE = 0xE0000000, 0xF0000000
 MAXDATA = 512
 BLOCKS, BLK, KEEP = 20, 0x30, 0x2F
-PORT_RE = re.compile(r"fm-1|jamesos|felucca|ota|composite|sinco|usb-midi", re.I)   # never probe other gear
+PORT_RE = re.compile(r"smk|fm-1|jamesos|felucca|ota|composite|sinco|usb-midi", re.I)   # never probe other gear
 
 # seconds; the tests shorten them
 DELAY = {"open": 0.3, "start": 2.0, "reply": 0.01, "loader": 3.0, "reboot": 3.0, "retry": 1.0,
          "poll": 1.0, "hs": 1.0, "idle_check": 8.0, "idle_write": 180.0,
          "wait_loader": 30.0, "wait_reboot": 40.0}
 
-EXIT = {"usage": 2, "badpkg": 2, "notfound": 3, "model": 6, "lost": 4, "stopped": 4, "badreq": 4,
+EXIT = {"usage": 2, "badpkg": 2, "ambiguous": 2, "notfound": 3, "model": 6, "lost": 4, "stopped": 4, "badreq": 4,
         "noloader": 5, "noreturn": 5, "mismatch": 6, "foreign": 6}
 
 
@@ -196,11 +204,6 @@ class MidoLink:
 
 class MidoBackend:
     def __init__(self):
-        # RtMidi's CoreMIDI constructor can terminate the entire interpreter
-        # when macOS denies client creation inside a restricted Codex process.
-        # Fail in Python before entering that native constructor.
-        if os.environ.get("CODEX_SANDBOX") == "seatbelt":
-            raise RuntimeError("CoreMIDI requires device access; run this FM-1 tool outside the restricted Codex sandbox")
         import mido
         self.mido = mido
 
@@ -212,6 +215,20 @@ class MidoBackend:
 
     def open(self, in_name, out_name):
         return MidoLink(self, in_name, out_name)
+
+
+def _port_base(name):
+    """a port name without case and without the number Windows appends to each port"""
+    return re.sub(r"\s+\d+$", "", name).casefold()
+
+
+def port_matches(port, names):
+    """-> (exact, partial): the ports named exactly `port` (ignoring case and a Windows port
+    number), and the other ports whose names contain it. An exact match wins."""
+    want = port.casefold()
+    exact = [n for n in names if n.casefold() == want or _port_base(n) == want]
+    partial = [n for n in names if n not in exact and want in n.casefold()]
+    return exact, partial
 
 
 def pair_output(name, outs):
@@ -251,37 +268,78 @@ class Updater:
     def __init__(self, backend, port=None):
         self.backend = backend
         self.port = port
+        self.prefer = None
 
-    def candidates(self, only_port):
+    def candidates(self, only_port, prefer=None):
+        """port names to try, in order. With --port: the exact match(es), else the ports
+        containing the name; with only_port=False (waiting for the loader or the restart)
+        the other device-like ports follow, since a port may be renamed meanwhile."""
         names = self.backend.input_names()
         if self.port:
-            mine = [n for n in names if self.port.lower() in n.lower()]
+            exact, partial = port_matches(self.port, names)
+            mine = exact or partial
             if only_port:
-                return mine
-            return mine + [n for n in names if n not in mine and PORT_RE.search(n)]
-        return [n for n in names if PORT_RE.search(n)]
+                order = mine
+            else:
+                order = exact + partial + [n for n in names if n not in exact and n not in partial and PORT_RE.search(n)]
+        else:
+            order = [n for n in names if PORT_RE.search(n)]
+        if prefer in order:                 # the port the device was on
+            order = [prefer] + [n for n in order if n != prefer]
+        return order
 
-    def find(self, want=None, only_port=True):
-        """the first matching port that answers the handshake (and want(identity))"""
-        outs = self.backend.output_names()
-        for name in self.candidates(only_port):
-            out = pair_output(name, outs)
-            if not out:
-                continue
-            try:
-                link = self.backend.open(name, out)
-            except Exception:
-                continue
-            ident = handshake(link, 2)
-            if ident and (want is None or want(ident)):
-                return Device(link, ident, name)
-            link.close()
+    def _open(self, name, outs):
+        out = pair_output(name, outs)
+        if not out:
+            return None
+        try:
+            link = self.backend.open(name, out)
+        except Exception:
+            return None
+        ident = handshake(link, 2)
+        if ident:
+            return Device(link, ident, name)
+        link.close()
         return None
 
-    def wait_for(self, want, secs):
+    def find(self, want=None, only_port=True, prefer=None):
+        """the first matching port that answers the handshake (and want(identity))"""
+        outs = self.backend.output_names()
+        for name in self.candidates(only_port, prefer):
+            dev = self._open(name, outs)
+            if dev and (want is None or want(dev.id)):
+                return dev
+            if dev:
+                dev.link.close()
+        return None
+
+    def find_all(self):
+        """every candidate port that answers the handshake (links open; the caller closes them)"""
+        outs = self.backend.output_names()
+        return [d for d in (self._open(n, outs) for n in self.candidates(True)) if d]
+
+    def pick(self, product):
+        """the one connected device of the package's model; refuses the other model"""
+        devs = self.find_all()
+        if not devs:
+            raise not_found(self)
+        mine = [d for d in devs if model_of(d.id.text) == model_of(product)]
+        for d in devs:
+            if d not in mine or len(mine) > 1:
+                d.link.close()
+        listing = ", ".join(f"{d.id.text} ({d.name})" for d in devs)
+        if not mine:
+            raise InstallError("model", f"the package is for {product}, but the connected device is not a "
+                                        f"{model_of(product)}: {listing}. Nothing was written.")
+        if len(mine) > 1:
+            raise InstallError("ambiguous", f"several {model_of(product)} devices answer ({listing}): "
+                                            "choose one with --port. Nothing was written.")
+        return mine[0]
+
+    def wait_for(self, want, secs, prefer=None):
         end = time.monotonic() + secs
         while time.monotonic() < end:
-            dev = self.find(want, only_port=False)
+            dev = self.find(want, only_port=False, prefer=prefer)
             if dev:
                 return dev
             time.sleep(DELAY["retry"])
@@ -354,7 +412,10 @@ class Updater:
     def verify(self, product, step):
         step("reboot")
         time.sleep(DELAY["reboot"])
-        back = self.wait_for(lambda i: not i.loader, DELAY["wait_reboot"])
+        # the restarted app of the package's model (another connected model never counts);
+        # a different identity of that model is reported below as a mismatch
+        back = self.wait_for(lambda i: not i.loader and model_of(i.text) == model_of(product),
+                             DELAY["wait_reboot"], self.prefer)
         if not back:
             raise InstallError("noreturn", "the FM-1 did not come back: power-cycle it")
         back.link.close()
@@ -375,6 +436,7 @@ class Updater:
                                           "finish that update with its own updater (M-UPGRADE), then install again")
         ota = dev if dev.id.loader else self.check(dev, image, loader_identity, step)
         self.write(ota, image, step)
+        self.prefer = getattr(dev, "name", None)     # look for the restarted app on this port first
         return self.verify(product, step)
 
 
@@ -387,15 +449,15 @@ def load_package(path, _force=False):
     except OSError as e:
         raise InstallError("badpkg", f"cannot read {path}: {e.strerror}")
     product = product_of(raw)
-    if not re.fullmatch(r"FM-1_[0-9]+", product):
-        raise InstallError("badpkg", f"{path}: not an FM-1 package (identity {product!r})")
+    if not re.fullmatch(r"(FM-1|SMK-37 Pro)_[0-9]+", product):
+        raise InstallError("badpkg", f"{path}: not an FM-1 or SMK-37 Pro package (identity {product!r})")
     try:
         validation = validate_package.validate(raw, expected_identity=product)
     except (ValueError, OSError, UnicodeError, struct.error) as e:
         raise InstallError("badpkg", f"{path}: package validation failed ({e}); nothing was written. "
                                      "Download it again.") from e
     loader_identity = validation.get("loader_identity")
-    if not isinstance(loader_identity, str) or not re.fullmatch(r"ota-FM-1_[0-9]+", loader_identity):
+    if not isinstance(loader_identity, str) or not re.fullmatch(r"ota-" + re.escape(model_of(product)) + r"_[0-9]+", loader_identity):
         raise InstallError("badpkg", f"{path}: independent validation did not identify the embedded loader; "
                                      "nothing was written.")
     image = logical_image(raw)
@@ -486,18 +548,17 @@ class Progress:
 def run(a, backend, out, ask):
     up = Updater(backend, a.port)
     if a.info:
-        dev = up.find()
-        if not dev:
+        devs = up.find_all()
+        if not devs:
             raise not_found(up)
-        dev.link.close()
-        mode = "update loader (update not finished)" if dev.id.loader else "running"
-        print(f"{dev.id.text}  [{mode}]  port: {dev.name}", file=out)
+        for dev in devs:
+            dev.link.close()
+            mode = "update loader (update not finished)" if dev.id.loader else "running"
+            print(f"{dev.id.text}  [{mode}]  port: {dev.name}", file=out)
         return 0
     product, loader_identity, image = load_package(a.package, a.force)
     print(f"package: {product}  ({a.package})", file=out)
-    dev = up.find()
-    if not dev:
-        raise not_found(up)
+    dev = up.pick(product)
     print(f"device:  {dev.id.text}  ({dev.name})" + ("  in update mode: the write will be finished" if dev.id.loader else ""),
           file=out)
     if not a.yes and not ask("Install? Do not unplug the FM-1 while writing. [y/N] "):
@@ -522,8 +583,9 @@ def ask_tty(prompt):
 def main(argv=None, backend=None, out=sys.stdout, ask=ask_tty):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("package", nargs="?", help="Felucca package (.fwsc)")
-    ap.add_argument("--info", action="store_true", help="print the identity of the connected FM-1")
-    ap.add_argument("--port", metavar="NAME", help="MIDI port to use (part of its name)")
+    ap.add_argument("--info", action="store_true", help="print the identity of every connected device")
+    ap.add_argument("--port", metavar="NAME",
+                    help="MIDI port to use: its exact name, or part of it when no port has exactly that name")
     ap.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     ap.add_argument("--force", action="store_true",
                     help="compatibility flag; independent package and embedded-loader validation still applies")
@@ -533,7 +595,14 @@ def main(argv=None, backend=None, out=sys.stdout, ask=ask_tty):
     try:
         if backend is None:
             try:
-                backend = MidoBackend()
+                if sys.platform == 'darwin':
+                    # CoreMIDI may expose distinct devices with identical names.
+                    # Keep their port indices rather than collapsing the names.
+                    sys.modules.setdefault('fm1_install', sys.modules[__name__])
+                    from fm1_rtmidi_indexed import IndexedBackend
+                    backend = IndexedBackend()
+                else:
+                    backend = MidoBackend()
             except ImportError:
                 raise InstallError("usage", "needs mido and python-rtmidi (pip install mido python-rtmidi)")
         return run(a, backend, out, ask)

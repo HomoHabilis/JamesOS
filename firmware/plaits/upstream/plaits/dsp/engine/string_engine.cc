@@ -62,6 +62,11 @@ void StringEngine::Render(
     float* aux,
     size_t size,
     bool* already_enveloped) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_unpatched = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool trigger_unpatched = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
   if (parameters.trigger & TRIGGER_RISING_EDGE) {
     // 8 in original firmware version.
     // 05.01.18: mic.w: problem with microbrute.
@@ -78,7 +83,7 @@ void StringEngine::Render(
   
   for (int i = 0; i < kNumStrings; ++i) {
     voice_[i].Render(
-        parameters.trigger & TRIGGER_UNPATCHED && i == active_string_,
+        trigger_unpatched && i == active_string_,
         parameters.trigger & TRIGGER_RISING_EDGE && i == active_string_,
         parameters.accent,
         f0_[i],

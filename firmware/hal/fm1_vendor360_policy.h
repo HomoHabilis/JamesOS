@@ -2,8 +2,9 @@
 /* FM-1 396 MHz supply policy; no device I/O in this file.
  *
  * Ordered operations follow the CRC-verified M-VAVE V15 application supply
- * block at 0x02004f4a..0x0200509a; see research/community/v15.dis in the
- * investigation workspace. The three VLVD operations at 0x02004f4e/5c/76
+ * block at 0x02004f4a..0x0200509a (M-VAVE publishes the V15 image under
+ * Apache-2.0: docs/legal/MVAVE-FM1-OPEN-THIRD-PARTY.md). This file is new code
+ * that performs the same register operations; no vendor code is copied. The three VLVD operations at 0x02004f4e/5c/76
  * precede the regulator handoff at 0x02004f98. Checked transfers, extra
  * readbacks and held-core and interrupt guards are additions. Intervening
  * vendor RTC, wake and software bookkeeping is not reproduced here.

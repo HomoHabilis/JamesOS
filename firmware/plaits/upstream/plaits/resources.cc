@@ -4270,7 +4270,7 @@ int16_t wav_integrated_waves[FM1_PLAITS_WAVE_SAMPLE_COUNT]
 #if !FM1_PLAITS_WAVES_STACK_SCRATCH
 #if FM1_PLAITS_WAVES_BOOT_SCRATCH_BSS
 #if defined(FM1_PATTERN_DEVICE_CANDIDATE) && FM1_PATTERN_DEVICE_CANDIDATE
-extern "C" uint8_t br_ps_target_arena[7756];
+extern "C" uint8_t br_ps_target_arena[];
 #define fm1_waves_delta_scratch br_ps_target_arena
 static_assert(FM1_PLAITS_WAVES_MAX_DELTA_BYTES <= 7756u, "boot workspace too small");
 #else

@@ -4,6 +4,7 @@
 #define FM1_PATTERN_PROJECT_TARGET_EXPERIMENT 1
 #define main host_unused_main
 #include "../firmware/src/dinghy.c"
+volatile unsigned fm1_project_old_format_seen;   /* pattern_project.c is not linked here */
 #undef main
 #include <assert.h>
 static int scan_result=PFS_EMPTY, save_result=PFS_OK, load_result=PFS_OK, init_result=PFS_OK;

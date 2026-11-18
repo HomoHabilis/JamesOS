@@ -8,11 +8,12 @@
 // the official V15, which that firmware's own update path supports.
 
 // "official" (V15, the only official version the base package is made for), "official-other" (any other
-// official version, such as V16), "jamesos", "felucca" (SLOOP, Felucca and their 9XX identities) or "other"
+// official version, such as V16), "jamesos" (this fork FM-1_926NNNN, upstream 1.0a FM-1_9262108,
+// upstream 1.0b and later FM-1_967NNNN), "felucca" (SLOOP, Felucca and their 9XX identities) or "other"
 export function firmwareKind(text) {
   if (text === "FM-1_015") return "official";
   if (/^FM-1_0\d\d$/.test(text)) return "official-other";
-  if (/^FM-1_9262\d{3}$/.test(text)) return "jamesos";
+  if (/^FM-1_9(26|67)\d{4}$/.test(text)) return "jamesos";
   if (/^FM-1_9\d\d$/.test(text)) return "felucca";
   return "other";
 }
@@ -21,6 +22,13 @@ export function firmwareKind(text) {
 export function packageFor(text) {
   const kind = firmwareKind(text);
   return kind === "jamesos" ? "app" : kind === "official" ? "base" : null;
+}
+
+// A JamesOS 1.0a build (upstream 2108, this fork up to 2150): its projects are in the old format, which
+// 1.0b-based builds list as OLD FORMAT and do not load until converted with upstream's browser Editor.
+export function oldProjectFormat(text) {
+  const m = /^FM-1_926(\d{4})$/.exec(text);
+  return !!m && Number(m[1]) <= 2150;
 }
 
 // The package that finishes an update left in a loader: this build's own loader takes the app package,

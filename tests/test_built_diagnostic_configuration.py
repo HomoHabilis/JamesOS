@@ -30,8 +30,9 @@ for directory, mode, enabled in [('pattern-device-candidate', 'development', Tru
     assert 'cmd == 0x7du && n == 3u' in source  # retained fault bundle
     assert 'cmd == 0xA0u && !n' in source  # session protection
     assert 'cmd == 0x62u && !n' in source  # session/protocol status
-    assert ('cmd == 0x60u && !n' in source) is enabled
-    assert ('cmd == 0x61u && n == 4u' in source) is enabled
+    assert 'cmd == 0x60u && !n' in source  # audio load counters: every build level
+    assert 'cmd == 0x61u && n == 4u' in source  # their reset
+    assert 'else if (cmd == 0xb2u && !n)' in source  # late drops
     assert ('fm1_foreground_journal_store_poll(fm1_ticks())' in source) is enabled
     assert 'cmd == 0x63u && n == 3u' in source  # session read
     assert 'cmd == 0x64u && n >= 3u' in source  # session upload
@@ -51,7 +52,7 @@ for directory, mode, enabled in [('pattern-device-candidate', 'development', Tru
     assert ('else if (cmd == 0x86u' in source) is enabled
     assert ('else if (cmd == 0x82u' in source) is enabled
     assert ('else if (cmd == 0xCCu' in source) is enabled
-    for command in ('0x6Au', '0x6Du', '0x74u', '0x75u', '0x76u', '0x7Bu', '0x7Fu', '0x78u', '0x79u', '0x7Au', '0x87u', '0x89u', '0x94u', '0x96u', '0x81u', '0x77u', '0x88u', '0x8Au', '0x8Bu', '0x95u', '0x9Au', '0x91u', '0x92u', '0xb2u', '0xb3u', '0xC8u', '0xCAu', '0xCDu', '0xC9u'):
+    for command in ('0x6Au', '0x6Du', '0x74u', '0x75u', '0x76u', '0x7Bu', '0x7Fu', '0x78u', '0x79u', '0x7Au', '0x87u', '0x89u', '0x94u', '0x96u', '0x81u', '0x77u', '0x88u', '0x8Au', '0x8Bu', '0x95u', '0x9Au', '0x91u', '0x92u', '0xb3u', '0xC8u', '0xCAu', '0xCDu', '0xC9u'):
         assert (f'else if (cmd == {command}' in source) is enabled, command
     assert ('else if (cmd == 0x90u' in source) is enabled
     assert ('br_half_timing_store' in symbols) is enabled
@@ -67,8 +68,9 @@ for directory, mode, enabled in [('pattern-device-candidate', 'development', Tru
     assert ('br_audio_source_cost_diagnostic_snapshot' in symbols) is enabled
     assert ('br_audio_source_diagnostic_snapshot' in symbols) is enabled
     for name in ('br_audio_late_drop_count', 'br_audio_partial_drop_count',
-                 'fm1_audio_late_drops', 'fm1_audio_late_contained_faults',
-                 'fm1_foreground_journal_store_timer',
+                 'fm1_audio_late_drops', 'fm1_audio_late_contained_faults', 'fm1_audio_metrics'):
+        assert name in symbols, name  # kept in distribution builds (0x60, 0xB2, MONITOR)
+    for name in ('fm1_foreground_journal_store_timer',
                  'fm1_cpu1_worker_diag', 'fm1_power_fault_capture_owned',
                  'fm1_vpd_fault_capture_owned', 'br_fx_progress_get',
                  'br_fx_progress_bootstrap', 'br_fx_serial_mode',

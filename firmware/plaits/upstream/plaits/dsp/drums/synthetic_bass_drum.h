@@ -349,6 +349,11 @@ class SyntheticBassDrum {
       float* out,
       size_t size,
       uint32_t* local_random_state) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+    // This shared kernel is not inlined, so the engine's constant does not
+    // reach it; drop the unreachable sustain branch here (plaits_config.h).
+    sustain = false;
+#endif
     const size_t updates = rate2 ? (size >> 1) : size;
     if (!updates) return;
 

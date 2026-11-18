@@ -57,6 +57,13 @@ int main(void)
     for (i = 0; i <= 32768u; i += 64u) { uint32_t s = br_meter_segments(i, 28u); assert(s >= last && s <= 28u); last = s; }
     assert(br_meter_segments(0u, 28u) == 0u && br_meter_segments(32768u, 28u) == 28u);
     assert(br_meter_segments(33u, 28u) == 0u);          /* below -60 dBFS */
+    /* A delayed redraw can accrue several fall steps; it must never decay
+     * below the signal currently present and then jump on the next redraw. */
+    for (i = 0u; i < BR_BLOCK; ++i) bus[0][i] = 94;
+    br_fx_meter_value[0] = 94u;
+    br_meter_hold[0] = 5u;
+    br_draw_meter_line(0u, 0u, 2u);
+    assert(br_meter_hold[0] == br_meter_segments(94u, BR_METER_STEPS));
     printf("mixer meter: ok\n");
     return 0;
 }

@@ -9,9 +9,20 @@ import struct
 import subprocess
 import sys
 import zlib
-from run_ui_polish import FLAGS
+import host_target
 
 ROOT = Path(__file__).resolve().parents[1]
+FLAGS = [   # the host app flags (as in run_drive.py, without its product defines: host_cc adds those)
+    '-std=c11', '-O2', '-fwrapv', '-Wno-unused-function',
+    '-DFM1_NATIVE_OUTPUT_32K=0', '-DFM1_NATIVE_OUTPUT_48K=0',
+    '-DBR_AUDIO_INTERNAL_BLOCK160=0', '-DBR_AUDIO_INTERNAL_BLOCK256=1',
+    '-DPLAITS_INTERNAL_SAMPLE_RATE=44100', '-DFM1_PLAITS_SOURCE_RATE_32K=0',
+    '-DFM1_PLAITS_SOURCE_RATE_44100=1', '-DFM1_PLAITS_SOURCE_RATE_38400=0',
+    '-DFM1_PLAITS_SOURCE_RATE_48000=0', '-DFM1_PLAITS_SRC_LAGRANGE4=0',
+    '-DFM1_PLAITS_SRC_FLOAT_PHASE_FRACTION=0', '-DFM1_PLAITS_PHASE_LUT=0',
+    '-DBR_FX_RATE_SIGNED_441_RECIP=0', '-DBR_FX_TAPE_WOW_DELTA_LUT=0',
+    '-DBR_AUDIO_FOREGROUND_FIXED8_PLAN=0', '-Ifirmware/src', '-Ifirmware/gen',
+]
 sys.path.insert(0, str(ROOT / 'tools'))
 from generate_startup_art import read_png, encode, quantize16, encode16
 
@@ -63,11 +74,14 @@ def main():
     subprocess.run([str(binary), str(raw)], cwd=ROOT, check=True)
     pixels = array('H'); pixels.frombytes(raw.read_bytes())
     assert len(pixels) == 240 * 240
+    smk = host_target.target() == 'smk37'
+    if smk:   # the SMK-37 text intro is checked in tests/test_startup_art.c; the FM-1 art asset below
+        print('startup: SMK-37 text intro verified in the app; FM-1 art asset checks follow')
     original = read_png(ROOT / 'assets/jamesos-start.png')
     top, bottom = 91, 149
     expected = [0] * (top*240) + quantize16(original[top*240:bottom*240]) + [0] * ((240-bottom)*240)
     assert sum(a != b for a, b in zip(original, expected)) == 276
-    for y in range(240):
+    for y in range(240 if not smk else 0):   # the FM-1 frame is the art
         for x in range(240):
             if pixels[y * 240 + x] != expected[y * 240 + x]:
                 raise AssertionError('frame differs at (%d,%d)' % (x, y))

@@ -6,7 +6,8 @@ uint32_t br_app_test_inject_fault_before_mutation;
 #define FM1_TICKS_PER_US 24u
 static struct { uint32_t last_ticks; } fm1_audio_metrics;
 static uint32_t fm1_ticks(void) { static uint32_t tick; return ++tick; }
-static void fm1_audio_metrics_snapshot(uint32_t out[8]) { memset(out, 0, 32u); }
+#define FM1_AUDIO_METRICS_WORDS 10u
+static void fm1_audio_metrics_snapshot(uint32_t out[10]) { memset(out, 0, 40u); }
 static void fm1_audio_metrics_reset(void) { }
 static void fm1_uac_diagnostic_snapshot(uint32_t out[19]) { memset(out, 0, 76u); out[0] = 1u; }
 #define DINGHY_HOST 1
@@ -31,15 +32,10 @@ int main(void)
     uint32_t n;
     uint8_t page = 0u;
     br_app_init();
-#if FM1_DEVELOPMENT_DIAGNOSTICS
-    assert(fm1_app_command(0x60u, 0, 0u, reply, &n) && n == 32u);
+    /* The audio load counters answer at every build level. */
+    assert(fm1_app_command(0x60u, 0, 0u, reply, &n) && n == 40u);
     assert(fm1_app_command(0x61u, body, 4u, reply, &n) && n == 1u);
-#else
-    assert(!fm1_app_command(0x60u, 0, 0u, reply, &n));
-    assert(!fm1_app_command(0x61u, body, 4u, reply, &n));
-#endif
     br_playing = 1u;
-#if FM1_DEVELOPMENT_DIAGNOSTICS
     br_audio_late_drop_count = 4u;
     br_audio_partial_drop_count = 2u;
     br_audio_late_last_index = 7u;
@@ -49,33 +45,24 @@ int main(void)
     br_audio_late_last_sequence = 42u;
     br_audio_late_last_cutoff = 1001u;
     br_audio_late_last_core = 1u;
-    assert(fm1_app_command(0xb2u, 0, 0u, reply, &n) && n == 68u);
-    assert(word(reply) == 3u && word(reply + 4u) == 4u);
+    assert(fm1_app_command(0xb2u, 0, 0u, reply, &n) && n == 88u);
+    assert(word(reply) == 4u && word(reply + 4u) == 4u);
     assert(word(reply + 8u) == 7u && word(reply + 12u) == 8u);
     assert(word(reply + 16u) == 1000u && word(reply + 20u) == 999u);
     assert(word(reply + 24u) == 42u && word(reply + 44u) == 1001u);
     assert(word(reply + 48u) == 1u);
     assert(word(reply + 60u) == 0u && word(reply + 64u) == 2u);
     assert(br_playing == 1u && br_audio_late_drop_count == 4u);
-#else
-    assert(!fm1_app_command(0xb2u, 0, 0u, reply, &n));
-#endif
     assert(!fm1_app_command(0x92u, &page, 1u, reply, &n));
     assert(br_playing == 1u);
     assert(!fm1_app_command(0xb2u, body, 1u, reply, &n));
     br_engine_pipeline_test_uncontained_fault_latch();
     assert(br_engine_pipeline_uncontained_fault_get());
-#if FM1_DEVELOPMENT_DIAGNOSTICS
-    assert(fm1_app_command(0xb2u, 0, 0u, reply, &n) && n == 68u);
-#else
-    assert(!fm1_app_command(0xb2u, 0, 0u, reply, &n));
-#endif
+    assert(fm1_app_command(0xb2u, 0, 0u, reply, &n) && n == 88u);
     assert(!fm1_app_command(0x61u, body, 4u, reply, &n));
-#if FM1_DEVELOPMENT_DIAGNOSTICS
     assert(br_audio_late_drop_count == 4u && br_playing == 1u);
     br_audio_late_drop_reset();
     assert(br_audio_late_drop_count == 0u && br_audio_partial_drop_count == 0u);
-#endif
     puts("PASS: diagnostic command selection and fault gate; disabled 0x92 refuses");
     return 0;
 }

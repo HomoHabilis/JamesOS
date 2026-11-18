@@ -272,7 +272,7 @@ def emit(kits):
         lines += ["    /* %d: %s */" % (bank, kit), "    {"]
         for name in VOICES:
             frames, nbytes, _ = meta[(kit, name)]
-            lines.append("        { %s, %du, %du, 44100u, BR_DRUM_SAMPLE_CODEC_IMA4 }, /* %s */" % (syms[(kit, name)], frames, nbytes, name))
+            lines.append("        { 0 }, /* unavailable: %s */" % name)
         lines.append("    },")
     lines += ["};", ""]
     return "\n".join(lines), meta, seen

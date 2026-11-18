@@ -15,6 +15,25 @@
 #define BR_BLOCK TEST_BLOCK
 #define BR_AUDIO_FUSION_FIXED_PLAN 1
 #define BR_AUDIO_C1_LATE_OWNER_KNOWN owner_known
+/* instrument_audio.c's owner-known condition is (BR_AUDIO_FUSION_JOB_TIMING_DIAG ||
+ * BR_AUDIO_FUSION_EWMA_SCHEDULER). With BR_POLY_SUPPORT (every SMK-37 build, any polyphony
+ * build; the runner passes it) the extracted text redefines BR_AUDIO_C1_LATE_OWNER_KNOWN from
+ * these two, so model them through the same owner_known switch, and the standard-graph test
+ * of a polyphony build (BR_POLY_STANDARD_GRAPH, !br_poly_scheduler_enabled on the device). */
+#define BR_AUDIO_FUSION_JOB_TIMING_DIAG 0
+#define BR_AUDIO_FUSION_EWMA_SCHEDULER owner_known
+#ifndef BR_POLY_SUPPORT
+#define BR_POLY_SUPPORT 0
+#endif
+#ifndef TEST_POLY_SCHEDULER
+#define TEST_POLY_SCHEDULER 0
+#endif
+#if TEST_POLY_SCHEDULER
+static volatile uint8_t br_poly_scheduler_enabled;
+#define BR_POLY_STANDARD_GRAPH (!br_poly_scheduler_enabled)
+#else
+#define BR_POLY_STANDARD_GRAPH 1
+#endif
 #define BR_AUDIO_FUSION_ONLY_BUILD fusion_only
 #define BR_AUDIO_FUSION_FOUR_WAY_KIT four_way_kit
 #define BR_AUDIO_C1_LATE_VALID 0x43314c54u
@@ -815,6 +834,29 @@ int main(void)
             assert(!poll_calls && !hard_calls && wait_calls == 1u && last_wait_ticks == 91u);
         assert(!o.late_accepted);
     }
+
+#if TEST_POLY_SCHEDULER
+    /* Polyphony build: the late-owner selector also needs the standard graph. With the poly
+     * scheduler running, a half takes the plain bounded wait exactly as with an unknown owner
+     * (no poll, no hard wait, no late acceptance); with it off, the late path is unchanged. */
+    for (uint32_t enabled = 0u; enabled <= 1u; ++enabled) {
+        reset(deadline);
+        br_poly_scheduler_enabled = (uint8_t)enabled;
+        soft_status = FM1_CPU1_WORKER_TIMEOUT;
+        preflight = BR_AUDIO_C1_PREFLIGHT_CLAIMED;
+        br_audio_source_queue.completed = 7u;
+        br_audio_source_jobs[7].state = 1u;
+        hard_result = BR_AUDIO_QUEUE_COMPLETE_LATE;
+        o = run(BR_AUDIO_QUEUE_OK, 8u, 7u, deadline);
+        if (enabled)
+            assert(!poll_calls && !hard_calls && wait_calls == 1u && last_wait_ticks == 91u &&
+                   !o.late_accepted);
+        else
+            assert(o.late_accepted && hard_calls == 1u);
+    }
+    br_poly_scheduler_enabled = 0u;
+    puts("PASS: polyphony build: late-owner path only on the standard graph");
+#endif
 
     /* Addition of the one-half hard deadline is modulo 32-bit T4 wrap. */
     const uint32_t wrapped = UINT32_MAX - 7000u;

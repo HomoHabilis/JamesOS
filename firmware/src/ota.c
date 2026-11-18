@@ -20,9 +20,22 @@
  *   ota_erase(off) ota_prog(off, p, n) ota_fread(off, p, n)   flash, 0 = ok
  *   ota_show(step, code)       progress / result for the screen
  *   ota_commit(parm)           write RAM record + reset (never returns on hardware)
+ *
+ * SMK-37 Pro (BR_PRODUCT_SMK37), as built in the JamesOS-K tree. In the app (platform.c defines
+ * SMK37_UPDATES; the loader, which includes this file too, does not): staging at
+ * [0xBB000, 0xC0000) (hal/smk37/smk37_flash_map.h), stricter package bounds, only Felucca's own
+ * loader carrying both marks "FELUCCA-LOADER-1JAMESOS-K-SMK37!" is accepted (never the
+ * official one), and the record names "ota-SMK-37 Pro_016" with its NUL. In app and loader: a
+ * failed update erases the staging area only if something was staged.
  */
+#include "../product.h"
+#if BR_PRODUCT_SMK37 && defined(SMK37_UPDATES)
+#define OTA_AREA SMK37_OTA_LO
+#define OTA_AREA_LEN (SMK37_OTA_HI - SMK37_OTA_LO)
+#else
 #define OTA_AREA 0x000E0000u                     /* staged loader, 5 x 4 KiB */
 #define OTA_AREA_LEN 0x5000u
+#endif
 #define OTA_RES (OTA_AREA + OTA_AREA_LEN - 0x100u)  /* 0xE4F00 = 4K boundary - 256: SPL scan */
 #define OTA_LDR_HCRC 0xEBAAu                     /* official update loader (usb_hid_ota.bin) */
 #define OTA_LDR_DCRC 0x5881u
@@ -332,17 +345,32 @@ static int ota_official_compatible(uint32_t off,uint32_t len,uint32_t want,uint8
     return c==want;
 }
 
+#if BR_PRODUCT_SMK37
+static uint8_t ota_stage_dirty;
+#endif
+
 static int ota_stage(void)                       /* steps 1..6; 0 = host said success */
 {
     static uint8_t hdr[0x400], b[512], mine[512];
     uint32_t i, n, ota_off, ota_len, fl_off, fl_len, fl_crc, c, len, own, official;
     int rc;
     /* 1. UFW header + entry list */
+#if BR_PRODUCT_SMK37
+    ota_stage_dirty = 0;
+#endif
     ota_show(1, 0);
     if ((rc = ota_ufw(hdr, &fl_off, &fl_len, &ota_off, &ota_len, &fl_crc)) != 0)
         return rc;
     if (!fl_off || !ota_off)
         return -3;
+#if BR_PRODUCT_SMK37 && defined(SMK37_UPDATES)
+    uint32_t total = ota_rd32(hdr + 4);
+    if (fl_len != SMK37_APP_HI || fl_off < sizeof hdr ||
+        fl_off > total || fl_len > total - fl_off ||
+        ota_off < sizeof hdr || ota_off > total || ota_len > total - ota_off ||
+        ota_len < 512u || fl_off + fl_len > ota_off)
+        return -3;
+#endif
     /* 2. which loader: the official one (known CRCs; it rewrites the whole flash.bin
      *    including the head) or Felucca's own (app area only, checks the chip key) */
     if (ota_read(ota_off, b, 512))
@@ -352,6 +380,13 @@ static int ota_stage(void)                       /* steps 1..6; 0 = host said su
         ota_len != len + 0x20u || len > OTA_AREA_LEN - 0x200u || ota_crc16(b + 0x22, 30, 0) != ota_rd16(b + 0x20) ||
         ota_rd32(b + 0x20 + 8) != 0x01C0A800u)
         return -7;
+#if BR_PRODUCT_SMK37 && defined(SMK37_UPDATES)
+    (void)official;
+    (void)mine;
+    for (i = 0x48u, own = 0; i + 32u <= 0x48u + 64u && !own; i++)
+        own = ota_memeq(b + i, (const uint8_t *)"FELUCCA-LOADER-1JAMESOS-K-SMK37!", 32u);
+    if (!own || ota_rd32(b + 0x20 + 4) > 0x14000u) return -7;
+#else
     official = ota_rd16(b) == OTA_LDR_HCRC && ota_rd16(b + 2) == OTA_LDR_DCRC && len == OTA_LDR_LEN;
     for (i = 0x48, own = 0; i + 16u <= 0x48u + 64u && !own; i++)    /* first LZ4 literals: crt0_ldr.S */
         own = ota_memeq(b + i, (const uint8_t *)"FELUCCA-LOADER-1", 16) && ota_rd32(b + 0x20 + 4) <= 0x14000u;
@@ -369,10 +404,14 @@ static int ota_stage(void)                       /* steps 1..6; 0 = host said su
         }
         if (mismatch && !ota_official_compatible(fl_off,fl_len,fl_crc,b)) return -5;
     }
+#endif
     /* 4. stage the package's loader: erase, body, verify, head last */
     ota_show(3, 0);
     if (ota_read(ota_off, b, 512))
         return -6;
+#if BR_PRODUCT_SMK37
+    ota_stage_dirty = 1u;
+#endif
     c = ota_rd16(b + 2);                                    /* outer dcrc of the body */
     for (i = 0; i < OTA_AREA_LEN; i += 0x1000u)
         if (ota_erase(OTA_AREA + i))
@@ -425,7 +464,11 @@ static int ota_session(void)
     ota_deadline = ota_now_ms() + 120000u;          /* step 1 normally takes ~5 s; a stalled host gives up after 2 min */
     rc = ota_stage();
     if (rc) {
+#if BR_PRODUCT_SMK37
+        if (ota_stage_dirty) ota_unstage();
+#else
         ota_unstage();
+#endif
         ota_show(9, rc);
         return rc;
     }
@@ -435,8 +478,18 @@ static int ota_session(void)
     ota_wr16(parm + 2, 0x5A0Du);
     ota_wr16(parm + 4, 0x5A01u);
     ota_wr16(parm + 6, 0x5441u);
+#if BR_PRODUCT_SMK37
+#if defined(SMK37_UPDATES)
+    static const char record_name[] = "ota-SMK-37 Pro_016";
+#else
+    static const char record_name[] = "ota-FM-1_015";
+#endif
+    for (i = 0; i < sizeof record_name; i++)
+        parm[8 + i] = (uint8_t)record_name[i];
+#else
     for (i = 0; i < 12u; i++)
         parm[8 + i] = (uint8_t)"ota-FM-1_015"[i];    /* the loader's own USB identity */
+#endif
     ota_wr32(parm + 72, OTA_AREA);
     ota_wr16(parm, ota_crc16(parm + 2, 78, 0));
 #if FELUCCA_OTA_DRYRUN

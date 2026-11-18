@@ -3,7 +3,12 @@
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
 """Build Dinghy (on Felucca / SLOOP's platform): the app, the update loader and an installable .fwsc package.
 
-  tools/build.py [--release X.Y[-suffix]]
+  tools/build.py [--target fm1|smk37] [--release X.Y[-suffix]]
+
+--target selects the product (default fm1, FM-1); smk37 is the SMK-37 Pro.
+Everything that differs between them is the TARGETS table below; the firmware
+sees the choice through firmware/product.h (-DBR_PRODUCT=..., force-included).
+--print-config prints the resolved configuration as JSON and builds nothing.
 
 Outputs in build/: dinghy.bin (app), loader/ota.bin (update loader),
 dinghy.fwsc (package). See README.md for the toolchain and the SDK.
@@ -56,6 +61,8 @@ PATTERN_TARGET_EXPERIMENT = False
 PATTERN_DEVICE_CANDIDATE = False
 PATTERN_NAMESPACE_TARGET_EXPERIMENT = False
 PATTERN_PROJECT_UI_TARGET_EXPERIMENT = False
+POLY_RECORDED = False               # FM-1 with polyphony: build-settings.json records "polyphony": true
+POLY_SIZE_CONSTRAINED = False       # = firmware/product.h BR_POLY_SIZE_CONSTRAINED (FM-1 with polyphony)
 DSP_C = []
 HAL_C = [FW / "hal" / "fm1_cpu1_snapshot.c",
          FW / "hal" / "fm1_cpu1_worker_target.c",
@@ -63,13 +70,33 @@ HAL_C = [FW / "hal" / "fm1_cpu1_snapshot.c",
 PLAITS_CPP = [FW / "plaits" / "plaits_c_api.cc", FW / "plaits" / "plaits_kit_c_api.cc",
               *sorted((FW / "plaits" / "upstream" / "plaits").rglob("*.cc")),
               *sorted((FW / "plaits" / "upstream" / "stmlib").rglob("*.cc"))]
-# Exact allowlist for the default-off cold Plaits translation-unit size
-# experiment. Do not extend this to shared DSP/common code or heavy engines.
+# Exact allowlist of Plaits translation units compiled at -Os (selector
+# FM1_PLAITS_COLD_TU_OS). Do not extend this to shared DSP/common code, the
+# kit/drum engines or anything placed in a RAM section.
 PLAITS_COLD_TU_OS_SOURCES = frozenset({
     "upstream/plaits/dsp/engine/fm_engine.cc",
     "upstream/plaits/dsp/engine/string_engine.cc",
     "upstream/plaits/dsp/engine2/chiptune_engine.cc",
     "upstream/plaits/dsp/engine2/six_op_engine.cc",
+    "upstream/plaits/resources.cc",                         # boot-only wave inflate: -682 B
+    # Non-kit engines that render audio: -Os costs CPU per block. One line each
+    # (linked O3->Os bytes, FM-1 and SMK-37 alike) so any can be backed out
+    # after hardware timing. naive_speech_synth.cc is left at O3 (+14 B at Os).
+    "upstream/plaits/dsp/engine/chord_engine.cc",           # -86 B
+    "upstream/plaits/dsp/engine/particle_engine.cc",        # -246 B
+    "upstream/plaits/dsp/engine/swarm_engine.cc",           # -206 B
+    "upstream/plaits/dsp/engine/wavetable_engine.cc",       # -228 B
+    "upstream/plaits/dsp/engine2/string_machine_engine.cc", # -246 B
+    "upstream/plaits/dsp/engine2/wave_terrain_engine.cc",   # -38 B
+    "upstream/plaits/dsp/speech/sam_speech_synth.cc",       # -98 B
+})
+# Size-constrained polyphony (FM-1 with polyphony only, = product.h BR_POLY_SIZE_CONSTRAINED):
+# Plaits translation units compiled at -Os instead of the DSP level so the HD image fits the
+# app slot. Only the -O level changes (floating-point flags stay those of the DSP build).
+# Every other configuration (FM-1 without polyphony, SMK-37) is unaffected. Each entry is a
+# timing change for the models that use it and must be benchmarked on a unit.
+POLY_SIZE_OS_SOURCES = frozenset({
+    "upstream/plaits/dsp/chords/chord_bank.cc",     # chord table setup and inversion: per chord-engine block
 })
 LINE = re.compile(r"^\s*([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*\t(.*)$")
 
@@ -80,9 +107,61 @@ SDK_SHA256 = {
     "cfg/eq_cfg_hw.bin": "41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d",
 }
 
-# Private hybrid source/FX scheduling diagnostic.
-PRODUCT = "FM-1_9261389"
-VERSION = "0.1-device-test"
+# Product targets. Everything product-specific in this script is data here.
+# The SMK-37 Pro values are those of the JamesOS-K build.py (smk37-import).
+TARGETS = {
+    "fm1": {
+        "name": "FM-1",
+        "product_define": "BR_PRODUCT_ID_FM1",     # -DBR_PRODUCT=..., see firmware/product.h
+        "identity_prefix": "FM-1_",                 # --product must be prefix + digits
+        "default_product": "FM-1_9261389",          # private hybrid source/FX scheduling diagnostic
+        "version": "1.0b-device-test",
+        "package_name": "fm1-braids-plaits-{version}.fwsc",
+        "release_package_name": "fm1-braids-plaits-{release}.fwsc",
+        "app_slot": 0x8DFBC,                        # = XIP LENGTH in firmware/app.ld
+        "polyphony": True,                          # device candidates (HD and standard): on, -DBR_CAP_POLY=1;
+                                                    # --no-polyphony: the previous default exactly (-nopoly dirs)
+        "poly_define_when_off": False,              # off: no define (product.h FM-1 default 0), flags as before
+        "poly_split_outputs": True,                 # --no-polyphony gets its own output directories, and
+                                                    # polyphony on is recorded in build-settings.json
+        "poly_size_constrained": True,              # with polyphony: POLY_SIZE_OS_SOURCES at -Os
+                                                    # (product.h BR_POLY_SIZE_CONSTRAINED)
+        "out_suffix": "",                           # output directories as before
+        "scanner_helpers": "SCANNER_RAM_SYMBOL_ALLOWLIST",
+        "smk37_layout": False,                      # fm1pkg_make/check_runtime_ram smk37= keyword
+        "package_requires_device_candidate": False,
+        "diagnostics_free_scope": "development-only instrumentation excluded; operational CPU monitor, fault records, installer and recovery retained",
+        "settings_tail": False,                     # build-settings.json keeps the FM-1 shape
+        "link_ready": True,
+    },
+    "smk37": {
+        "name": "SMK-37 Pro",
+        "product_define": "BR_PRODUCT_ID_SMK37",
+        "identity_prefix": "SMK-37 Pro_",
+        "default_product": "SMK-37 Pro_9650001",  # JamesOS-K prefix 965, four-digit build number
+        "version": "1.0b-bring-up",
+        "package_name": "JamesOS-K-SMK-37-Pro.fwsc",
+        "release_package_name": "JamesOS-K-SMK-37-Pro-{release}.fwsc",
+        "app_slot": 0x97400,                        # XIP LENGTH substituted into app.ld
+        "polyphony": True,                          # device candidates: on unless --no-polyphony
+        "poly_define_when_off": True,               # --no-polyphony passes -DBR_CAP_POLY=0
+        "poly_split_outputs": False,                # --no-polyphony: same output directory (as JamesOS-K)
+        "poly_size_constrained": False,             # 36 KB free: keeps its code generation
+        "out_suffix": "smk37",                      # build/<dir>-smk37: never mixes with FM-1 outputs
+        "scanner_helpers": "SMK_SCANNER_HELPERS",
+        "smk37_layout": True,
+        "package_requires_device_candidate": True,  # other SMK-37 builds are link checks only
+        "diagnostics_free_scope": "development-only instrumentation excluded; operational CPU monitor and fault records retained",
+        "settings_tail": True,                      # target, app_identity, app_slot_bytes, installable
+        # --target smk37 links and packages from this tree (WP5). Sources the SMK-37 build needs:
+        "link_ready": True,
+        "required_sources": ("hal/smk37/smk37_input.h", "hal/smk37/smk37_flash_map.h",
+                             "hal/smk37/smk37_lcd_hw.h", "src/smk37/smk37_panel.c"),
+    },
+}
+TARGET = TARGETS["fm1"]
+PRODUCT = TARGET["default_product"]
+VERSION = TARGET["version"]
 
 
 def toolchain():
@@ -180,7 +259,8 @@ def build_loader():
     LDR.mkdir(parents=True, exist_ok=True)
     src = FW / "loader"
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src"]
-    tc_all(("cc", "-c", src / "crt0_ldr.S", "-o", LDR / "crt0_ldr.o"),
+    # crt0_ldr.S carries the product's loader mark, so it must see the product define too.
+    tc_all(("cc", f"-DBR_PRODUCT={TARGET['product_define']}", "-c", src / "crt0_ldr.S", "-o", LDR / "crt0_ldr.o"),
            ("cc", *flags, "-c", src / "loader.c", "-o", LDR / "loader.o"))
     elf = LDR / "loader.elf"
     tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", src / "loader.ld",
@@ -243,6 +323,20 @@ def braids_perc_no_jump_tables():
     return bool(value)
 
 
+# RAM bound of the shared reverb's per-sample core (rv2_core_run); see check(). The
+# shipped core measured 2,252 B (fm1 and smk37); the bound leaves room for the -D
+# timing options (RV2_LINE_STRUCT=1, RV2_UPSAMPLE_TAPS=4, RV2_INT_READS=1) and stays
+# under the 4,320 B of comb kernel it replaced.
+RV2_CORE_RAM_LIMIT = 3072
+# RAM bound of the DRIVE per-sample loop (br_fx_drive_run, all three shapers and the mix);
+# measured 1,362 B on fm1. Its block setup, br_fx_drive_block, stays in XIP flash.
+DRIVE_RUN_RAM_LIMIT = 1400
+# RAM bounds of the Plaits kit drum loops (AnalogBassDrum::RenderRam and
+# SquareNoise::RenderRam, both call-free); their callers stay in XIP flash.
+PLAITS_KICK_RAM_LIMIT = 1152
+PLAITS_SQUARE_NOISE_RAM_LIMIT = 416
+
+
 def ram_code_limit():
     value = check_runtime_ram._macro(
         SRC, "firmware/hal/fm1_hot_code_policy.h", "FM1_EXTENDED_RAM_AUDIO", 0)
@@ -251,11 +345,25 @@ def ram_code_limit():
     return 0x01C07F00 if value else 0x01C06000
 
 
+XIP_MAP = re.compile(r"XIP    \(rx\)  : ORIGIN = 0x02000120, LENGTH = (0x[0-9A-Fa-f]+)\n")
+
+
 def app_linker_script():
+    """firmware/app.ld for FM-1; for another target the same script with its XIP length."""
     source = FW / "app.ld"
-    if ram_code_limit() == 0x01C06000:
-        return source
     text = source.read_text()
+    found = XIP_MAP.findall(text)
+    if len(found) != 1 or int(found[0], 16) != fm1pkg_make.APP_SLOT:
+        raise ValueError("unexpected XIP map in firmware/app.ld")
+    if TARGET["app_slot"] != fm1pkg_make.APP_SLOT:
+        text = XIP_MAP.sub(f"XIP    (rx)  : ORIGIN = 0x02000120, LENGTH = 0x{TARGET['app_slot']:X}\n", text)
+    if ram_code_limit() == 0x01C06000:
+        if TARGET["app_slot"] == fm1pkg_make.APP_SLOT:
+            return source
+        GEN.mkdir(parents=True, exist_ok=True)
+        target = GEN / f"app-{TARGET['out_suffix']}.ld"
+        target.write_text(text)
+        return target
     original = "RAMTEXT (rwx): ORIGIN = 0x01C00000, LENGTH = 0x6000"
     if text.count(original) != 1:
         raise ValueError("unexpected baseline RAMTEXT map")
@@ -270,11 +378,13 @@ def app_linker_script():
 def build_app(optimization, dsp_optimization):
     cold_tu_os_enabled = plaits_cold_tu_os()
     plaits_sources = {str(src.relative_to(FW / "plaits")) for src in PLAITS_CPP}
-    missing_cold_sources = PLAITS_COLD_TU_OS_SOURCES - plaits_sources
+    missing_cold_sources = (PLAITS_COLD_TU_OS_SOURCES | POLY_SIZE_OS_SOURCES) - plaits_sources
     if missing_cold_sources:
         raise ValueError("cold Plaits TU allowlist is missing build sources: " +
                          ", ".join(sorted(missing_cold_sources)))
-    common_flags = [*CFLAGS, "-DBR_ENABLE_PLAITS=1", "-Ifirmware/hal", "-Ifirmware/src", "-Ifirmware/gen", f'-DFELUCCA_ID="{PRODUCT}"', f'-DAPP_VER="{VERSION}"']
+    # -DBR_UI_HD=1: the HD interface is the only one (the standard interface was removed; it is also
+    # firmware/src/gfx_hd.h's default, kept explicit so the flags and bytes stay as they were).
+    common_flags = [*CFLAGS, "-DBR_ENABLE_PLAITS=1", "-Ifirmware/hal", "-Ifirmware/src", "-Ifirmware/gen", f'-DFELUCCA_ID="{PRODUCT}"', f'-DAPP_VER="{VERSION}"', "-DBR_UI_HD=1"]
     flags = [*common_flags, "-" + optimization]
     dsp_flags = [*common_flags, "-" + dsp_optimization]
     if dsp_relaxed_fp():
@@ -310,6 +420,8 @@ def build_app(optimization, dsp_optimization):
         plaits_objects.append(obj)
         file_dsp_flags = plaits_source_dsp_flags(
             dsp_flags, relative, cold_tu_os_enabled)
+        if POLY_SIZE_CONSTRAINED and relative in POLY_SIZE_OS_SOURCES:
+            file_dsp_flags = [flag for flag in file_dsp_flags if flag not in ("-Os", "-O2", "-O3")] + ["-Os"]
         if (src.name == "additive_engine.cc" and
                 check_runtime_ram._macro(
                     SRC, "firmware/plaits/upstream/plaits/dsp/oscillator/harmonic_oscillator.h",
@@ -516,12 +628,11 @@ def check(img, syms, dis, rt, ra):
         "br_fx_fusion_cost", "br_fx_fusion_prepare", "br_fx_fusion_cancel",
         "br_fx_stage_drive_block", "br_fx_stage_mod_block", "br_fx_stage_delay_block",
         "br_fx_stage_mod_rate2_block", "br_fx_stage_delay_rate2_tape_block",
-        "br_fx_stage_reverb_block", "br_fx_process_track_job_staged",
+        "br_fx_process_track_job_staged",
         "br_fx_stage_send_block", "br_gr_job", "br_gr_add_range",
         "br_fx_process_track_job_staged_block",
-        "br_fx_delay_rate2_step", "br_fx_reverb_rate2", "br_fx_reverb_rate2_selected",
-        "br_fx_reverb_rate4", "br_master_fx_begin_block", "br_master_fx_process_frame",
-        "br_master_fx_process", "br_master_snapshot_ram", "br_master_slew", "br_fx_abs",
+        "br_fx_delay_rate2_step", "br_master_fx_begin_block", "br_master_fx_process_frame",
+        "br_master_fx_process", "br_master_limit_block", "br_master_snapshot_ram", "br_master_slew", "br_fx_abs",
         "br_fx_div_pow2", "br_fx_mul_q15", "br_fx_wet_gain", "br_master_shape",
         "br_fx_pole", "br_fx_pole_bounded", "br_fx_softclip", "br_fx_tri", "br_comp_ratio", "br_comp_snapshot",
         "br_comp_abs", "br_comp_slew", "br_comp_mul_q15", "br_comp_makeup_q15",
@@ -530,14 +641,14 @@ def check(img, syms, dis, rt, ra):
         "br_comp_gain_for_level", "br_comp_mix_gain", "br_comp_bypassed",
         "br_comp_reset_detector", "br_comp_process_tracks", "br_fx_any_enabled",
         "br_fx_pan_stereo", "br_fx_drive", "br_fx_mod_delay_q8", "br_fx_mod",
-        "br_fx_delay_samples_ram", "br_fx_delay", "br_fx_reverb", "br_fx_progress_get",
+        "br_fx_delay_samples_ram", "br_fx_delay", "br_fx_progress_get",
         "br_fx_delay_note_samples", "br_fx_delay_long_decimate", "br_fx_delay_storage_reset",
         "br_fx_process_pipeline",
         # Silent-finish fast path: the compressor rest check outlines the gain step.
         "br_comp_next_mix_gain", "br_fx_comp_at_rest", "br_fx_finish_inputs_silent",
         "fm1_cpu1_worker_start_stub", "fm1_cpu1_worker_main",
         "worker_dispatch_target"
-    } | set(check_runtime_ram.SCANNER_RAM_SYMBOL_ALLOWLIST) | \
+    } | set(getattr(check_runtime_ram, TARGET["scanner_helpers"])) | \
         set(check_runtime_ram.VCF_RAM_SYMBOL_ALLOWLIST)
     development_diagnostics = configured_macro("firmware/src/instrument_diagnostic.c", "FM1_DEVELOPMENT_DIAGNOSTICS", 1)
     if development_diagnostics:
@@ -550,25 +661,53 @@ def check(img, syms, dis, rt, ra):
         errors.append("diagnostic RAM CRC must be unique and <=128 bytes")
     else:
         expected_ram_audio.add("crc32")
-    # Live reverb SIZE interpolation is a bounded leaf in the FX RAM path.
-    # Permit only this exact new helper, retaining size and call-free guards.
-    tap_symbol = "br_fx_reverb_tap"
-    if tap_symbol in ram_audio_names:
-        expected_ram_audio.add(tap_symbol)
-        tap_fields = [f for f in ram_audio_functions if f[-1] == tap_symbol]
-        tap_body = re.search(r"^" + tap_symbol + r":\n(.*?)(?=^\S|\Z)", ra, re.M | re.S)
-        if len(tap_fields) != 1 or int(tap_fields[0][-2], 16) > 256 or not tap_body or ram_text_calls(tap_body.group(1)):
-            errors.append("Reverb SIZE tap must be unique, <=256 bytes, and call-free")
+    # The shared reverb (reverb2, instrument_reverb2*.h/.c). Its per-sample core is the
+    # only reverb DSP in RAM: one call-free leaf, bounded below the old comb kernel it
+    # replaced (br_gr_job 2,992 + br_fx_reverb 1,084 + tap 244 B). Its design, apply and
+    # block driver run from XIP flash and reach the core through an indirect call.
+    # br_gr_job is now only the RAM entry (guards, timing, the indirect call); keep it
+    # small (70 B measured) so the DSP cannot drift back into it.
+    for symbol, size_limit, call_free in (("rv2_core_run", RV2_CORE_RAM_LIMIT, True),
+                                          ("br_gr_job", 128, False)):
+        fields = [f for f in ram_audio_functions if f[-1] == symbol]
+        if len(fields) != 1 or int(fields[0][-2], 16) > size_limit:
+            errors.append(f"shared reverb RAM symbol {symbol} missing, duplicated, or over {size_limit} bytes")
+            continue
+        expected_ram_audio.add(symbol)
+        if call_free:
+            first, length = int(fields[0][0], 16), int(fields[0][-2], 16)
+            body = "\n".join(line for line in ra.splitlines()
+                             if (match := LINE.match(line)) and
+                             first <= int(match[1], 16) < first + length)
+            if not body or ram_text_calls(body):
+                errors.append(f"shared reverb core {symbol} must remain call-free")
+                continue
+        notes.append(f"shared reverb: {symbol} {int(fields[0][-2], 16)} B of <= {size_limit}"
+                     + (", call-free" if call_free else ""))
+    # DRIVE: only the per-sample loop is RAM code, one bounded call-free leaf; the block setup
+    # runs from XIP flash and reaches it through an indirect call. pi32v2 objdump decodes some
+    # FPU opcodes as a spurious `call`, so the compiler listing is audited instead.
+    drive_symbol = "br_fx_drive_run"
+    drive_fields = [f for f in ram_audio_functions if f[-1] == drive_symbol]
+    if len(drive_fields) != 1 or int(drive_fields[0][-2], 16) > DRIVE_RUN_RAM_LIMIT:
+        errors.append(f"DRIVE RAM loop {drive_symbol} missing, duplicated, or over {DRIVE_RUN_RAM_LIMIT} bytes")
+    else:
+        expected_ram_audio.add(drive_symbol)
+        try:
+            drive_asm = (OUT / "instrument_audio_unit.s").read_text()
+        except OSError:
+            drive_asm = ""
+        drive_body = re.search(r"(?ms)^" + drive_symbol + r":.*?^\s*\.size\s+" + drive_symbol + r"\s*,",
+                               drive_asm)
+        if not drive_body or re.search(r"(?m)^\s*(?:call[a-z0-9]*|syscall)\b", drive_body.group(0)):
+            errors.append(f"DRIVE RAM loop {drive_symbol}: compiler listing must be present and call-free")
         else:
-            notes.append("Reverb SIZE tap: exact leaf symbol, <=256 bytes, call-free")
-    # Expanded feedback storage adds two bounded codec leaves; the compiler
-    # may also share the stereo diffuser as one leaf. Keep exact names, size
-    # limits and no-call checks alongside all existing RAM/SIZE-tap guards.
-    # The cached-unity, in-place diffuser compiles to 278 bytes on pi32v2;
-    # keep its bound local while retaining the total RAM/image hard limits.
+            notes.append(f"DRIVE: {drive_symbol} {int(drive_fields[0][-2], 16)} B of <= "
+                         f"{DRIVE_RUN_RAM_LIMIT}, compiler body call-free")
+    # Delay lines keep the companded int16 storage of the old reverb: two bounded,
+    # call-free codec leaves.
     for codec_symbol, leaf_limit in (("br_fx_reverb_compress16", 64),
-                                      ("br_fx_reverb_decompress16", 64),
-                                      ("br_fx_reverb_loop_gain_spring_block", 80)):
+                                      ("br_fx_reverb_decompress16", 64)):
         if codec_symbol not in ram_audio_names:
             continue
         expected_ram_audio.add(codec_symbol)
@@ -579,62 +718,6 @@ def check(img, syms, dis, rt, ra):
             errors.append(f"feedback leaf must be unique, <={leaf_limit} bytes, and call-free: " + codec_symbol)
         else:
             notes.append(f"feedback leaf: exact symbol, <={leaf_limit} bytes, call-free: " + codec_symbol)
-    fx_source = (SRC / "firmware/src/instrument_fx.c").read_text()
-    diffuser_inline = (
-        any(re.fullmatch(r"-DBR_FX_REVERB_OUTPUT_DIFFUSER_INLINE=1u?", flag)
-            for flag in CFLAGS) or
-        bool(re.search(r"^[ \t]*#[ \t]*define[ \t]+BR_FX_REVERB_OUTPUT_DIFFUSER_INLINE[ \t]+1u?[ \t]*$",
-                       fx_source, re.M)))
-    diffuser_symbol = "br_fx_reverb_output_diffuse"
-    diffuser_fields = [f for f in ram_audio_functions if f[-1] == diffuser_symbol]
-    if diffuser_inline:
-        # In inline mode the leaf must be gone. The two call sites live in this
-        # single stage function; target357 measured 2998 B before expansion,
-        # and this cap allows both inlined bodies with a small margin.
-        if diffuser_fields:
-            errors.append("inline reverb diffuser must not emit its out-of-line RAM leaf")
-        # The shared reverb has the only diffuser call site, in its range loop.
-        stage_symbol = ("br_gr_job" if "br_gr_job" in ram_audio_names
-                        else "br_fx_stage_reverb_block")
-        stage_fields = [f for f in ram_audio_functions if f[-1] == stage_symbol]
-        if len(stage_fields) != 1 or int(stage_fields[0][-2], 16) > 3584:
-            errors.append("inline reverb diffuser stage must be unique and <=3584 bytes")
-        else:
-            notes.append("inline reverb diffuser: leaf absent; approved stage unique and <=3584 bytes")
-    else:
-        if len(diffuser_fields) != 1 or int(diffuser_fields[0][-2], 16) > 288:
-            errors.append("reverb diffuser leaf must be present, unique, and <=288 bytes")
-        else:
-            diffuser_body = re.search(r"^" + diffuser_symbol + r":\n(.*?)(?=^\S|\Z)",
-                                      ra, re.M | re.S)
-            if not diffuser_body or ram_text_calls(diffuser_body.group(1)):
-                errors.append("reverb diffuser leaf must be call-free")
-            else:
-                expected_ram_audio.add(diffuser_symbol)
-                notes.append("reverb diffuser: exact leaf symbol, <=288 bytes, call-free")
-    # The explicit XIP-kernel diagnostic materializes two tiny RAM helpers
-    # which were inlined before their addresses were taken. Keep this allowance
-    # conditional, size-bounded and call-free; every other RAM rule remains.
-    reverb_xip = "br_fx_reverb_xip_call(" in (SRC / "firmware/src/instrument_fx.c").read_text()
-    if reverb_xip:
-        kernel = [ln.split() for ln in syms.splitlines()
-                  if len(ln.split()) >= 6 and ln.split()[2] == "F" and
-                  ln.split()[-1] == "br_fx_reverb"]
-        if len(kernel) != 1 or kernel[0][3] != ".text" or int(kernel[0][-2], 16) > 1024:
-            errors.append("diagnostic reverb kernel must be unique XIP text, <=1024 bytes")
-        for symbol, size_limit in (("br_fx_pole_reverb", 64), ("br_fx_mul_q15_spring", 32)):
-            expected_ram_audio.add(symbol)
-            fields = [item for item in ram_audio_functions if item[-1] == symbol]
-            if len(fields) != 1 or int(fields[0][-2], 16) > size_limit:
-                errors.append(f"XIP reverb helper {symbol} missing, duplicated, or exceeds {size_limit} bytes")
-                continue
-            first, length = int(fields[0][0], 16), int(fields[0][-2], 16)
-            body = "\n".join(line for line in ra.splitlines()
-                             if (match := LINE.match(line)) and
-                             first <= int(match[1], 16) < first + length)
-            if not body or ram_text_calls(body):
-                errors.append(f"XIP reverb helper {symbol} must remain call-free")
-        notes.append("diagnostic reverb: unique XIP kernel; exact named RAM helpers, size-bounded and call-free")
     fusion_only = check_runtime_ram._macro(
         SRC, "firmware/src/instrument.h", "BR_AUDIO_FUSION_ONLY_BUILD", 0)
     if fusion_only not in (0, 1):
@@ -719,6 +802,19 @@ def check(img, syms, dis, rt, ra):
                     int(rows[0][-2], 16) > cold_limit or cold_symbol in ram_audio_names):
                 errors.append(f"cold master setup must be unique bounded XIP code: {cold_symbol}")
         notes.append("master setup: bounded XIP control/coefficient preparation; sample kernels remain in RAM")
+    fx_prepare_flash = check_runtime_ram._macro(
+        SRC, "firmware/src/instrument_fx.c", "BR_FX_PREPARE_FLASH", 1)
+    if fx_prepare_flash not in (0, 1):
+        errors.append("BR_FX_PREPARE_FLASH must be exactly zero or one")
+    if fx_prepare_flash:
+        # Once-per-block (or rarer) FX helpers share br_fx_prepare_block's XIP
+        # placement; RAM callers reach them through BR_FX_PREPARE_INVOKE.
+        for cold_symbol in ("br_comp_snapshot", "br_comp_ratio", "br_comp_makeup_q15",
+                            "br_comp_threshold_q15", "br_comp_bypassed", "br_comp_reset_detector",
+                            "br_fx_delay_storage_reset", "br_fx_fusion_prepare"):
+            if cold_symbol in ram_audio_names:
+                errors.append(f"cold FX helper must stay in XIP while BR_FX_PREPARE_FLASH=1: {cold_symbol}")
+        notes.append("FX prepare helpers: snapshot/bypass/detector reset/delay storage reset/fusion prepare in XIP")
     temporal_ram = check_runtime_ram._macro(
         SRC, "firmware/plaits/upstream/plaits/dsp/oscillator/harmonic_oscillator.h",
         "FM1_HARMONIC_TEMPORAL_RAM", 0)
@@ -806,6 +902,42 @@ def check(img, syms, dis, rt, ra):
             errors.append("Scalar modal RAM kernel is not approved while paired recurrence is selected")
     elif modal_kernel_symbol in ram_audio_names or scalar_modal_kernel_symbol in ram_audio_names:
         errors.append("Modal RAM kernel present while its selector is disabled")
+    # Plaits kit drum loops: exact call-free RAM leaves, reached from XIP callers
+    # through a volatile pointer. pi32v2 objdump decodes some FPU opcodes as a
+    # spurious `call`, so the compiler listing is audited instead.
+    for selector, header, drum_symbol, drum_limit, drum_listing in (
+            ("FM1_PLAITS_KICK_RAM", "analog_bass_drum.h",
+             "_ZN6plaits14AnalogBassDrum9RenderRamEbbffffffPfm",
+             PLAITS_KICK_RAM_LIMIT, "bass_drum_engine.s"),
+            ("FM1_PLAITS_SQUARE_NOISE_RAM", "hi_hat.h",
+             "_ZN6plaits11SquareNoise9RenderRamEfPfS1_S1_m",
+             PLAITS_SQUARE_NOISE_RAM_LIMIT, "hi_hat_engine.s")):
+        drum_ram = check_runtime_ram._macro(
+            SRC, "firmware/plaits/upstream/plaits/dsp/drums/" + header, selector, 0)
+        if drum_ram not in (0, 1):
+            errors.append(f"{selector} must be exactly zero or one")
+            continue
+        if not drum_ram:
+            if drum_symbol in ram_audio_names:
+                errors.append(f"Plaits drum RAM loop present while {selector}=0: {drum_symbol}")
+            continue
+        expected_ram_audio.add(drum_symbol)
+        required_ram_audio.add(drum_symbol)
+        drum_fields = [f for f in ram_audio_functions if f[-1] == drum_symbol]
+        if len(drum_fields) != 1 or int(drum_fields[0][-2], 16) > drum_limit:
+            errors.append(f"Plaits drum RAM loop {drum_symbol} missing, duplicated, or over {drum_limit} bytes")
+            continue
+        try:
+            drum_asm = (OUT / drum_listing).read_text()
+        except OSError:
+            drum_asm = ""
+        drum_body = re.search(r"(?ms)^" + re.escape(drum_symbol) + r":.*?^\s*\.size\s+" +
+                              re.escape(drum_symbol) + r"\s*,", drum_asm)
+        if not drum_body or re.search(r"(?m)^\s*(?:call[a-z0-9]*|syscall)\b", drum_body.group(0)):
+            errors.append(f"Plaits drum RAM loop {drum_symbol}: compiler listing must be present and call-free")
+        else:
+            notes.append(f"Plaits drum RAM loop: {drum_symbol} {int(drum_fields[0][-2], 16)} B of <= "
+                         f"{drum_limit}, compiler body call-free")
     if not fusion_only:
         required_ram_audio.add("br_fx_process_pipeline")
     elif any("br_audio_pipeline_frames" in line for line in syms.splitlines()):
@@ -902,25 +1034,202 @@ def mmio_check():
     return errors
 
 
+def build_settings(a, capture, runtime_ram_settings, report):
+    """build-settings.json; report is the package validation (None: no package)."""
+    per_source_optimization = {
+        **{str(src.relative_to(FW)): a.app_opt for src in [FW / "src" / "dinghy.c", *APP_C]},
+        **{str(src.relative_to(FW)): a.dsp_opt for src in [FW / "src" / "instrument_audio_unit.c", *DSP_C, *BRAIDS_CPP, *PLAITS_CPP]},
+        **{str(src.relative_to(FW)): "Os" for src in HAL_C},
+        "loader/loader.c": "Os",
+    }
+    if PATTERN_DEVICE_CANDIDATE:
+        per_source_optimization["src/audio_fixed8_plan_unit.c"] = "Os"
+    if POLY_SIZE_CONSTRAINED:
+        for relative in sorted(POLY_SIZE_OS_SOURCES):
+            per_source_optimization["plaits/" + relative] = "Os"
+    cold_tu_os_enabled = plaits_cold_tu_os()
+    cold_tu_os_selected_sources = []
+    if cold_tu_os_enabled:
+        cold_tu_os_selected_sources = sorted(PLAITS_COLD_TU_OS_SOURCES)
+        for relative in cold_tu_os_selected_sources:
+            per_source_optimization["plaits/" + relative] = "Os"
+    harmonic_triple_ram_enabled = check_runtime_ram._macro(
+        SRC, "firmware/plaits/upstream/plaits/dsp/oscillator/harmonic_oscillator.h",
+        "FM1_HARMONIC_TRIPLE_RAM", 0)
+    harmonic_listing_path = OUT / "additive_engine.s"
+    harmonic_listing_sha256 = (
+        hashlib.sha256(harmonic_listing_path.read_bytes()).hexdigest()
+        if harmonic_triple_ram_enabled and harmonic_listing_path.is_file() else None)
+    fixed8_solver_ram_enabled = configured_macro(
+        "firmware/src/audio_fixed8_plan.h", "BR_AUDIO_FIXED8_SOLVER_RAM", 0)
+    failure_profile_settings = {
+        "base": check_runtime_ram._macro(
+            SRC, "firmware/src/instrument_failure_job_profile.h",
+            "BR_AUDIO_FAILURE_JOB_PROFILE_DIAG", 0),
+        "stage": check_runtime_ram._macro(
+            SRC, "firmware/src/instrument_failure_job_profile.h",
+            "BR_AUDIO_FAILURE_JOB_STAGE_PROFILE_DIAG", 0),
+        "fx_substage": check_runtime_ram._macro(
+            SRC, "firmware/src/instrument_failure_job_profile.h",
+            "BR_AUDIO_FAILURE_JOB_FX_SUBSTAGE_PROFILE_DIAG", 0),
+        "model_substage": check_runtime_ram._macro(
+            SRC, "firmware/src/instrument_failure_job_profile.h",
+            "BR_AUDIO_FAILURE_JOB_MODEL_SUBSTAGE_PROFILE_DIAG", 0),
+    }
+    wave_scratch_bss_flags = [flag for flag in CFLAGS
+                              if flag.startswith("-DFM1_PLAITS_WAVES_BOOT_SCRATCH_BSS=")]
+    if len(wave_scratch_bss_flags) != 1:
+        raise SystemExit("expected one explicit waveform boot-scratch BSS selector in CFLAGS")
+    wave_scratch_bss = wave_scratch_bss_flags[0].rsplit("=", 1)[1]
+    if wave_scratch_bss not in ("0", "1"):
+        raise SystemExit("FM1_PLAITS_WAVES_BOOT_SCRATCH_BSS must be zero or one")
+    settings = {
+        "product_identity": PRODUCT,
+        "app_version": VERSION,
+        "requested_defines": list(a.define),
+        "compiler_flags": list(CFLAGS),
+        "sdk_required_sha256": dict(SDK_SHA256),
+        "app_optimization": a.app_opt, "dsp_optimization": a.dsp_opt,
+        "loader_optimization": "Os",
+        "per_source_optimization": per_source_optimization,
+        "braids_perc_no_jump_tables": braids_perc_no_jump_tables(),
+        "plaits_cold_tu_os": {
+            "selector_path": "firmware/hal/fm1_math_policy.h",
+            "selector_name": "FM1_PLAITS_COLD_TU_OS",
+            "enabled": cold_tu_os_enabled,
+            "allowlist": sorted(PLAITS_COLD_TU_OS_SOURCES),
+            "selected_sources": cold_tu_os_selected_sources,
+            "optimization": "Os",
+            "floating_point_flags": "identical to global DSP flags; only -O level is overridden",
+        },
+        "floating_point_contraction": "dsp-fast/app-hal-loader-off" if dsp_relaxed_fp() else "off",
+        "fast_math": False,
+        "dsp_relaxed_fp": dsp_relaxed_fp(),
+        "dsp_relaxed_fp_flags": DSP_RELAXED_FP_FLAGS if dsp_relaxed_fp() else [],
+        "diagnostics_configuration": a.diagnostics,
+        "ui_hd": True,                  # always: read by other tooling and the reference settings files
+        "diagnostics_free": a.diagnostics == "distribution",
+        "diagnostics_free_scope": TARGET["diagnostics_free_scope"],
+        "fault_ram_code_capture_read": bool(capture),
+        "optional_app_p33_and_work_read_commands": bool(capture),
+        "runtime_profile_explicit": a.runtime_profile,
+        "pattern_panel_test": a.pattern_panel_test,
+        "panel_test_omits_popframe_export_0x94": False,
+        "panel_test_omits_c1_sidecar_export_0x96": a.pattern_panel_test,
+        "pattern_sector_test": a.pattern_sector_test,
+        "harmonic_triple_ram": {
+            "enabled": bool(harmonic_triple_ram_enabled),
+            "compiler_listing": "build/additive_engine.s" if harmonic_triple_ram_enabled else None,
+            "compiler_listing_sha256": harmonic_listing_sha256,
+        },
+        "fixed8_solver": {
+            "ram_selected": bool(fixed8_solver_ram_enabled),
+            "audited_section": ".ram_audio" if fixed8_solver_ram_enabled else ".text",
+        },
+        "failure_job_profile": failure_profile_settings,
+        "plaits_wave_boot_scratch_bss": wave_scratch_bss == "1",
+        "runtime_ram_audit": runtime_ram_settings,
+        "ram_tables": True,
+    }
+    if POLY_RECORDED:               # FM-1 without polyphony keeps the exact settings shape it always had
+        settings["polyphony"] = True
+    if POLY_SIZE_CONSTRAINED:
+        settings["poly_size_os_sources"] = sorted(POLY_SIZE_OS_SOURCES)
+    if not TARGET["settings_tail"]:
+        settings["package_sha256"] = report["sha256"] if report else None
+    else:
+        settings.update({
+            "target": TARGET["name"],
+            "app_identity": PRODUCT,
+            "app_slot_bytes": APP_SLOT,
+            "installable": report is not None,
+            "package_sha256": report["sha256"] if report else None,
+        })
+    return settings
+
+
+def resolved_config(a, capture, polyphony, package_name, packaged, missing):
+    """--print-config: the resolved target configuration, nothing built."""
+    app_defines = [f'-DFELUCCA_ID="{PRODUCT}"', f'-DAPP_VER="{VERSION}"', "-DBR_UI_HD=1"]
+    sdk = a.sdk or os.environ.get("AC79_SDK")
+    sdk_pin = {}
+    for rel, sha in SDK_SHA256.items():
+        path = Path(sdk) / "cpu" / "wl82" / "tools" / rel if sdk else None   # as fm1pkg_make.sdk_file
+        sdk_pin[rel] = {"sha256": sha, "matches": (hashlib.sha256(path.read_bytes()).hexdigest() == sha)
+                        if path and path.is_file() else None}
+    settings = build_settings(a, capture, None, None)
+    settings["harmonic_triple_ram"]["compiler_listing_sha256"] = None   # needs a build
+    if "installable" in settings:
+        settings["installable"] = packaged
+    return {
+        "target": a.target,
+        "product_name": TARGET["name"],
+        "product_define": f"-DBR_PRODUCT={TARGET['product_define']}",
+        "product_header": "firmware/product.h (force-included: -include firmware/product.h)",
+        "polyphony": polyphony,
+        "identity": PRODUCT,
+        "identity_pattern": TARGET["identity_prefix"] + "[0-9]+",
+        "version": VERSION,
+        "release": a.release,
+        "app_slot": APP_SLOT,
+        "app_slot_hex": f"0x{APP_SLOT:X}",
+        "linker_script": "firmware/app.ld" if APP_SLOT == fm1pkg_make.APP_SLOT else
+                         f"generated from firmware/app.ld with XIP LENGTH = 0x{APP_SLOT:X}",
+        "package_layout": "smk37" if TARGET["smk37_layout"] else "fm1",
+        "packaged": packaged,
+        "output_dir": str(OUT.relative_to(SRC)) if OUT.is_relative_to(SRC) else str(OUT),
+        "package_path": str((OUT / package_name).relative_to(SRC)) if packaged and OUT.is_relative_to(SRC) else None,
+        "scanner_helpers": TARGET["scanner_helpers"],
+        "cflags": CFLAGS,
+        "app_defines": app_defines,
+        "sdk": {"path": str(sdk) if sdk else None, "pin": sdk_pin},
+        "link_ready": TARGET["link_ready"],
+        "missing_sources": missing,
+        "build_settings": settings,
+        "build_settings_pending": ["runtime_ram_audit", "package_sha256",
+                                   "harmonic_triple_ram.compiler_listing_sha256"],
+    }
+
+
 def main():
     global PRODUCT, VERSION, OUT, GEN, LDR, PATTERN_TARGET_EXPERIMENT
     global PATTERN_NAMESPACE_TARGET_EXPERIMENT, PATTERN_PROJECT_UI_TARGET_EXPERIMENT, PATTERN_DEVICE_CANDIDATE
+    global TARGET, APP_SLOT, POLY_RECORDED, POLY_SIZE_CONSTRAINED
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_9XY, version string X.Y")
+    ap.add_argument("--target", choices=sorted(TARGETS), default="fm1",
+                    help="product: fm1 (FM-1, default) or smk37 (SMK-37 Pro)")
+    ap.add_argument("--print-config", action="store_true",
+                    help="print the resolved target configuration as JSON and exit without building")
+    ap.add_argument("--force-incomplete-target", action="store_true",
+                    help="porting only: try to build a target whose sources are not complete yet")
+    ap.add_argument("--release", metavar="X.Y", help="release build: version string X.Y (identity from --product)")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
-    ap.add_argument("--product", default=PRODUCT, help="private build's FM-1 numeric package identity")
+    ap.add_argument("--product", help="private build's numeric package identity: FM-1_<digits> "
+                    "(--target fm1, default FM-1_9261389) or \"SMK-37 Pro_<digits>\" "
+                    "(--target smk37, default SMK-37 Pro_9650001)")
+    ap.add_argument("--build-number", help="four-digit paired JamesOS build number; prefixes the selected instrument identity")
     ap.add_argument("--app-opt", choices=("Oz", "Os", "O2", "O3"), default="Os",
                     help="application optimization level; loader always uses Os (default: Os)")
     ap.add_argument("--dsp-opt", choices=("Os", "O2", "O3"), default="O3",
                     help="sound-engine optimization level (default: O3)")
     ap.add_argument("--runtime-profile", action="store_true",
                     help="allow explicitly instrumented scanner/VCF builds and classify them as diagnostic-only")
+    ap.add_argument("--define", action="append", default=[], metavar="NAME=VALUE",
+                    help="extra compiler define for every unit (trial switches, e.g. BR_MASTER_LEVELER=1); repeatable")
     ap.add_argument("--diagnostics", choices=("development", "distribution"), default="development",
                     help="development enables enhanced diagnostics; distribution excludes development-only diagnostic features")
     ap.add_argument("--pattern-sector-test", action="store_true", help="enable bounded read-only project-sector diagnostics")
     ap.add_argument("--pattern-panel-test", action="store_true", help="enable guarded panel test controls in a candidate")
     ap.add_argument("--pattern-device-candidate", action="store_true",
                     help="experimental pattern-only device test package; no automatic installation")
+    poly_opt = ap.add_mutually_exclusive_group()
+    poly_opt.add_argument("--polyphony", action="store_true",
+                          help="build the device candidate with stopped-transport polyphony (-DBR_CAP_POLY=1): "
+                               "the default for both targets (accepted, changes nothing)")
+    poly_opt.add_argument("--no-polyphony", action="store_true",
+                          help="build the device candidate without stopped-transport polyphony. --target smk37: "
+                               "-DBR_CAP_POLY=0, same output directory. --target fm1: the pre-polyphony FM-1 build "
+                               "exactly (no BR_CAP_POLY define), outputs in a separate -nopoly directory")
     ap.add_argument("--pattern-target-experiment", action="store_true",
                     help="build-only unshippable pattern owner RAM/link experiment")
     ap.add_argument("--pattern-namespace-target-experiment", action="store_true",
@@ -931,7 +1240,44 @@ def main():
                     help="link unbound provisioning protocol for offline tests; never install")
     ap.add_argument("--pattern-provisional-pin", type=Path,
                     help="private provisional identity pin for gated link-only build")
+    ui_opt = ap.add_mutually_exclusive_group()
+    ui_opt.add_argument("--ui-hd", action="store_true",
+                        help="the HD interface (-DBR_UI_HD=1), the only interface (accepted, changes nothing)")
+    ui_opt.add_argument("--ui-standard", action="store_true",
+                        help="REMOVED: the standard (pixel) interface was removed; this flag is an error")
     a = ap.parse_args()
+    if a.ui_standard:
+        ap.error("the standard interface was removed")
+    TARGET = TARGETS[a.target]
+    PRODUCT, VERSION, APP_SLOT = TARGET["default_product"], TARGET["version"], TARGET["app_slot"]
+    if a.build_number is not None:
+        if a.product is not None:
+            ap.error("use either --build-number or --product, not both")
+        if not re.fullmatch(r"[0-9]{4}", a.build_number):
+            ap.error("--build-number must contain exactly four digits")
+        a.product = ("FM-1_967" if a.target == "fm1" else "SMK-37 Pro_965") + a.build_number
+    if a.product is None:
+        a.product = PRODUCT
+    # Polyphony (firmware/product.h BR_CAP_POLY) is a capability of both products; it exists only
+    # in device candidates. TARGET["polyphony"] is the target's default (on for both). FM-1 without
+    # polyphony gets no BR_CAP_POLY define, so it keeps exactly the flags and bytes it always had;
+    # FM-1 with polyphony is the size-constrained configuration, whichever flag selected it.
+    if a.polyphony and not a.pattern_device_candidate:
+        ap.error("--polyphony requires --pattern-device-candidate (polyphony exists only in device candidates)")
+    polyphony = a.pattern_device_candidate and (a.polyphony or (TARGET["polyphony"] and not a.no_polyphony))
+    POLY_RECORDED = bool(polyphony and TARGET["poly_split_outputs"])
+    POLY_SIZE_CONSTRAINED = bool(polyphony and TARGET["poly_size_constrained"])
+    # FM-1 --no-polyphony candidate: its own output directory, never mixed with the default's objects
+    split = a.pattern_device_candidate and TARGET["poly_split_outputs"] and not polyphony
+    poly_out_suffix = "nopoly" if split else ""
+    # One product switch for every C/C++ unit (app, DSP, HAL, loader): see firmware/product.h.
+    CFLAGS.extend([f"-DBR_PRODUCT={TARGET['product_define']}", "-include", "firmware/product.h"])
+    for define in a.define:
+        if not re.fullmatch(r"[A-Z_][A-Z0-9_]*(=[A-Za-z0-9_]+)?", define):
+            ap.error(f"--define {define!r}: expected NAME or NAME=VALUE")
+        CFLAGS.append("-D" + define)
+    if polyphony or TARGET["poly_define_when_off"]:
+        CFLAGS.append(f"-DBR_CAP_POLY={int(polyphony)}")
     if a.diagnostics == "distribution" and (a.runtime_profile or a.pattern_sector_test or a.pattern_panel_test or
             a.pattern_namespace_target_experiment or a.pattern_provision_target_experiment or a.pattern_provisional_pin or
             (a.pattern_target_experiment and not a.pattern_device_candidate) or
@@ -941,7 +1287,8 @@ def main():
     CFLAGS.extend([f"-DFM1_FAULT_RAM_CODE_CAPTURE_READ={capture}",
                    f"-DFM1_ENABLE_P33_REGISTER_SNAPSHOT={capture}",
                    f"-DFM1_DEVELOPMENT_DIAGNOSTICS={capture}"])
-    print(f"diagnostics configuration: {a.diagnostics} (RAM code capture/read={capture}, optional app read commands={capture})")
+    if not a.print_config:          # --print-config: stdout is the JSON only
+        print(f"diagnostics configuration: {a.diagnostics} (RAM code capture/read={capture}, optional app read commands={capture})")
     if a.diagnostics == "distribution" and not a.pattern_device_candidate:
         OUT = SRC / "build" / "distribution"
         GEN = OUT / "gen"
@@ -996,11 +1343,23 @@ def main():
             CFLAGS.append("-DFM1_PATTERN_SECTOR_TEST=1")
         if PATTERN_DEVICE_CANDIDATE:
             CFLAGS.extend(["-DFM1_PATTERN_DEVICE_CANDIDATE=1", "-DFM1_PATTERN_RUNTIME_TARGET_LINK_ONLY=1", "-DFM1_PATTERN_STREAM_ONLY=1", "-DFM1_PATTERN_V16_ONLY=1"])
-            APP_C.extend(FW / "src" / name for name in ("pattern_codec_source.c", "pattern_compressed_project_shared.c", "pattern_owned_ps.c", "pattern_fixed_project.c", "pattern_fixed_bridge.c", "pattern_fixed_stage.c", "pattern_pair_stream.c", "pattern_pair_owner.c", "pattern_pair_bridge.c", "pattern_pair_project.c", "pattern_stream_project.c", "pattern_fixed_runtime.c"))
+            APP_C.extend(FW / "src" / name for name in ("pattern_codec_source.c", "pattern_compressed_project_shared.c", "pattern_owned_ps.c", "pattern_fixed_project.c", "pattern_fixed_bridge.c", "pattern_fixed_stage.c", "pattern_pair_stream.c", "pattern_pair_owner.c", "pattern_pair_bridge.c", "pattern_pair_project.c", "pattern_stream_project.c", "pattern_fixed_runtime.c", "pattern_sha256.c"))
+            if "FM1_PATTERN_DELETE_SIZING=1" in a.define:
+                if "FM1_PATTERN_DELETE_EXPERIMENT=1" not in a.define:
+                    ap.error("delete sizing requires the guarded deletion experiment")
+                APP_C.append(FW / "src" / "project_delete_gate.c")
+            if "FM1_PATTERN_DELETE_PROTOCOL_EXPERIMENT=1" in a.define:
+                if "FM1_PATTERN_DELETE_EXPERIMENT=1" not in a.define:
+                    ap.error("delete protocol requires the guarded deletion experiment")
+                if "FM1_PATTERN_DELETE_SIZING=1" not in a.define:
+                    APP_C.append(FW / "src" / "project_delete_gate.c")
+                APP_C.append(FW / "src" / "project_delete_protocol.c")
         if a.pattern_namespace_target_experiment:
             PATTERN_NAMESPACE_TARGET_EXPERIMENT = True
             CFLAGS.append("-DFM1_PATTERN_NAMESPACE_TARGET_EXPERIMENT=1")
-            APP_C.extend(FW / "src" / name for name in ("pattern_namespace.c", "pattern_namespace_sha256.c", "pattern_sha256.c", "pattern_journal_gate.c"))
+            APP_C.extend(FW / "src" / name for name in ("pattern_namespace.c", "pattern_namespace_sha256.c", "pattern_journal_gate.c"))
+            if not PATTERN_DEVICE_CANDIDATE:
+                APP_C.append(FW / "src" / "pattern_sha256.c")
         if a.pattern_provision_target_experiment:
             CFLAGS.append("-DFM1_PATTERN_PROVISION_EXPERIMENT=1")
             APP_C.append(FW / "src" / "pattern_provision_protocol.c")
@@ -1017,18 +1376,45 @@ def main():
             CFLAGS.append("-DFM1_PATTERN_PROJECT_TARGET_EXPERIMENT=1")
             if not PATTERN_DEVICE_CANDIDATE:
                 APP_C.append(FW / "src" / "pattern_project_target_bridge.c")
+    if TARGET["out_suffix"] and not a.pattern_provisional_pin:
+        suffix = TARGET["out_suffix"]
+        OUT = OUT / suffix if OUT == SRC / "build" else OUT.parent / (OUT.name + "-" + suffix)
+        GEN = OUT / "gen"
+        LDR = OUT / "loader"
+    if poly_out_suffix:             # FM-1 --no-polyphony candidate: never mix the outputs
+        OUT = OUT.parent / (OUT.name + "-" + poly_out_suffix)   # a device candidate: never build/ itself
+        GEN = OUT / "gen"
+        LDR = OUT / "loader"
     cold_tu_os_enabled = plaits_cold_tu_os()
-    require_product = re.fullmatch(r"FM-1_[0-9]+", a.product)
+    prefix = TARGET["identity_prefix"]
+    require_product = re.fullmatch(re.escape(prefix) + r"[0-9]+", a.product)
     if not require_product or len(a.product) > 20:
-        ap.error("--product must be FM-1_ followed by digits, at most 20 total characters")
+        ap.error(f"--product must be {prefix} followed by digits, at most 20 total characters"
+                 f" (--target {a.target})")
     PRODUCT = a.product
-    name = f"fm1-braids-plaits-{VERSION}.fwsc"
+    name = TARGET["package_name"].format(version=VERSION)
     if a.release:                   # one digit each: the identity has room for two (X.Y; a .Z only in the text)
         m = re.fullmatch(r"(\d)\.(\d)(\.\d)?(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z or X.Y-suffix, one digit each")
         VERSION = m[1] + "." + m[2] + (m[3] or "")
-        name = f"fm1-braids-plaits-{a.release}.fwsc"
+        name = TARGET["release_package_name"].format(release=a.release)
+    packaged = not (PATTERN_TARGET_EXPERIMENT and not PATTERN_DEVICE_CANDIDATE) and \
+        not (TARGET["package_requires_device_candidate"] and not PATTERN_DEVICE_CANDIDATE)
+    if a.release and not packaged:
+        # Releases are never device candidates (rule above, both targets), and SMK-37 Pro
+        # packages only device candidates: a release would produce no package.
+        ap.error(f"--release needs a packaged build; --target {a.target} packages only device candidates, "
+                 "which cannot be releases")
+    missing = [rel for rel in TARGET.get("required_sources", ()) if not (FW / rel).is_file()]
+    if a.print_config:
+        print(json.dumps(resolved_config(a, capture, polyphony, name, packaged, missing), indent=2))
+        return 0
+    if not TARGET["link_ready"] and not a.force_incomplete_target:
+        raise SystemExit(
+            f"build: --target {a.target} ({TARGET['name']}) cannot be built from this tree yet: its "
+            f"firmware sources are not ported (missing: {', '.join(missing) or 'none, but not marked link_ready'}). "
+            f"Nothing was compiled. Use --print-config to inspect the resolved configuration.")
     fm1pkg_make.SDK = a.sdk
     for rel, sha in SDK_SHA256.items():          # fail early without the SDK
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:
@@ -1051,19 +1437,20 @@ def main():
     runtime_ram_audit = None
     selectors = check_runtime_ram.configured_selectors(SRC)
     if selectors["scanner"] or selectors["vcf"]:
-        if PATTERN_TARGET_EXPERIMENT:
+        smk37 = TARGET["smk37_layout"]
+        if PATTERN_TARGET_EXPERIMENT or TARGET["out_suffix"]:
             # Keep build outputs isolated without letting the linked audit read
-            # stale binaries from the normal build directory.
+            # stale binaries from the normal build directory (or another target's).
             with tempfile.TemporaryDirectory(prefix="pattern-audit-", dir=OUT) as temp:
                 audit_root = Path(temp)
                 (audit_root / "firmware").symlink_to(FW, target_is_directory=True)
                 (audit_root / "build").symlink_to(OUT, target_is_directory=True)
                 runtime_ram_audit = check_runtime_ram.audit_candidate(
-                    audit_root, require_original_gpio=True, runtime_profile=a.runtime_profile)
+                    audit_root, require_original_gpio=True, runtime_profile=a.runtime_profile, smk37=smk37)
                 runtime_ram_audit["candidate"] = str(SRC)
         else:
             runtime_ram_audit = check_runtime_ram.audit_candidate(
-                SRC, require_original_gpio=True, runtime_profile=a.runtime_profile)
+                SRC, require_original_gpio=True, runtime_profile=a.runtime_profile, smk37=smk37)
         (OUT / "runtime-ram-audit.json").write_text(
             json.dumps(runtime_ram_audit, indent=2) + "\n")
         errors += runtime_ram_audit["errors"]
@@ -1088,11 +1475,14 @@ def main():
     if PATTERN_TARGET_EXPERIMENT and not PATTERN_DEVICE_CANDIDATE:
         print("pattern target experiment: link/check only; no installable package generated")
         return
-    pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY), ota, PRODUCT)
-    from validate_package import validate
-    report = validate(pkg, img, (LDR / "loader.bin").read_bytes(), PRODUCT)
-    (OUT / name).write_bytes(pkg)
-    (OUT / "package-validation.json").write_text(json.dumps(report, indent=2) + "\n")
+    report = None
+    if packaged:
+        pkg = fm1pkg_make.ufw(fm1pkg_make.flash_image(img, fm1pkg_make.KEY, smk37=TARGET["smk37_layout"]),
+                              ota, PRODUCT)
+        from validate_package import validate
+        report = validate(pkg, img, (LDR / "loader.bin").read_bytes(), PRODUCT)
+        (OUT / name).write_bytes(pkg)
+        (OUT / "package-validation.json").write_text(json.dumps(report, indent=2) + "\n")
     runtime_ram_settings = None
     if runtime_ram_audit is not None:
         runtime_ram_settings = {
@@ -1102,94 +1492,14 @@ def main():
             "report": "build/runtime-ram-audit.json",
             "report_sha256": hashlib.sha256((OUT / "runtime-ram-audit.json").read_bytes()).hexdigest(),
         }
-    per_source_optimization = {
-        **{str(src.relative_to(FW)): a.app_opt for src in [FW / "src" / "dinghy.c", *APP_C]},
-        **{str(src.relative_to(FW)): a.dsp_opt for src in [FW / "src" / "instrument_audio_unit.c", *DSP_C, *BRAIDS_CPP, *PLAITS_CPP]},
-        **{str(src.relative_to(FW)): "Os" for src in HAL_C},
-        "loader/loader.c": "Os",
-    }
-    if PATTERN_DEVICE_CANDIDATE:
-        per_source_optimization["src/audio_fixed8_plan_unit.c"] = "Os"
-    cold_tu_os_selected_sources = []
-    if cold_tu_os_enabled:
-        cold_tu_os_selected_sources = sorted(PLAITS_COLD_TU_OS_SOURCES)
-        for relative in cold_tu_os_selected_sources:
-            per_source_optimization["plaits/" + relative] = "Os"
-    harmonic_triple_ram_enabled = check_runtime_ram._macro(
-        SRC, "firmware/plaits/upstream/plaits/dsp/oscillator/harmonic_oscillator.h",
-        "FM1_HARMONIC_TRIPLE_RAM", 0)
-    harmonic_listing_path = OUT / "additive_engine.s"
-    harmonic_listing_sha256 = (
-        hashlib.sha256(harmonic_listing_path.read_bytes()).hexdigest()
-        if harmonic_triple_ram_enabled and harmonic_listing_path.is_file() else None)
-    fixed8_solver_ram_enabled = configured_macro(
-        "firmware/src/audio_fixed8_plan.h", "BR_AUDIO_FIXED8_SOLVER_RAM", 0)
-    failure_profile_settings = {
-        "base": check_runtime_ram._macro(
-            SRC, "firmware/src/instrument_failure_job_profile.h",
-            "BR_AUDIO_FAILURE_JOB_PROFILE_DIAG", 0),
-        "stage": check_runtime_ram._macro(
-            SRC, "firmware/src/instrument_failure_job_profile.h",
-            "BR_AUDIO_FAILURE_JOB_STAGE_PROFILE_DIAG", 0),
-        "fx_substage": check_runtime_ram._macro(
-            SRC, "firmware/src/instrument_failure_job_profile.h",
-            "BR_AUDIO_FAILURE_JOB_FX_SUBSTAGE_PROFILE_DIAG", 0),
-        "model_substage": check_runtime_ram._macro(
-            SRC, "firmware/src/instrument_failure_job_profile.h",
-            "BR_AUDIO_FAILURE_JOB_MODEL_SUBSTAGE_PROFILE_DIAG", 0),
-    }
-    wave_scratch_bss_flags = [flag for flag in CFLAGS
-                              if flag.startswith("-DFM1_PLAITS_WAVES_BOOT_SCRATCH_BSS=")]
-    if len(wave_scratch_bss_flags) != 1:
-        raise SystemExit("expected one explicit waveform boot-scratch BSS selector in CFLAGS")
-    wave_scratch_bss = wave_scratch_bss_flags[0].rsplit("=", 1)[1]
-    if wave_scratch_bss not in ("0", "1"):
-        raise SystemExit("FM1_PLAITS_WAVES_BOOT_SCRATCH_BSS must be zero or one")
-    (OUT / "build-settings.json").write_text(json.dumps({
-        "app_optimization": a.app_opt, "dsp_optimization": a.dsp_opt,
-        "loader_optimization": "Os",
-        "per_source_optimization": per_source_optimization,
-        "braids_perc_no_jump_tables": braids_perc_no_jump_tables(),
-        "plaits_cold_tu_os": {
-            "selector_path": "firmware/hal/fm1_math_policy.h",
-            "selector_name": "FM1_PLAITS_COLD_TU_OS",
-            "enabled": cold_tu_os_enabled,
-            "allowlist": sorted(PLAITS_COLD_TU_OS_SOURCES),
-            "selected_sources": cold_tu_os_selected_sources,
-            "optimization": "Os",
-            "floating_point_flags": "identical to global DSP flags; only -O level is overridden",
-        },
-        "floating_point_contraction": "dsp-fast/app-hal-loader-off" if dsp_relaxed_fp() else "off",
-        "fast_math": False,
-        "dsp_relaxed_fp": dsp_relaxed_fp(),
-        "dsp_relaxed_fp_flags": DSP_RELAXED_FP_FLAGS if dsp_relaxed_fp() else [],
-        "diagnostics_configuration": a.diagnostics,
-        "diagnostics_free": a.diagnostics == "distribution",
-        "diagnostics_free_scope": "development-only instrumentation excluded; operational CPU monitor, fault records, installer and recovery retained",
-        "fault_ram_code_capture_read": bool(capture),
-        "optional_app_p33_and_work_read_commands": bool(capture),
-        "runtime_profile_explicit": a.runtime_profile,
-        "pattern_panel_test": a.pattern_panel_test,
-        "panel_test_omits_popframe_export_0x94": False,
-        "panel_test_omits_c1_sidecar_export_0x96": a.pattern_panel_test,
-        "pattern_sector_test": a.pattern_sector_test,
-        "harmonic_triple_ram": {
-            "enabled": bool(harmonic_triple_ram_enabled),
-            "compiler_listing": "build/additive_engine.s" if harmonic_triple_ram_enabled else None,
-            "compiler_listing_sha256": harmonic_listing_sha256,
-        },
-        "fixed8_solver": {
-            "ram_selected": bool(fixed8_solver_ram_enabled),
-            "audited_section": ".ram_audio" if fixed8_solver_ram_enabled else ".text",
-        },
-        "failure_job_profile": failure_profile_settings,
-        "plaits_wave_boot_scratch_bss": wave_scratch_bss == "1",
-        "runtime_ram_audit": runtime_ram_settings,
-        "ram_tables": True, "package_sha256": report["sha256"],
-    }, indent=2) + "\n")
+    (OUT / "build-settings.json").write_text(json.dumps(
+        build_settings(a, capture, runtime_ram_settings, report), indent=2) + "\n")
     print(f"app      {OUT / 'dinghy.bin'}  {len(img)} B")
     print(f"loader   {LDR / 'ota.bin'}  {len(ota)} B")
-    print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}")
+    if report:
+        print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}")
+    else:
+        print(f"{TARGET['name']} link check for {PRODUCT}; no package (not a device candidate)")
     return 0
 
 

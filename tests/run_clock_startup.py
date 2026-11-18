@@ -4,13 +4,16 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import host_target                      # product selection: BR_HOST_TARGET (default fm1)
 
 root = Path(__file__).resolve().parent
 firmware = root.parent / "firmware"
+TARGET = host_target.target()
 
 
 def source(path):
-    text = path.read_text()
+    """the source as the selected product compiles it, without comments"""
+    text = host_target.select_product(path.read_text(), TARGET)
     return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.DOTALL)
 
 
@@ -42,8 +45,16 @@ assert startup.count("fm1_time_init();") == 1
 assert guard.end() < time_init < startup.index("fm1_p33_checked_read(")
 assert time_init < startup.index("fm1_wdt_arm_checked(")
 assert time_init < startup.index("recovery_main();") < startup.index("lcd_init();")
-assert time_init < startup.index("fm1_lcd_enable_backlight();") < startup.index("recovery_key()")
-assert startup.index("recovery_key()") < startup.index("ota_boot_cleanup();")
+if TARGET == "smk37":
+    # SMK-37 Pro (as built in JamesOS-K): no backlight pin to configure for the input matrix;
+    # the flash chip is identified before rescue entry (rescue uses ota_flash_ok), the store is
+    # claimed after it, and the boot does not call ota_boot_cleanup() (plan decision D4).
+    assert time_init < startup.index("ota_flash_ok = (uint8_t)fl_jedec_known(") < startup.index("recovery_key()")
+    assert startup.index("recovery_key()") < startup.index("smk37_store_enable()") < startup.index("lcd_init();")
+    assert "fm1_lcd_enable_backlight();" not in startup and "ota_boot_cleanup();" not in startup
+else:
+    assert time_init < startup.index("fm1_lcd_enable_backlight();") < startup.index("recovery_key()")
+    assert startup.index("recovery_key()") < startup.index("ota_boot_cleanup();")
 
 # The early hold and its explicitly called helpers must remain independent of
 # TIMER4; this is a scoped source check, not target control-flow emulation.
@@ -67,7 +78,8 @@ assert "lcd_init();" in recovery
 loader = body(source(firmware / "loader/loader.c"), "ldr_main")
 assert loader.count("fm1_time_init();") == 1
 assert loader.index("fm1_time_init();") < loader.index("usb_start();")
-print("Startup hold, TIMER4, P33, recovery and loader source order: passed")
+print("Startup hold, TIMER4, P33, recovery and loader source order: passed" +
+      (" (SMK-37 Pro)" if TARGET == "smk37" else ""))
 
 with tempfile.TemporaryDirectory(prefix="fm1-clock-startup-") as tmp:
     for name, defines in (("test_fm1_time_init", []),

@@ -7,7 +7,9 @@
  * RAM  : .data/.bss (96 KiB)
  * POOL : big zero-initialised buffers (FX lines, canvases), section .pool
  * STACKS with 256-byte guard bands; NOINIT survives resets and UBOOT entry.
- * 0x01C7FD50.. is reserved: boot_info, boot-state mailbox, vector table. */
+ * 0x01C7FD50.. is reserved: boot_info, boot-state mailbox, vector table.
+ * XIP LENGTH is the FM-1 app slot. tools/build.py --target smk37 links a generated
+ * copy of this script with only that length changed (0x97400, the SMK-37 Pro slot). */
 MEMORY
 {
     XIP    (rx)  : ORIGIN = 0x02000120, LENGTH = 0x8DFBC

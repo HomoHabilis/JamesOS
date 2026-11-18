@@ -1,0 +1,2134 @@
+{
+ "tree": ".",
+ "config": "fm1-nopoly",
+ "target": "fm1",
+ "poly": false,
+ "product_flags": [],
+ "extra_defines": [],
+ "started": "2026-11-17 00:10:57",
+ "jobs": 8,
+ "opt": "class",
+ "sanitize": false,
+ "dsp_build": {
+  "exit_code": 0,
+  "seconds": 5.7,
+  "attempts": 1,
+  "last_line": ""
+ },
+ "runners": [
+  {
+   "runner": "run_396_target_delay.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: extracted 396 target waits, exact boundary, wrap, stalled timer and policy callback wiring",
+   "seconds": 2.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_adaptive_poly_engine.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_all_engines_audible.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "All 24 models produced non-silent output in separate host processes.",
+   "seconds": 13.3,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_anim_marks.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "animation marks: all 247320 checks passed",
+   "seconds": 23.3,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_arp.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "arp, hold, recording and session checks passed",
+   "seconds": 12.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_arrangement_strip.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "arrangement strip: 5934 checks passed",
+   "seconds": 3.7,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_audio_drop_platform.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: platform late-drop, ownership, resync, metrics and development profile seals",
+   "seconds": 2.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_bank.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "sound bank table, browse, audition, load, confirm, octave and leave checks passed",
+   "seconds": 14.4,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_clock_startup.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "Startup hold, TIMER4, P33, recovery and loader source order: passed",
+   "seconds": 3.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_cold_stagger.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "cold stagger: synth and kit cold starts one per half, lanes together",
+   "seconds": 12.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_cold_start_old_replay.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: frozen 1482 rejects captured physical-cold tuple before writes",
+   "seconds": 1.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_cold_start_policy.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: measured 396 warm/reset and inferred physical profiles, 20 ordered writes, VLVD pending, 61 read faults and all write/guard/delay faults",
+   "seconds": 2.6,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_comp_local.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "compressor block-local step matches the global step over 614400 frames",
+   "seconds": 15.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_control_spacing_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "control_spacing (HD, FM-1): passed",
+   "seconds": 2.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_delay_character.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "delay character: all checks passed",
+   "seconds": 15.6,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_delay_laws.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "delay laws: all checks passed",
+   "seconds": 15.3,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_draw_load.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "draw load: all checks passed",
+   "seconds": 31.6,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_drive.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "drive: bypass, three shapers, gain, tone, never-quieter send, send-to-zero fade, silence, app path and session checks passed",
+   "seconds": 15.7,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_drum_render_hash.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: all 31 Plaits render hashes match 279d1ae (4 drum engine paths, 24 synth models)",
+   "seconds": 7.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_env_times.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "envelope times: all checks passed",
+   "seconds": 22.8,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_filter_chart_height_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "filter_chart_height (HD, FM-1): passed",
+   "seconds": 3.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_filter_laws.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "filter laws: all checks passed",
+   "seconds": 20.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_filter_settle.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "filter settle: 588 cutoff/resonance pairs return to zero, and a resonant track goes quiet after its note",
+   "seconds": 11.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_firmware_metadata.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "firmware metadata: firmware.json schema 1 valid (10 keys), agrees with fmhub.json",
+   "seconds": 0.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_flash_wait.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "flash wait: all checks passed (FM-1 units + callers, SMK-37 Pro units)",
+   "seconds": 4.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_fm1_install.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "installer and ROM backup gate tests passed (fakes only)",
+   "seconds": 5.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_fm1_time_init.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "TIMER4 startup configuration and preservation: passed",
+   "seconds": 1.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_font_fit.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 11.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_fx_knob4_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "fx_knob4 (HD, FM-1): passed",
+   "seconds": 11.6,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_fx_render.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "fx render: comparison tool, skipped without --ref",
+   "seconds": 0.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_gfx_hd.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PIL not available; image left as build/gfx-hd/gfx_hd.ppm",
+   "seconds": 1.6,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_global_filter.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "global filter: smoothing, note envelope, session, screens and track depth checks passed",
+   "seconds": 11.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_global_reverb.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "shared reverb: send, sum, track-1 settings, every type, tail and quiet checks passed",
+   "seconds": 18.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_global_shortcuts.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: GLO release, filter shortcut, GLO-hold snap, FX sends snap, sequencer and SAVE",
+   "seconds": 2.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_global_timing.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "",
+   "seconds": 11.6,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_guarded_pair_repair.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: model cannot compile into device firmware",
+   "seconds": 3.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_guarded_repair_real_v4.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 7.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_hd_text.py",
+   "args": [],
+   "exit_code": 1,
+   "status": "fail",
+   "last_line": "preview: Pillow is not installed; the specimen stays a PPM: build/hd-text/hd_text_specimen.ppm",
+   "seconds": 1.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_home_algo_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "home_algo (HD, FM-1): passed",
+   "seconds": 2.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_home_poly_cue.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_keyboard_modes.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: keyboard modes, held-note release and LED levels",
+   "seconds": 2.7,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_kit_mixer.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: kit mixer controls, audio, lane isolation and level preservation",
+   "seconds": 11.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_late_drop_protocol.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 2.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_lcd_crystal_wait.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "LCD startup command order and 80/150/120 ms waits: passed",
+   "seconds": 1.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_lfo_edit_navigation.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "Track patch navigation and kit mixer passed",
+   "seconds": 2.3,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_lfo_mod_law.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "lfo mod law: all checks passed",
+   "seconds": 12.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_lfo_target_icons_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "lfo_target_icons (HD, FM-1): passed",
+   "seconds": 2.7,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_lpg_release_audio.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_master_leveler.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "master leveler: all checks passed",
+   "seconds": 25.3,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_master_limiter.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "master limiter: all checks passed",
+   "seconds": 13.8,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_master_silence.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "master silence: zero stays zero, the note passes (peak 17957), state settles",
+   "seconds": 14.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_microtiming.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: microtimed playback, recording grid and session migration",
+   "seconds": 14.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_midi_app_regression.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 2.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_channel_ui_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "midi_channel_ui (HD, FM-1): passed",
+   "seconds": 2.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_clock_bias.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "mean BPM 239.553 phase drift -0.1492 pulses over 11.60s",
+   "seconds": 4.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_clock_bridge.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "MIDI timestamp-to-engine host prototype checks passed",
+   "seconds": 3.3,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_clock_continue.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "block=1056 playing=1 paused=0 active=1 invalid=0 seek=0 follow_run=1 locked=1 pending=0 probe=0 wait=0 phase=12606229 target=13059072 anchor=1",
+   "seconds": 2.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_clock_control.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 4.2,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_clock_diag.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 6.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_clock_engine.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "MIDI clock experimental physical sequencer checks passed",
+   "seconds": 4.2,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_clock_resilience.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "240->240 jitter=0 drop=0 extra=48 mean=244.459 drift=0.022 pulses",
+   "seconds": 7.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_kit.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "Independent MIDI kit lane release checks passed",
+   "seconds": 3.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_routes.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "MIDI routing ledger passed",
+   "seconds": 2.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_session_v16.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "v17 MIDI session, clock source, old-record rejection and protection passed",
+   "seconds": 3.2,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_midi_transport.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "MIDI Start/Stop/Continue audio checks passed",
+   "seconds": 12.3,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_mix_icon_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "mix_icon (HD, FM-1): passed",
+   "seconds": 2.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_mix_laws.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "mix laws: all checks passed",
+   "seconds": 13.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_mixer.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: mixer mute, multiple solos, saved mute, LEDs and global clock strip",
+   "seconds": 11.8,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_mixer_meter.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "mixer meter: ok",
+   "seconds": 13.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_mod_target_tests.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "Plaits kit pitch: tune=2, expected=2",
+   "seconds": 33.3,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_model_modulation.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "experimental model target: depth, range, kit exclusion and session passed",
+   "seconds": 13.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_model_poly_scheduler.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_model_transition_stress.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 2.6,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_mono_priority.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: mono last-note priority, duplicates, reset, MIDI and keyboard",
+   "seconds": 2.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_note_timing.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "note timing: all checks passed (tables, burst, fast run, recording)",
+   "seconds": 17.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_output_scale.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "",
+   "seconds": 18.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_overrun_counter.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 22.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_partial_frame_reconstruction.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: kit 76 key lane 3 partial pattern 1 poison 1, next frame and quiet recovery",
+   "seconds": 20.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_patch_track_color_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "patch_track_color (HD, FM-1): passed",
+   "seconds": 3.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_arranger.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "pattern arranger engine: all checks passed",
+   "seconds": 2.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_pattern_arranger_app.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "pattern arranger app: song playback, edits, ends and save/load passed",
+   "seconds": 5.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_arranger_transition.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "multi-track arrangement transition matches direct playback",
+   "seconds": 20.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_pattern_arranger_ui.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "pattern arranger screen: 26056 checks passed (record, insert, bars, pattern, remove, selection, loops, refusals, play, edit, save/load)",
+   "seconds": 22.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_pattern_audio_host.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "host pattern audio integration passed",
+   "seconds": 17.7,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_pattern_bank.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "pattern bank host experiment passed",
+   "seconds": 3.4,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_pattern_delete_protocol_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 8.2,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_encoder_hash.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: all 4 pattern encoder hashes match 0943a05",
+   "seconds": 27.3,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_pattern_export_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 6.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_fixed_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 7.7,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_foreign_reclaim.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 7.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_import_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 12.0,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_manual_independent.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "manual UI, owner and audio pattern integration passed",
+   "seconds": 16.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_pattern_only_project.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "pattern-only 11-pattern project and arrangement round-trip passed; real v5 project loads as b9ef12f did",
+   "seconds": 2.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_panel_validation.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "",
+   "seconds": 4.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_raw_delete_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 5.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_raw_export_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 5.3,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_salvage_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 11.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_save_cut_runtime.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 16.6,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_sector_diagnostic.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 5.0,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_sector_panel_combined.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 6.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_target_ui_lock2.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 2.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_pattern_v16_only.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 2.7,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_perform_heat.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: WOW saturation, pitch processing, and heat transitions",
+   "seconds": 14.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_plaits_kit_mix_hoist.py",
+   "args": [],
+   "exit_code": 2,
+   "status": "needs arguments",
+   "last_line": "run_plaits_kit_mix_hoist.py: error: the following arguments are required: --baseline",
+   "seconds": 0.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_plaits_kit_safe_prefix.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 4.4,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_plaits_regression.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "compares the BR_POLY_SUPPORT (compact state) Plaits voice with HEAD: FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_poly_render.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_poly_scheduler.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_poly_two_cores.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_poly_ui.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_poly_units.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "needs BR_POLY_SUPPORT objects (product.h: SMK-37 always, FM-1 only with polyphony): FM-1 runs it in the fm1 configuration",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_preflight_retry.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: actual retry loop: busy release, invalid graph, hard cutoff, stalled T4 and wrap",
+   "seconds": 2.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_preflight_retry_engine.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: actual C0/C1 source callbacks, queue/mailbox, preflight, late publication and fault controls",
+   "seconds": 7.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_product_switch.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "product switch: product.h selection, capabilities and guards; build.py targets: passed",
+   "seconds": 33.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_product_tests.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "FM-1 flash IDs, loader restart path and update-record cleanup: passed",
+   "seconds": 2.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_project_device_adapter.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: device adapter quiescence, bounds, worker failures and restore",
+   "seconds": 1.6,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_project_list.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 6.6,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_project_store.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: 12 slots, interrupted writes, CRC fallback and read errors",
+   "seconds": 5.9,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_publication_actual.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: actual generalized publication, two-owner/fixed/partial graphs and bounded retirement",
+   "seconds": 9.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_punch.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "punch-in key, page, settings, session, trem and loop checks passed",
+   "seconds": 17.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_punch_keys.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "punch key state machine, settings and effect checks passed",
+   "seconds": 2.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_punch_release.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: punch shift and ordinary key releases",
+   "seconds": 16.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_reader.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "reader: all checks passed (29 SAYs, 10 HELLO answers)",
+   "seconds": 3.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_retrig_audio.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: kit retrigger timing, lanes, cancellation and audio",
+   "seconds": 16.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_retrig_ui.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: held-step retrigger UI, four lanes/banks, inert empty keys and release/navigation locks",
+   "seconds": 3.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_reverb2_golden.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "reverb2 golden: all 4 builds match the prototype bit for bit",
+   "seconds": 7.6,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_reverb_sync_app.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 18.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_route_badges_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "route_badges (HD, FM-1): passed",
+   "seconds": 3.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_rv2_design_hash.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: all 16 reverb designer hashes match 38cdc16",
+   "seconds": 9.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_save_cue_stability.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: SAVE redraw never clears the cue bar (7 HD checks)",
+   "seconds": 4.2,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_save_feedback.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "SAVE and INIT preserve REC, and stopped INIT clears effect tails",
+   "seconds": 19.7,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_save_led_stability.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: SAVE LEDs have no transient changes during idle updates",
+   "seconds": 3.6,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_save_ux_1953.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "SAVE menu navigation, silence and failure notice timing passed",
+   "seconds": 3.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_screen_map.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: GLO groups (taps, long press, HOME, chord); ENV names; HOME ENV DEPTH is the filter's own depth",
+   "seconds": 4.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_screen_transitions_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "screen_transitions (HD, FM-1): passed",
+   "seconds": 17.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_seq_behaviour.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "summary: 4 passed, 0 failed, 0 defects reproduced",
+   "seconds": 49.5,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_seq_cue_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "seq_cue (HD, FM-1): passed",
+   "seconds": 19.4,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_seq_defaults.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "",
+   "seconds": 4.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_seq_leds.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: sequencer key LEDs (black off; on BRIGHT, beats MID, rest DIM, past length OFF), inert black keys, bank, track, drum lane, RETRIG and SAVE precedence",
+   "seconds": 4.1,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_seq_top_gap_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "seq_top_gap (HD, FM-1): passed",
+   "seconds": 4.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_session_old_store.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 8.2,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_session_pcm.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 2,
+   "status": "needs arguments",
+   "last_line": "run_session_pcm.py: error: the following arguments are required: session, pcm",
+   "seconds": 0.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_session_protection.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 4.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_session_retrig.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "session retrigger persistence passed",
+   "seconds": 3.6,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_session_v17.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "session v17: all checks passed",
+   "seconds": 8.8,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_session_v5_store.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "device runtime compilation deliberately rejected",
+   "seconds": 8.0,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_session_wire.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "session wire: all checks passed",
+   "seconds": 8.3,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_shape_symmetry_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "shape_symmetry (HD, FM-1): passed",
+   "seconds": 4.4,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_smk37_units.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "SMK-37 Pro hardware (faders, track arrows, pads, loader map): no FM-1 meaning",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_smk_fader_link.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "SMK-37 Pro hardware (faders, track arrows, pads, loader map): no FM-1 meaning",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_smk_faders.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "SMK-37 Pro hardware (faders, track arrows, pads, loader map): no FM-1 meaning",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_smk_seq_keys.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 17.9,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_smk_track_arrows.py",
+   "args": [],
+   "exit_code": "skip",
+   "status": "skip",
+   "reason": "SMK-37 Pro hardware (faders, track arrows, pads, loader map): no FM-1 meaning",
+   "last_line": "",
+   "seconds": 0,
+   "attempts": 0
+  },
+  {
+   "runner": "run_sound_record.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "smk37: sound record tests passed",
+   "seconds": 4.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_startup_art.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "startup: expected 16-color frame, run/index bounds and strip boundaries verified; 2438 bytes including palette",
+   "seconds": 5.2,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_suite_targeting.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "suite targeting: scanner and selection rules passed",
+   "seconds": 1.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_take_pattern_capacity.py",
+   "args": [],
+   "exit_code": 2,
+   "status": "needs arguments",
+   "last_line": "run_take_pattern_capacity.py: error: the following arguments are required: --take",
+   "seconds": 0.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_target_raw_callbacks_independent.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "target raw callback bounds, IRQ restore and error propagation passed (mock)",
+   "seconds": 7.0,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_target_wait_orchestration.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: non-half block cannot enter the extended wait path",
+   "seconds": 7.7,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_track_patch_home_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "track_patch_home (HD, FM-1): passed",
+   "seconds": 4.3,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_track_redraw.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: track changes match clean redraws",
+   "seconds": 4.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_ui_polish_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ui_polish (HD, FM-1): passed",
+   "seconds": 3.8,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_ui_tidy_hd.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ui_tidy (HD, FM-1): passed",
+   "seconds": 3.7,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_ui_timing_diag.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 8.5,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_v4_conversion_cli.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "v4 converter: current decoder accepts result; patterns preserved; originals and failures protected",
+   "seconds": 12.1,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_v4_migration_import.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "ld: warning: symbols in __TEXT,__ram_audio (build/host/plaits_reference/plaits_upstream_plaits_dsp_engine2_virtual_analog_vcf_engine.cc.o) have unwind information, but it's not a code section (missing 'regular,pure_instructions' section flag)",
+   "seconds": 14.3,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_v4_migration_proof.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "offline proof only: old pattern records unchanged; no device or project files modified",
+   "seconds": 6.4,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_validate_package_padding.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "validate_package: 0xFF padding required between directory and first file (8 packages)",
+   "seconds": 4.6,
+   "attempts": 1,
+   "opt": "logic"
+  },
+  {
+   "runner": "run_vendor_boot_validation.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "Vendor encoded boot and cross-block LZ4 validation passed; corruptions rejected",
+   "seconds": 0.2,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_wave_inflate_probe.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: 120 varied streams and truncations under ASan/UBSan",
+   "seconds": 4.7,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_worker_absolute_wait.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: absolute soft/hard waits, deadline races, wrap, stuck clock and reset semantics",
+   "seconds": 5.8,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
+   "runner": "run_worker_fault_recovery.py",
+   "args": [],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "PASS: worker fault recovery (extracted HAL, -O0 and -O2)",
+   "seconds": 4.4,
+   "attempts": 1,
+   "opt": "audio"
+  }
+ ],
+ "backoffs": [],
+ "wall_seconds": 196.2,
+ "summary": {
+  "pass": 154,
+  "fail": 1,
+  "needs arguments": 3,
+  "timeout": 0,
+  "skip": 14,
+  "total": 172,
+  "mode": "full"
+ },
+ "finished": "2026-11-17 00:14:13",
+ "baseline": {
+  "file": "tests/baselines/host-fm1-nopoly.json",
+  "differences": [
+   {
+    "runner": "run_adaptive_poly_engine.py",
+    "baseline": "absent",
+    "now": "skip"
+   },
+   {
+    "runner": "run_arrangement_strip.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_control_spacing_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_filter_chart_height_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_fx_knob4_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_home_poly_cue.py",
+    "baseline": "absent",
+    "now": "skip"
+   },
+   {
+    "runner": "run_lfo_target_icons_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_lpg_release_audio.py",
+    "baseline": "absent",
+    "now": "skip"
+   },
+   {
+    "runner": "run_model_modulation.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_model_poly_scheduler.py",
+    "baseline": "absent",
+    "now": "skip"
+   },
+   {
+    "runner": "run_model_transition_stress.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_patch_track_color_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_pattern_arranger_transition.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_pattern_delete_protocol_runtime.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_pattern_export_runtime.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_pattern_import_runtime.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_pattern_raw_delete_runtime.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_pattern_raw_export_runtime.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_project_list.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_reverb_sync_app.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_save_feedback.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_seq_cue_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_seq_top_gap_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_smk_seq_keys.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_sound_record.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_suite_targeting.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_track_patch_home_hd.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_v4_conversion_cli.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_v4_migration_import.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_v4_migration_proof.py",
+    "baseline": "absent",
+    "now": "pass"
+   },
+   {
+    "runner": "run_vendor_boot_validation.py",
+    "baseline": "absent",
+    "now": "pass"
+   }
+  ]
+ }
+}

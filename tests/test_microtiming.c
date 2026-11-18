@@ -9,7 +9,7 @@ static void setup(void) {
     br_app_init(); fm1_ms=2000u;
     br_ui.part=0; br_ui.page=BR_PAGE_SEQ; br_ui.screen[BR_PAGE_SEQ]=0;
     br_load_preset(0,BR_FIRST_PLAITS);
-    br_part[0].length=2u; br_part[0].division=1u; br_part[0].swing=0u;
+    br_part[0].length=2u; br_part[0].division=1u; br_swing=0u;
     br_part[0].step[0]=BR_NOTE_STEP(60,100);
     br_part[0].step[1]=BR_NOTE_STEP(62,100);
     br_seq_synth_velocity[0][0]=br_seq_synth_velocity[0][1]=255u;
@@ -24,6 +24,15 @@ static void setup(void) {
 }
 int main(void) {
     uint32_t duration, unit, step; int32_t micro;
+    { char label[16]; int32_t lo, hi;
+      br_micro_text(label, sizeof label, 0); assert(!strcmp(label, "ON GRID"));
+      br_micro_text(label, sizeof label, 4); assert(!strcmp(label, "+1/32"));
+      br_micro_text(label, sizeof label, -6); assert(!strcmp(label, "-3/64"));
+      br_micro_text(label, sizeof label, 7); assert(!strcmp(label, "+7/128"));
+      br_part[0].length=16u; br_part[0].division=1u; br_swing=0u;
+      br_micro_bounds(0,0,&lo,&hi); assert(lo == -7 && hi == 7);
+      br_part[0].division=2u; br_micro_bounds(0,0,&lo,&hi); assert(lo == -3 && hi == 3);
+      br_part[0].division=0u; br_micro_bounds(0,0,&lo,&hi); assert(lo == -15 && hi == 15); }
     setup(); duration=br_step_base_duration(0); unit=duration/8u;
     /* Positive timing delays a trigger and a negative next step arrives early. */
     br_seq_synth_micro[0][0]=1; br_seq_synth_micro[0][1]=-1;
@@ -33,6 +42,13 @@ int main(void) {
     br_seq_process(0,1u); assert(br_seq_note[0]==62u);
     /* The negative step is not re-triggered at its normal boundary. */
     br_seq_process(0,unit); assert(br_seq_note[0]==62u);
+    /* A heavily advanced next note can cross a delayed current note. */
+    setup(); duration=br_step_base_duration(0); unit=duration/8u;
+    br_seq_synth_micro[0][0]=7; br_seq_synth_micro[0][1]=-7;
+    br_seq_process(0,unit); assert(br_seq_note[0]==255u);
+    br_seq_process(0,1u); assert(br_seq_note[0]==62u);
+    br_seq_process(0,6u*unit-1u); assert(br_seq_note[0]==62u);
+    br_seq_process(0,1u); assert(br_seq_note[0]==60u);
     /* The real render loop processes events in BR_BLOCK chunks. Adjacent
      * 1/128 positions remain distinct, with at most one block of latency. */
     setup(); duration=br_step_base_duration(0); unit=duration/8u;
@@ -50,7 +66,7 @@ int main(void) {
     br_seq_process(0,duration); assert(br_seq_note[0]==255u);
     br_seq_process(0,1u); assert(br_seq_note[0]==62u);
     /* Input quantization: nearest step, full 1/128, coarser grid, wrap. */
-    br_part[0].length=16u; br_part[0].division=1u; br_part[0].swing=0u;
+    br_part[0].length=16u; br_part[0].division=1u; br_swing=0u;
     br_record_quantize_event(0,0,300,800,100,800,BR_TIME_QUANT_OFF,&step,&micro);
     assert(step==0u && micro==3);
     br_record_quantize_event(0,0,500,800,100,800,BR_TIME_QUANT_OFF,&step,&micro);
@@ -67,7 +83,6 @@ int main(void) {
     br_ui.page=BR_PAGE_SEQ; br_ui.screen[BR_PAGE_SEQ]=1u; br_ui.part=0;
     assert(br_control(2).value==BR_TIME_QUANT_STEP);
     br_control_turn(2,1); assert(br_seq_record_quantize[0]==BR_TIME_QUANT_OFF);
-    assert(br_part[0].mod.quantize==0u);
     br_ui.part=1; assert(br_seq_record_quantize[1]==BR_TIME_QUANT_STEP);
     /* Capture uses the audio transport snapshot rather than rounding to a step. */
     br_ui.part=0; br_ui.screen[BR_PAGE_SEQ]=0; br_part[0].length=16u;
@@ -85,21 +100,19 @@ int main(void) {
     br_seq_synth_micro[0][0]=-4; br_seq_kit_micro[2][1]=7;
     br_seq_record_quantize[0]=BR_TIME_QUANT_OFF;
     br_seq_record_quantize[3]=BR_TIME_QUANT_64;
-    br_session_t saved; assert(br_capture(&saved)); assert(saved.v3.version==16u);
-    assert(br_session_v16_valid(&saved));
+    br_session_t saved; assert(br_capture(&saved)); assert(saved.b[4]==BR_V17_VERSION);
+    assert(br_session_valid(&saved));
     br_seq_synth_micro[0][0]=0; br_seq_kit_micro[2][1]=0;
     br_seq_record_quantize[0]=br_seq_record_quantize[3]=0;
     assert(br_restore(&saved));
     assert(br_seq_synth_micro[0][0]==-4 && br_seq_kit_micro[2][1]==7);
     assert(br_seq_record_quantize[0]==BR_TIME_QUANT_OFF && br_seq_record_quantize[3]==BR_TIME_QUANT_64);
-    /* A legacy v12 project starts with no micro offsets and step quantization. */
-    for(uint32_t p=0;p<BR_SYNTH_PARTS;p++)for(uint32_t i=0;i<BR_STEPS;i++) saved.synth_length[p][i]&=0x7ffu;
-    for(uint32_t i=0;i<BR_STEPS;i++)for(uint32_t j=0;j<BR_DRUM_LANES;j++) saved.kit_length[i][j]&=0x7ffu;
-    memset(saved.kit_note,255,sizeof saved.kit_note);
-    saved.reserved_v10[0]=saved.reserved_v10[1]=saved.reserved_v10[2]=0u; saved.v3.version=12u;
-    assert(br_session_v12_valid(&saved) && br_restore(&saved));
-    assert(br_seq_synth_micro[0][0]==0 && br_seq_kit_micro[2][1]==0);
-    assert(br_seq_record_quantize[0]==BR_TIME_QUANT_STEP);
+    /* A record without a PATTERN section (v17 skips what it lacks): no micro offsets. */
+    { uint32_t pat = BR_V17_TOTAL_LEN - BR_V17_PATTERN_BYTES - BR_V17_SECTION_HEADER_LEN;
+      saved.b[7] = 4u; saved.b[8] = (uint8_t)pat; saved.b[9] = (uint8_t)(pat >> 8);
+      assert(br_session_valid(&saved) && br_restore(&saved));
+      assert(br_seq_synth_micro[0][0]==0 && br_seq_kit_micro[2][1]==0);
+      assert(br_seq_record_quantize[0]==BR_TIME_QUANT_OFF); }
     /* Actual held-key plus OCT buttons changes only the held step. */
     br_ui.page=BR_PAGE_SEQ; br_ui.screen[BR_PAGE_SEQ]=0; br_ui.part=0;
     br_ui.step_bank=0; br_ui.previous_keys=0; br_ui.step_press_key=BR_STEP_NO_PRESS;
@@ -131,12 +144,21 @@ int main(void) {
     br_seq_process(BR_DRUM_PART,1); assert(br_seq_lane_gate_frames[BR_DRUM_PART][0]);
     br_seq_process(BR_DRUM_PART,duration-2u*unit-1u); assert(!br_seq_lane_gate_frames[BR_DRUM_PART][1]);
     br_seq_process(BR_DRUM_PART,1); assert(br_seq_lane_gate_frames[BR_DRUM_PART][1]);
+    /* The expanded range also schedules crossing kit lanes independently. */
+    br_seq_kit_micro[0][0]=7; br_seq_kit_micro[1][1]=-7;
+    br_seq_frames[BR_DRUM_PART]=0u; br_seq_next[BR_DRUM_PART]=0u; br_seq_started[BR_DRUM_PART]=0u;
+    memset(br_micro_event[BR_DRUM_PART],0,sizeof br_micro_event[BR_DRUM_PART]);
+    memset(br_seq_lane_gate_frames[BR_DRUM_PART],0,sizeof br_seq_lane_gate_frames[BR_DRUM_PART]);
+    br_seq_process(BR_DRUM_PART,unit); assert(!br_seq_lane_gate_frames[BR_DRUM_PART][0] && !br_seq_lane_gate_frames[BR_DRUM_PART][1]);
+    br_seq_process(BR_DRUM_PART,1); assert(br_seq_lane_gate_frames[BR_DRUM_PART][1]);
+    br_seq_process(BR_DRUM_PART,6u*unit-1u); assert(!br_seq_lane_gate_frames[BR_DRUM_PART][0]);
+    br_seq_process(BR_DRUM_PART,1); assert(br_seq_lane_gate_frames[BR_DRUM_PART][0]);
     /* Exercise the allowed range at every subdivision and common swing value. */
     br_ui.part=0; br_part[0].length=16u;
     static const uint32_t swing_values[] = {0u, 16u, 32u, 48u, 64u, BR_SWING_MAX};
     for (uint32_t div=0; div<3; ++div) for (uint32_t si=0; si<sizeof swing_values/sizeof swing_values[0]; ++si) {
         uint32_t swing = swing_values[si];
-        br_part[0].division=div; br_part[0].swing=swing;
+        br_part[0].division=div; br_swing=swing;
         uint32_t base=800u, tick=base/(16u>>div);
         for (uint32_t pos=0; pos<16; ++pos) {
             uint32_t dur=base*((pos&1u)?128u-swing:128u+swing)/128u;
@@ -153,7 +175,7 @@ int main(void) {
     /* Odd-length loops and non-divisible frame counts must also stay within
      * the displayed nudge bounds. */
     for (uint32_t len=1; len<=15; len+=2) for (uint32_t div=0; div<3; ++div) {
-        br_part[0].length=len; br_part[0].division=div; br_part[0].swing=37;
+        br_part[0].length=len; br_part[0].division=div; br_swing=37;
         uint32_t base=779u, tick=base/(16u>>div);
         for (uint32_t pos=0;pos<len;++pos) {
             uint32_t dur=base*((pos&1u)?91u:165u)/128u;

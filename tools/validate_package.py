@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Independently inspect an FM-1 package, its flash image and its RAM loader.
+"""Independently inspect an FM-1 or SMK-37 Pro package, its flash image and its RAM loader.
+
+The package identity selects the product: "FM-1_<digits>" or "SMK-37 Pro_<digits>"
+(SMK-37: app slot 0x97400, flash 0x9D000, V016 region table, JAMESOS-K loader).
 
 Uses Python's CRC implementation and a bounds-checked LZ4 decoder, rather than
 round-tripping the packer's own parsing code. Never opens a MIDI port.
@@ -22,6 +25,11 @@ SDK_HASHES = {
     "cfg_tool.bin": "276579954f076886a6a7694f65dc71c034a63a2c204b76749065c0ac7b010d1b",
     "cfg/eq_cfg_hw.bin": "41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d",
 }
+# M-VAVE FM1 Open revision 4c7496daac04a95ff10d1afdcc8f9ead2dbabc41,
+# sdk/tools/pack/uboot.boot. The package stores its banks encoded; the JLFS
+# content CRC is calculated on this decoded file, not the encoded bytes.
+MVAVE_BOOT_SHA256 = "b88747cb72afc554d6ca078594a89f4fdcea5a74d26345b633f8e2524e7e3415"
+MVAVE_V15_OTA_SHA256 = "ef1f2db89b011fa53e71df363f0122de0ea896618c53fb53e8da676322004541"
 
 
 def require(test, message):
@@ -60,8 +68,39 @@ def file_data(data, entry, label):
     return result
 
 
-def lz4_block(raw, expected):
-    out = bytearray()
+def boot_data(data, entry):
+    encoded = cut(data, entry["offset"], entry["size"], "SDK bootloader")
+    if crc(encoded) == entry["crc"]:
+        return encoded
+    # Manufacturer format: each 16-byte bank header and its payload use the
+    # same reset cipher. Decode and validate every bank before trusting the
+    # outer CRC or accepting a known vendor hash.
+    require(len(encoded) >= 16, "SDK bootloader: missing bank header")
+    first = decrypt(encoded[:16])
+    count = struct.unpack_from("<H", first)[0]
+    require(1 <= count <= len(encoded) // 16, "SDK bootloader: invalid bank count")
+    plain = bytearray(encoded)
+    previous = count * 16
+    for i in range(count):
+        off = i * 16
+        header = decrypt(encoded[off:off + 16])
+        require(crc(header[:14]) == struct.unpack_from("<H", header, 14)[0], "SDK bootloader: bank header CRC")
+        length = struct.unpack_from("<H", header, 2)[0]
+        start = struct.unpack_from("<i", header, 8)[0]
+        require(length > 0 and start >= previous and start + length <= len(encoded), "SDK bootloader: bank bounds")
+        payload = decrypt(encoded[start:start + length])
+        require(crc(payload) == struct.unpack_from("<H", header, 12)[0], "SDK bootloader: bank content CRC")
+        plain[off:off + 16] = header
+        plain[start:start + length] = payload
+        previous = start + length
+    require(crc(plain) == entry["crc"], "SDK bootloader: decoded content CRC")
+    require(hashlib.sha256(plain).hexdigest() == MVAVE_BOOT_SHA256, "SDK bootloader: unrecognized decoded bytes")
+    return bytes(plain)
+
+
+def lz4_block(raw, expected, prefix=b""):
+    out = bytearray(prefix[-65535:])
+    prefix_len = len(out)
     pos = 0
     while pos < len(raw):
         token = raw[pos]
@@ -74,7 +113,7 @@ def lz4_block(raw, expected):
                 if count != 255: break
         out += cut(raw, pos, literal, "LZ4 literals")
         pos += literal
-        require(len(out) <= expected, "LZ4: expanded past output block")
+        require(len(out) - prefix_len <= expected, "LZ4: expanded past output block")
         if pos == len(raw): break
         require(pos + 2 <= len(raw), "LZ4: truncated offset")
         distance = raw[pos] | raw[pos + 1] << 8
@@ -86,19 +125,20 @@ def lz4_block(raw, expected):
                 require(pos < len(raw), "LZ4: truncated match length")
                 count = raw[pos]; pos += 1; match += count
                 if count != 255: break
-        require(len(out) + match <= expected, "LZ4: match expands past output block")
+        require(len(out) - prefix_len + match <= expected, "LZ4: match expands past output block")
         for _ in range(match): out.append(out[-distance])
-    require(pos == len(raw) and len(out) == expected, "LZ4: wrong output length")
-    return bytes(out)
+    require(pos == len(raw) and len(out) - prefix_len == expected, "LZ4: wrong output length")
+    return bytes(out[prefix_len:])
 
 
-def loader_identity(image):
+def loader_identity(image, *, smk37=False):
     """Read the updater's own identity, independent of the app's identity.
 
     Read the exact identity from the packaged updater. Its version may differ
     from both the app identity and previously installed updater versions.
     """
-    identities = set(re.findall(rb"ota-FM-1_[0-9]+\x00", image))
+    pattern = rb"ota-SMK-37 Pro_[0-9]+\x00" if smk37 else rb"ota-FM-1_[0-9]+\x00"
+    identities = set(re.findall(pattern, image))
     require(len(identities) == 1, "missing or ambiguous RAM update-loader identity")
     identity = identities.pop()[:-1].decode("ascii")
     require(len(identity) <= 27, "RAM update-loader identity exceeds handshake field")
@@ -117,7 +157,9 @@ def validate(raw, app=None, loader=None, expected_identity=None):
             require(not ended, "identity has a gap")
             chars.append(chr((block[47] - index - 1) & 255))
     identity = "".join(chars)
-    require(re.fullmatch(r"FM-1_[0-9]+", identity), "not an FM-1 numeric identity")
+    smk37 = bool(re.fullmatch(r"SMK-37 Pro_[0-9]+", identity))
+    require(smk37 or re.fullmatch(r"FM-1_[0-9]+", identity), "unrecognized package identity")
+    flash_size, app_slot = (0x9D000, 0x97400) if smk37 else (FLASH_SIZE, APP_SLOT)
     if expected_identity: require(identity == expected_identity, "unexpected package identity")
     logical += raw[960:]
     header = decrypt(logical[:64])
@@ -141,14 +183,19 @@ def validate(raw, app=None, loader=None, expected_identity=None):
         for start, stop in intervals:
             require(offset >= stop or offset + length <= start, "overlapping package files")
         intervals.append((offset, offset + length)); files[name] = payload
+    # Logical bytes 224 (end of the file directory) up to the first file: no checksum covers them
+    # and the device never reads them; every package the tools produced has 0xFF there.
+    first = min(start for start, _ in intervals)
+    require(logical[64 + count * 80:first] == b"\xff" * (first - 64 - count * 80),
+            "padding between the file directory and the first file is not 0xFF")
     flash, ota = files["flash.bin"], files["ota.bin"]
-    require(len(flash) == FLASH_SIZE, "flash image has wrong length")
+    require(len(flash) == flash_size, "flash image has wrong length")
     plain_header = b"".join(decrypt(flash[i:i + 32]) for i in range(0, 160, 32))
     require(crc(plain_header[2:32]) == struct.unpack_from("<H", plain_header)[0], "flash header CRC")
     top = [jlfs(plain_header, i, "flash directory") for i in range(32, 160, 32)]
     require([e["name"] for e in top] == ["uboot.boot", "isd_config.ini", "app_dir_head", "key_mac"],
             "wrong flash directory")
-    spl = file_data(flash, top[0], "SDK bootloader")
+    spl = boot_data(flash, top[0])
     isd = file_data(flash, top[1], "chip key blob")
     require(len(isd) >= 34 and crc(isd[:32]) == struct.unpack_from("<H", isd, 32)[0], "chip key CRC")
     threshold = sum(isd[:16]) & 255
@@ -164,15 +211,27 @@ def validate(raw, app=None, loader=None, expected_identity=None):
     end = area_header["size"]
     require(end >= 0x120 and end <= len(area), "application area extent")
     require(crc(area[32:end]) == area_header["crc"], "application area body CRC")
-    entries = [jlfs(area, 32 + i * 32, "application directory") for i in range(6)]
-    require([e["name"] for e in entries] == ["app.bin", "cfg_tool.bin", "VM", "PRCT", "BTIF", "USR"],
-            "wrong application directory")
+    names = ["app.bin", "cfg_tool.bin", "VM", "PRCT", "BTIF"]
+    names += ["USRTRIM", "USRFLASH", "USR"] if smk37 else ["USR"]
+    entries = [jlfs(area, 32 + i * 32, "application directory") for i in range(len(names))]
+    require([e["name"] for e in entries] == names, "wrong application directory")
+    if smk37:
+        regions = [
+            (0x9D000, 0x23000, 0x12, 0x81, 0),
+            (0x00000, 0x9D000, 0x92, 0x82, 0),
+            (0xC0000, 0x01000, 0x92, 0x82, 0),
+            (0xC1000, 0x01000, 0x92, 0x81, 0),
+            (0xC2000, 0x29000, 0x92, 0x81, 0),
+            (0xF4000, 0x0A000, 0x92, 0x81, 1),
+        ]
+        require([tuple(e[key] for key in ("offset", "size", "flags", "reserved", "index"))
+                 for e in entries[2:]] == regions, "incorrect SMK-37 flash region table")
     application = file_data(area, entries[0], "application")
-    require(entries[0]["offset"] == 0x120 and len(application) == APP_SLOT, "application slot extent")
+    require(entries[0]["offset"] == 0x120 and len(application) == app_slot, "application slot extent")
     require(application[:4] == bytes.fromhex("04818000"), "wrong FM-1 entry stub")
     if app is not None:
-        require(len(app) <= APP_SLOT and application[:len(app)] == app, "packaged application differs from ELF image")
-        require(application[len(app):] == b"\xff" * (APP_SLOT - len(app)), "non-padding data after application")
+        require(len(app) <= app_slot and application[:len(app)] == app, "packaged application differs from ELF image")
+        require(application[len(app):] == b"\xff" * (app_slot - len(app)), "non-padding data after application")
     cfg_tool = file_data(area, entries[1], "SDK config tool")
     cfg_header = jlfs(area, end, "SDK config directory")
     require(cfg_header["name"] == "cfg" and cfg_header["offset"] == 32, "wrong SDK config directory")
@@ -183,7 +242,9 @@ def validate(raw, app=None, loader=None, expected_identity=None):
     eq = cut(area, end + eq_entry["offset"], eq_entry["size"], "EQ configuration bytes")
     require(crc(eq) == eq_entry["crc"], "EQ configuration content CRC")
     for name, payload in (("uboot.boot", spl), ("cfg_tool.bin", cfg_tool), ("cfg/eq_cfg_hw.bin", eq)):
-        require(hashlib.sha256(payload).hexdigest() == SDK_HASHES[name], f"SDK {name}: unrecognized bytes")
+        digest = hashlib.sha256(payload).hexdigest()
+        require(digest == SDK_HASHES[name] or (name == "uboot.boot" and digest == MVAVE_BOOT_SHA256),
+                f"SDK {name}: unrecognized bytes")
     outer, inner = jlfs(ota, 0, "OTA outer header"), jlfs(ota, 32, "OTA inner header")
     require(outer["name"] == inner["name"] == "usb_hid_ota.bin", "wrong OTA program name")
     require(outer["offset"] == 32 and outer["size"] == len(ota) - 32, "OTA body extent")
@@ -195,13 +256,17 @@ def validate(raw, app=None, loader=None, expected_identity=None):
     while pos < len(ota):
         packed, unpacked = struct.unpack("<II", cut(ota, pos, 8, "OTA LZ4 block header")); pos += 8
         require(0 < packed <= 4096 and 0 < unpacked <= 4096, "OTA LZ4 block extent")
-        expanded += lz4_block(cut(ota, pos, packed, "OTA LZ4 block"), unpacked); pos += packed
+        expanded += lz4_block(cut(ota, pos, packed, "OTA LZ4 block"), unpacked, expanded); pos += packed
     require(len(expanded) == inner["offset"] and crc(expanded) == inner["crc"], "expanded OTA image CRC/length")
-    require(b"FELUCCA-LOADER-1" in expanded, "unknown RAM update-loader protocol")
+    vendor_ota = not smk37 and hashlib.sha256(ota).hexdigest() == MVAVE_V15_OTA_SHA256
+    require(vendor_ota or b"FELUCCA-LOADER-1" in expanded, "unknown RAM update-loader protocol")
+    if smk37:
+        require(b"FELUCCA-LOADER-1JAMESOS-K-SMK37!" in expanded[:64], "wrong SMK-37 loader")
     if loader is not None: require(bytes(expanded) == loader, "packaged loader differs from built RAM program")
     return {"identity": identity, "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
-            "loader_identity": loader_identity(expanded),
-            "app_slot": APP_SLOT, "app_bytes": len(app) if app is not None else None,
+            "loader_identity": "ota-FM-1_015" if vendor_ota else loader_identity(expanded, smk37=smk37),
+            "loader_identity_source": "pinned V15 loader; hardware-observed" if vendor_ota else "embedded loader string",
+            "app_slot": app_slot, "app_bytes": len(app) if app is not None else None,
             "ota_bytes": len(expanded), "chip": "AC791N", "format_valid": True}
 
 

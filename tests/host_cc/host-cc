@@ -1,0 +1,57 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+# Host compiler wrapper for product-selected host tests (see tests/host_target.py).
+# Installed as cc, c++, clang, clang++, gcc and g++ in this directory; runs the next
+# compiler of that name on PATH with $BR_HOST_CFLAGS (e.g. -DBR_PRODUCT=...) first and
+# $BR_HOST_CFLAGS_LAST after the caller's own arguments (tests/run_suite.py: the runner's
+# optimisation class, e.g. -O0, and --sanitize; the last -O on a clang command line wins).
+name=$(basename "$0")
+self=$(cd "$(dirname "$0")" && pwd -P)
+real=
+old_ifs=$IFS; IFS=:
+for d in $PATH; do
+    [ -n "$d" ] || continue
+    [ "$(cd "$d" 2>/dev/null && pwd -P)" = "$self" ] && continue
+    if [ -x "$d/$name" ] && [ ! -d "$d/$name" ]; then real="$d/$name"; break; fi
+done
+IFS=$old_ifs
+[ -n "$real" ] || { echo "host_cc: no real $name on PATH" >&2; exit 127; }
+# tests/run_suite.py records which files each runner reads (quick mode: tests/suite_changed.py)
+if [ -n "${BR_HOST_DEPS_LOG:-}" ]; then
+    # shellcheck disable=SC2086
+    python3 "$self/../depscan/ccdeps.py" "$real" $BR_HOST_CFLAGS "$@" $BR_HOST_CFLAGS_LAST || true
+fi
+# tests/run_suite.py --record-funcs (tests/suite_changed.py): clang's frontend profile instrumentation, at
+# compile and at link (the flag is needed by both); the runner's binary writes $LLVM_PROFILE_FILE
+instr=
+[ -n "${BR_HOST_INSTR:-}" ] && instr=-fprofile-instr-generate
+# Unity build (tests/unity_build.py, tests/README-SPEED.md): a compile+link of one tests/*.c that
+# includes firmware/src/dinghy.c is answered by a shell script that runs the group's shared binary.
+# BR_UNITY=0 turns it off, BR_UNITY=force builds a unity regardless of popularity; exit 97 from unity_build.py means "not handled" and the real compile runs.
+# ON by default (17 Nov 2026): a test is served from a shared binary only after `tests/unity_build.py verify`
+# proved its output identical to its own build (build/unity/verified.json); everything else compiles the old way.
+# BR_UNITY=0 turns it off.
+BR_UNITY=${BR_UNITY:-1}; export BR_UNITY
+if true; then   # BR_UNITY=0 still reaches unity_build.py, which records popularity and answers 97
+    unity_o= unity_src= unity_no=
+    for a in "$@"; do
+        case "$a" in
+            -c|-E|-S|-M*|-fsyntax-only|-shared) unity_no=1 ;;
+            -o) unity_o=1 ;;
+            tests/*.c) unity_src=1 ;;
+        esac
+    done
+    if [ -z "$unity_no" ] && [ -n "$unity_o" ] && [ -n "$unity_src" ]; then
+        # shellcheck disable=SC2086
+        if [ -n "$instr" ]; then   # a --record-funcs run compiles the old way; it still teaches popularity for plain runs
+            BR_UNITY=0 python3 "$self/../unity_build.py" cc -- "$real" $BR_HOST_CFLAGS "$@" $BR_HOST_CFLAGS_LAST
+        else
+            python3 "$self/../unity_build.py" cc -- "$real" $BR_HOST_CFLAGS "$@" $BR_HOST_CFLAGS_LAST
+        fi
+        rc=$?
+        [ "$rc" -eq 0 ] && exit 0
+        [ "$rc" -eq 97 ] || echo "host_cc: unity_build.py failed (rc=$rc); compiling the old way" >&2
+    fi
+fi
+# shellcheck disable=SC2086  # the flags are separate words without spaces
+exec "$real" $BR_HOST_CFLAGS "$@" $BR_HOST_CFLAGS_LAST $instr

@@ -4,6 +4,7 @@
 #define FM1_PATTERN_PROJECT_TARGET_EXPERIMENT 1
 #define main host_unused_main
 #include "../firmware/src/dinghy.c"
+volatile unsigned fm1_project_old_format_seen;   /* pattern_project.c is not linked here */
 #undef main
 #include <assert.h>
 static int scan_result=PFS_EMPTY, save_result=PFS_OK, load_result=PFS_OK, init_result=PFS_OK;
@@ -14,6 +15,14 @@ int br_pp_target_load(unsigned s) { assert(!br_diagnostic_restore_in_progress &&
 int br_pp_target_ready(void) { return ready_state; }
 int br_pp_target_recover(int *slot) { (void)slot; return recover_result; }
 int br_pp_target_init_project(void) { assert(!br_diagnostic_restore_in_progress); ++inits; return init_result; }
+#ifdef BR_SAVE_FAST_LIST_TEST
+static int fast_calls;
+int br_pp_target_list(unsigned first, fm1_project_list_entry out[FM1_PROJECT_LIST_PAGE]) {
+ assert(first==0u || first==6u); ++fast_calls;
+ for(unsigned i=0;i<FM1_PROJECT_LIST_PAGE;i++) { out[i].state=(first+i)==0u?FM1_LIST_PRESENT:FM1_LIST_EMPTY; strcpy(out[i].name,"PREVIEW"); }
+ return PFS_OK;
+}
+#endif
 
 static void tick(void){++fm1_ms;br_app_tick();}
 static void tap(unsigned k){fm1_in.buttons|=1u<<k;host_pressed|=1u<<k;tick();fm1_in.buttons&=~(1u<<k);host_released|=1u<<k;tick();}
@@ -21,6 +30,43 @@ static void knob(int n){host_encoder[ENC_KNOB1]+=n;tick();}
 static void knob2(int n){host_encoder[ENC_KNOB2]+=n;tick();}
 int main(void){
  br_app_init();fm1_ms=2000;es_project_boot_state=1;es.current=0;es_directory[0].state=1;strcpy(es_directory[0].name,"PROJECT OLD");
+#ifdef BR_SAVE_FAST_LIST_TEST
+ { es_record preview; memset(es_directory,0,sizeof es_directory); es.mode=3; es.slot=0; br_recording=1u;
+   es_scan_tick(); assert(fast_calls==1 && es_directory[0].state==5 && !es_slot_ready(0) && br_recording);
+   assert(es_latest(0,&preview,0) && !strcmp(preview.name,"PREVIEW"));
+   es_scan_tick(); assert(fast_calls==2 && es_directory[6].state==6 && !es_slot_ready(6) && !es_latest(6,&preview,0));
+   es_scan_tick(); assert(es_directory[0].state==2 && es_slot_ready(0) && br_recording);
+   memset(es_directory,0,sizeof es_directory); es.mode=0; br_recording=0u; es_directory[0].state=1; strcpy(es_directory[0].name,"PROJECT OLD");
+ }
+#endif
+ /* Exercise the shift chord through the real device SAVE / REC latch path. */
+ { br_ui.page=BR_PAGE_SEQ; br_ui.screen[BR_PAGE_SEQ]=0u; br_ui.part=0u;
+   br_part[0].length=4u; br_part[0].step[3]=BR_NOTE_STEP(72u,100u); br_recording=0u;
+   fm1_in.buttons|=1u<<BTN_OCT_UP;host_pressed|=1u<<BTN_OCT_UP;tick();
+   fm1_in.buttons|=1u<<BTN_REC;host_pressed|=1u<<BTN_REC;tick();
+   fm1_in.buttons&=~(1u<<BTN_REC);host_released|=1u<<BTN_REC;tick();
+   fm1_in.buttons&=~(1u<<BTN_OCT_UP);host_released|=1u<<BTN_OCT_UP;tick();
+   assert(BR_STEP_NOTE(br_part[0].step[0])==72u && !br_recording && !es.rec_pending);
+   fm1_in.buttons|=1u<<BTN_REC;host_pressed|=1u<<BTN_REC;tick();
+   fm1_in.buttons|=1u<<BTN_OCT_DOWN;host_pressed|=1u<<BTN_OCT_DOWN;tick();
+   fm1_in.buttons&=~(1u<<BTN_OCT_DOWN);host_released|=1u<<BTN_OCT_DOWN;tick();
+   assert(BR_STEP_NOTE(br_part[0].step[3])==72u && !br_recording);
+   fm1_in.buttons|=1u<<BTN_OCT_DOWN;host_pressed|=1u<<BTN_OCT_DOWN;tick();
+   fm1_in.buttons&=~(1u<<BTN_OCT_DOWN);host_released|=1u<<BTN_OCT_DOWN;tick();
+   assert(BR_STEP_NOTE(br_part[0].step[2])==72u && !br_recording);
+   fm1_in.buttons|=1u<<BTN_OCT_UP;host_pressed|=1u<<BTN_OCT_UP;tick();
+   fm1_in.buttons&=~(1u<<BTN_OCT_UP);host_released|=1u<<BTN_OCT_UP;tick();
+   fm1_in.buttons&=~(1u<<BTN_REC);host_released|=1u<<BTN_REC;tick();
+   assert(BR_STEP_NOTE(br_part[0].step[3])==72u && !br_recording && !es.rec_pending);
+   br_recording=1u;
+   fm1_in.buttons|=1u<<BTN_OCT_UP;host_pressed|=1u<<BTN_OCT_UP;tick();
+   fm1_in.buttons|=1u<<BTN_REC;host_pressed|=1u<<BTN_REC;tick();
+   fm1_in.buttons&=~(1u<<BTN_REC);host_released|=1u<<BTN_REC;tick();
+   fm1_in.buttons&=~(1u<<BTN_OCT_UP);host_released|=1u<<BTN_OCT_UP;tick();
+   assert(BR_STEP_NOTE(br_part[0].step[0])==72u && br_recording && !es.rec_pending);
+   br_recording=0u;
+   br_ui.page=BR_PAGE_HOME;
+ }
  tap(BTN_SAVE);assert(es.mode==1 && es.action==0);tap(BTN_OCT_UP);assert(es.mode==1&&!saves);
  tap(BTN_SAVE);assert(es.mode==0&&saves==1&&es.current==0&&!strcmp(es_directory[0].name,"PROJECT OLD"));
  tap(BTN_SAVE);knob(1);assert(es.action==1);tap(BTN_SAVE);assert(es.mode==3&&es.slot_purpose==0);

@@ -114,6 +114,47 @@
 #define FM1_PLAITS_KIT_LOCAL_RNG 1
 #endif
 
+/* Every Plaits caller in this firmware drives the trigger as patched: the
+ * synth-track C API sets Modulations::trigger_patched = true at both of its
+ * construction sites (plaits_c_api.cc), so Voice::Render never produces
+ * TRIGGER_UNPATCHED, and the kit (plaits_kit_c_api.cc) passes only
+ * TRIGGER_RISING_EDGE or TRIGGER_LOW. The drum engines' "sustain" (unpatched,
+ * free-running) mode is therefore unreachable. 1 compiles it out at the drum
+ * engines' call sites so its code is not emitted; output is unchanged. */
+#ifndef FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+#define FM1_PLAITS_TRIGGER_ALWAYS_PATCHED 1
+#endif
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED != 0 && \
+    FM1_PLAITS_TRIGGER_ALWAYS_PATCHED != 1
+#error "FM1_PLAITS_TRIGGER_ALWAYS_PATCHED must be 0 or 1"
+#endif
+
+/* The synth-track C API is the only Voice::Render caller, and both places
+ * where plaits_render builds the Modulations (plaits_c_api.cc) set
+ * frequency_patched = timbre_patched = morph_patched = false and
+ * level_patched = true; AppendFrames changes only trigger and level. 1 lets
+ * Voice::Render use those constants, so the external FM/TIMBRE/MORPH CV and
+ * unpatched-LEVEL (ping envelope) paths are not emitted; output is unchanged. */
+#ifndef FM1_PLAITS_CAPI_FIXED_CV_PATCHING
+#define FM1_PLAITS_CAPI_FIXED_CV_PATCHING 1
+#endif
+#if FM1_PLAITS_CAPI_FIXED_CV_PATCHING != 0 && \
+    FM1_PLAITS_CAPI_FIXED_CV_PATCHING != 1
+#error "FM1_PLAITS_CAPI_FIXED_CV_PATCHING must be 0 or 1"
+#endif
+
+/* Both places where plaits_render builds the Patch for Voice::Render (the
+ * C API is its only caller; AppendFrames takes the Patch by const reference)
+ * set frequency/timbre/morph_modulation_amount = 0, decay = 0.5 and
+ * lpg_colour = 0. 1 lets Voice::Render use those constants so the code that
+ * only runs for other values is not emitted; output is unchanged. */
+#ifndef FM1_PLAITS_CAPI_FIXED_PATCH
+#define FM1_PLAITS_CAPI_FIXED_PATCH 1
+#endif
+#if FM1_PLAITS_CAPI_FIXED_PATCH != 0 && FM1_PLAITS_CAPI_FIXED_PATCH != 1
+#error "FM1_PLAITS_CAPI_FIXED_PATCH must be 0 or 1"
+#endif
+
 /* Experimental correction for fixed per-sample/per-render smoothing
  * constants when testing the 38.4 kHz source path. */
 #ifndef FM1_PLAITS_RATE_TIME_CALIBRATION

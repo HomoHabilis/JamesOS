@@ -18,7 +18,7 @@ int main(void)
             assert(host_led_level_state[BTN_HOME]==FM1_LED_OFF);
             assert(host_led_level_state[BTN_SAVE]==FM1_LED_BRIGHT);
             assert(host_led_level_state[BTN_OCT_DOWN]==(mode==1?FM1_LED_OFF:FM1_LED_BRIGHT));
-            assert(host_led_level_state[BTN_OCT_UP]==FM1_LED_BRIGHT);
+            assert(host_led_level_state[BTN_OCT_UP]==FM1_LED_OFF);   /* OCT+ has no action in a SAVE screen */
             assert(host_led_level_state[BTN_PLAY]==FM1_LED_OFF);
             assert(host_led_level_state[FM1_LED_PLAY_GREEN]==FM1_LED_MID);
             for(uint32_t k=0;k<27;k++)assert(host_led_level_state[KEY_LED(k)]==FM1_LED_OFF);

@@ -18,6 +18,10 @@
 #define BR_PATTERN_PROJECT_UI 1
 #define BR_PATTERN_PROJECT_UI_TARGET 1
 #include "pattern_project_adapter.h"
+#if defined(FM1_DEVICE) || defined(BR_SAVE_FAST_LIST_TEST)
+#include "pattern_fixed_runtime.h"
+extern int br_pp_target_list(unsigned, fm1_project_list_entry [FM1_PROJECT_LIST_PAGE]);
+#endif
 extern int br_pp_target_scan(unsigned, char [13]);
 extern int br_pp_target_save(unsigned, const char *);
 extern int br_pp_target_load(unsigned);
@@ -61,8 +65,11 @@ static struct {
 __attribute__((section(".pool"), aligned(4)))
 #endif
 ;
-/* 0 unknown, 1 valid, 2 empty, 3 foreign/corrupt, 4 read error. */
-static struct { uint8_t state; char name[PS_NAME_BYTES]; } es_directory[ES_SLOTS];
+/* 0 unknown, 1 valid, 2 empty, 3 foreign/corrupt, 4 read error. 5-7 are
+ * provisional fast-list results; actions still require the full slot scan. `old`: a state-3
+ * slot holds a project in an older save format (shown OLD FORMAT, never loaded,
+ * replaceable by SAVE after the usual confirm). */
+static struct { uint8_t state, old; char name[PS_NAME_BYTES]; } es_directory[ES_SLOTS];
 #if BR_PATTERN_PROJECT_UI_TARGET
 static uint32_t es_project_fault;
 /* 0: waiting for startup recovery, 1: ready, 2: recovery failed. */
@@ -81,11 +88,11 @@ static int es_latest(int slot, es_record *out, int *copy) {
     const char *name; unsigned state;
     if(slot<0 || slot>=ES_SLOTS) return 0;
     state=es_directory[slot].state;
-    if(state==2) return 0;
+    if(state==2 || state==6) return 0;
 #if BR_PATTERN_PROJECT_UI_TARGET
-    name=state==1?es_directory[slot].name:state==3?"USED DATA":state==4?"READ ERROR":!br_pp_target_ready() || es_project_boot_state!=1u?"LOCKED":"SCANNING";
+    name=(state==1 || state==5)?es_directory[slot].name:state==3?(es_directory[slot].old?"OLD FORMAT":"USED DATA"):state==7?"USED DATA":state==4?"READ ERROR":!br_pp_target_ready() || es_project_boot_state!=1u?"LOCKED":"SCANNING";
 #else
-    name=state==1?es_directory[slot].name:state==3?"USED DATA":state==4?"READ ERROR":"SCANNING";
+    name=state==1?es_directory[slot].name:state==3?(es_directory[slot].old?"OLD FORMAT":"USED DATA"):state==4?"READ ERROR":"SCANNING";
 #endif
     if(out)br_text_copy(out->name,name,sizeof out->name);
     if(copy)*copy=0;
@@ -95,11 +102,14 @@ static void es_error(const char *s) { es.notice[0]=0;br_text_copy(es.error,s,siz
 /* Caller holds the quiescent transaction. */
 #if BR_PATTERN_PROJECT_UI
 static void es_scan_slot(int slot) {
-    char name[13]; int rc=br_pp_ui_scan((unsigned)slot,name);
+    char name[13]; int rc;
+    fm1_project_old_format_seen=0u;
+    rc=br_pp_ui_scan((unsigned)slot,name);
 #if BR_PATTERN_PROJECT_UI_TARGET
     if(rc==FM1_PROJECT_ROLLBACK_FAILED){es_project_fault=1u;es_directory[slot].state=4;es_error("RECOVERY NEEDED");return;}
 #endif
     es_directory[slot].state=(uint8_t)(rc==PFS_OK?1:rc==PFS_EMPTY?2:rc==PFS_INVALID?3:4);
+    es_directory[slot].old=(uint8_t)(rc==PFS_INVALID && fm1_project_old_format_seen);
     if(rc==PFS_OK)br_text_copy(es_directory[slot].name,name,sizeof es_directory[slot].name);
     br_ui.redraw=1;
 }
@@ -129,9 +139,13 @@ static int br_project_target_factory(void *context,uint8_t *out,size_t length) {
 static int br_project_target_recover(void) {
     int slot=-1, rc;
     if(br_playing) return PFS_INVALID;
+    fm1_project_old_format_seen=0u;
     rc=br_pp_ui_recover(&slot);
     if(rc==FM1_PROJECT_ROLLBACK_FAILED){es_project_fault=1u;es_error("RECOVERY NEEDED");}
     if(rc==PFS_OK || rc==FM1_PROJECT_SAFE_EMPTY || rc==FM1_PROJECT_FOREIGN_WORKING) es_project_boot_state=1u;
+    /* The working project is in an older save format: start from defaults, the
+     * store stays usable and the next SAVE replaces it. */
+    if(rc==FM1_PROJECT_FOREIGN_WORKING && fm1_project_old_format_seen) br_message("OLD PROJECT NOT LOADED");
     if(rc==PFS_OK) { br_project_host_ui_reset(); es.current=slot; if(slot>=0 && slot<ES_SLOTS) es_scan_slot(slot); }
     return rc;
 }
@@ -160,15 +174,58 @@ static void es_scan_tick(void) {
     if(br_session_save_blocked())return;
 #endif
     for(slot=0;slot<ES_SLOTS;slot++) if(!es_directory[slot].state)break;
+#if BR_PATTERN_PROJECT_UI_TARGET && (defined(FM1_DEVICE) || defined(BR_SAVE_FAST_LIST_TEST))
+    if(slot<ES_SLOTS) {
+        /* The librarian's CRC-checked batch list is an early preview only.
+         * Full semantic validation still gates every SAVE and LOAD. */
+        fm1_project_list_entry entries[FM1_PROJECT_LIST_PAGE];
+        unsigned start=(unsigned)slot / FM1_PROJECT_LIST_PAGE * FM1_PROJECT_LIST_PAGE;
+        uint32_t recording=br_recording; int rc;
+        br_recording=0u; rc=br_pp_target_list(start,entries); br_recording=recording;
+        if(rc==PFS_OK) {
+            for(unsigned i=0;i<FM1_PROJECT_LIST_PAGE;i++) if(!es_directory[start+i].state) {
+                unsigned st=entries[i].state;
+                es_directory[start+i].state=(uint8_t)(st==FM1_LIST_PRESENT?5:st==FM1_LIST_EMPTY?6:7);
+                if(st==FM1_LIST_PRESENT) br_text_copy(es_directory[start+i].name,entries[i].name,PS_NAME_BYTES);
+            }
+            br_ui.redraw=1u;
+            return;
+        }
+        if(rc==FM1_PROJECT_ROLLBACK_FAILED){es_project_fault=1u;es_error("RECOVERY NEEDED");return;}
+        /* If the fast list is unavailable, retain the original safe scan. */
+    } else {
+        if(es.slot>=0 && es.slot<ES_SLOTS && es_directory[es.slot].state>=5) slot=es.slot;
+        else for(slot=0;slot<ES_SLOTS;slot++) if(es_directory[slot].state>=5)break;
+    }
+#endif
 #if BR_PATTERN_PROJECT_UI_TARGET
     if(slot==ES_SLOTS)return;
-    es_scan_slot(slot);
+    /* Project storage requires REC disarmed even for its directory scan.
+     * Restore the arm state before returning to the normal input loop. */
+    { uint32_t recording=br_recording; br_recording=0u;
+      es_scan_slot(slot); br_recording=recording; }
 #else
     if(slot==ES_SLOTS || !br_quiescent_transaction_begin())return;
     es_scan_slot(slot);br_quiescent_transaction_end();
 #endif
 }
 static int es_silence_for_save(void);
+#ifndef ES_STORAGE_FEEDBACK_SYNC
+#define ES_STORAGE_FEEDBACK_SYNC() lcd_sync()
+#endif
+/* Storage can block the foreground for a long time. Paint a compact cue now,
+ * including any previously held canvas rows, and wait for the panel DMA to
+ * finish before touching the engine or project store. Audio interrupts remain
+ * enabled. The next ordinary draw must repair the strip we replaced. */
+static void es_storage_feedback(const char *text) {
+    cv_begin(240u,24u,BR_BACKGROUND);
+    cv_ox=0;cv_oy=0;
+    br_widget_text_2x((240-br_widget_text_width_scaled(text,2))/2,4,text,C_WHITE);
+    cv_blit(0u,216u);
+    ES_STORAGE_FEEDBACK_SYNC();
+    br_pass.epoch+=0x9e3779b9u;
+    br_ui.redraw=1u;
+}
 #if BR_PATTERN_PROJECT_UI
 static int es_write(int slot,const char *name) {
     int rc;
@@ -178,11 +235,15 @@ static int es_write(int slot,const char *name) {
 #endif
     if(!es_slot_ready(slot)){es_error("SCANNING SLOTS");return 0;}
     if(br_playing){es_error("STOP PLAYBACK");return 0;}
+    es_storage_feedback("SAVING...");
     if(!es_silence_for_save()){es_error("BUSY");return 0;}
 #if !BR_PATTERN_PROJECT_UI_TARGET
     if(!br_quiescent_transaction_begin()){es_error("BUSY");return 0;}
 #endif
-    rc=br_pp_ui_save((unsigned)slot,name);
+    /* Storage requires REC disarmed. This is a temporary pause, not a
+     * user-facing REC toggle: restore the previous state even on failure. */
+    { uint32_t recording=br_recording; br_recording=0u;
+      rc=br_pp_ui_save((unsigned)slot,name); br_recording=recording; }
 #if !BR_PATTERN_PROJECT_UI_TARGET
     br_quiescent_transaction_end();
 #endif
@@ -202,8 +263,10 @@ static int es_write(int slot,const char *name) {
     int rc; ps_info info;
     if(!es_slot_ready(slot)){es_error("SCANNING SLOTS");return 0;}
     if(br_playing){es_error("STOP PLAYBACK");return 0;}
+    es_storage_feedback("SAVING...");
     if(!es_silence_for_save()){es_error("BUSY");return 0;}
-    rc=br_project_save((uint32_t)slot,name,es_directory[slot].state==3,&info);
+    { uint32_t recording=br_recording; br_recording=0u;
+      rc=br_project_save((uint32_t)slot,name,es_directory[slot].state==3,&info); br_recording=recording; }
     if(rc!=PS_OK){es_error("SAVE FAILED");es_directory[slot].state=0;return 0;}
     es_directory[slot].state=1;br_text_copy(es_directory[slot].name,info.name,sizeof es_directory[slot].name);
     es.current=slot;es.error[0]=0;return 1;
@@ -217,12 +280,16 @@ static void es_finish_pending(void) {
     if(es_project_fault){es_error("RECOVERY NEEDED");return;}
     if(!br_pp_target_ready() || es_project_boot_state!=1u){es_error(es_project_boot_state==2u?"RECOVERY FAILED":"STORE LOCKED");return;}
 #endif
-    if(br_playing || !br_engine_quiet() || !br_fx_quiet()){es_error("STOP AND WAIT");return;}
+    if(br_playing || (es.pending!=2 && (!br_engine_quiet() || !br_fx_quiet()))){es_error("STOP AND WAIT");return;}
+    es_storage_feedback(es.pending==1?"LOADING...":"INITIALIZING...");
+    if(es.pending==2 && !es_silence_for_save()){es_error("BUSY");return;}
 #if !BR_PATTERN_PROJECT_UI_TARGET
     if(!br_quiescent_transaction_begin()){es_error("BUSY");return;}
 #endif
-    rc=es.pending==1?br_pp_ui_load((unsigned)es.target):
-       es.pending==2?br_pp_ui_init_project():PFS_INVALID;
+    if(es.pending==2) {
+        uint32_t recording=br_recording; br_recording=0u;
+        rc=br_pp_ui_init_project(); br_recording=recording;
+    } else rc=es.pending==1?br_pp_ui_load((unsigned)es.target):PFS_INVALID;
 #if !BR_PATTERN_PROJECT_UI_TARGET
     br_quiescent_transaction_end();
 #endif
@@ -252,9 +319,13 @@ static void es_finish_pending(void) {
 #else
 static void es_finish_pending(void) {
     int rc;
-    if(br_playing || !br_engine_quiet() || !br_fx_quiet()){es_error("STOP AND WAIT");return;}
-    rc=es.pending==1?br_project_load((uint32_t)es.target,0):
-       es.pending==2?br_project_init(&es.factory):PS_INVALID;
+    if(br_playing || (es.pending!=2 && (!br_engine_quiet() || !br_fx_quiet()))){es_error("STOP AND WAIT");return;}
+    es_storage_feedback(es.pending==1?"LOADING...":"INITIALIZING...");
+    if(es.pending==2 && !es_silence_for_save()){es_error("BUSY");return;}
+    if(es.pending==2) {
+        uint32_t recording=br_recording; br_recording=0u;
+        rc=br_project_init(&es.factory); br_recording=recording;
+    } else rc=es.pending==1?br_project_load((uint32_t)es.target,0):PS_INVALID;
     if(rc!=PS_OK){es_error(es.pending==1?"LOAD FAILED":"INIT FAILED");return;}
     es.current=es.pending==1?es.target:-1;es_close();
 }
@@ -298,7 +369,6 @@ static void es_open(void) {
 }
 static void es_quick_save(void) {
     es_record r;
-    if (!br_playing && !es_silence_for_save()){es_error("BUSY");return;}
     if(es.current<0){es_open();es.mode=3;return;}
     if(!es_slot_ready(es.current) || !es_slot_loadable(es.current)){es_open();es.mode=3;es_error("SELECT SLOT");return;}
     (void)es_latest(es.current,&r,0);

@@ -146,7 +146,7 @@ static inline __attribute__((always_inline)) uint32_t br_comp_clamp(uint32_t x, 
 BR_AUDIO_API int32_t br_comp_threshold_db(uint32_t v)
 { return -(int32_t)(48u - br_comp_clamp(v, 48u)); }
 
-static BR_FX_RAM_AUDIO uint32_t br_comp_ratio(uint32_t v)
+static BR_FX_PREPARE_CODE uint32_t br_comp_ratio(uint32_t v)
 { return br_comp_ratio_table[br_comp_clamp(v, 7u)]; }
 
 BR_AUDIO_API uint32_t br_comp_attack_samples(uint32_t v)
@@ -166,11 +166,14 @@ BR_AUDIO_API uint32_t br_comp_release_samples(uint32_t v)
 BR_AUDIO_API uint32_t br_comp_hold_samples(uint32_t v)
 { v = br_comp_clamp(v, 127u); return (v * v * (FS / 2u)) / 16129u; }
 
-static BR_FX_RAM_AUDIO uint32_t br_comp_makeup_q15(uint32_t value);
-static BR_FX_RAM_AUDIO uint32_t br_comp_threshold_q15(uint32_t value);
+static BR_FX_PREPARE_CODE uint32_t br_comp_makeup_q15(uint32_t value);
+static BR_FX_PREPARE_CODE uint32_t br_comp_threshold_q15(uint32_t value);
 
-static BR_FX_RAM_AUDIO void br_comp_snapshot(const br_compressor_config_t *provided,
-                                             uint32_t provided_revision)
+/* Cold control snapshot: runs once per block from br_fx_prepare_block, so it
+ * and its ratio/makeup/threshold helpers (used nowhere else) share that
+ * function's placement (XIP flash by default). */
+static BR_FX_PREPARE_CODE void br_comp_snapshot(const br_compressor_config_t *provided,
+                                                uint32_t provided_revision)
 {
     uint32_t before = provided ? provided_revision : br_master.revision, after;
     br_compressor_config_t c;
@@ -405,7 +408,7 @@ static void br_comp_init(void)
     br_comp_reduction_q15 = 0u;
 }
 
-static BR_FX_RAM_AUDIO uint32_t br_comp_makeup_q15(uint32_t value)
+static BR_FX_PREPARE_CODE uint32_t br_comp_makeup_q15(uint32_t value)
 {
     uint32_t pos = br_comp_clamp(value, 24u), idx = pos / 3u, rem = pos % 3u;
     uint32_t a = br_comp_makeup_table[idx];
@@ -413,7 +416,7 @@ static BR_FX_RAM_AUDIO uint32_t br_comp_makeup_q15(uint32_t value)
     return a + (br_comp_makeup_table[idx + 1u] - a) * rem / 3u;
 }
 
-static BR_FX_RAM_AUDIO uint32_t br_comp_threshold_q15(uint32_t value)
+static BR_FX_PREPARE_CODE uint32_t br_comp_threshold_q15(uint32_t value)
 {
     uint32_t pos = br_comp_clamp(value, 48u), idx = pos / 3u, rem = pos % 3u;
     uint32_t a = br_comp_threshold_table[idx];
@@ -542,13 +545,14 @@ static BR_FX_RAM_AUDIO uint32_t br_comp_mix_gain(uint32_t compressed_q15, uint32
 
 /* Tracks contain post-FX/post-pan samples. Keys are pre-mixer mono taps;
  * normalize the chosen key by four here to match the dry mixer scale. */
-static BR_FX_RAM_AUDIO int br_comp_bypassed(void)
+static BR_FX_PREPARE_CODE int br_comp_bypassed(void)
 {
     return br_comp_cached.source == BR_COMP_OFF || !br_comp_cached.mix ||
         (br_comp_cached.ratio == 0u && br_comp_cached.makeup == 0u);
 }
 
-static BR_FX_RAM_AUDIO void br_comp_reset_detector(void)
+/* Once per block at most; RAM callers use BR_FX_PREPARE_INVOKE. */
+static BR_FX_PREPARE_CODE __attribute__((noinline)) void br_comp_reset_detector(void)
 {
     br_comp_envelope = 0;
     br_comp_hold_left = 0;

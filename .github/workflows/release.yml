@@ -1,7 +1,7 @@
 name: Release
 
 # Run from Actions > Release > Run workflow. Leave the tag empty to reuse a release tag already on the
-# chosen commit, or to name the next build (v1.0a-midi-2150, then 2151, ...). An existing tag is
+# chosen commit, or to name the next build (v1.0b-midi-2151, then 2152, ...). An existing tag is
 # released at its own commit; a new tag is created on the commit the workflow runs on. The tag is
 # only pushed once the tests and the firmware build have passed.
 #
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to release, e.g. v1.0a-midi-2151 (empty = reuse or name the next one)
+        description: Tag to release, e.g. v1.0b-midi-2151 (empty = reuse or name the next one)
         required: false
         default: ""
       prerelease:

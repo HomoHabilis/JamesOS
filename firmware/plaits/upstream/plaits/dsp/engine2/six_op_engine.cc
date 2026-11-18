@@ -106,10 +106,15 @@ void SixOpEngine::Render(
     float* aux,
     size_t size,
     bool* already_enveloped) {
+#if FM1_PLAITS_TRIGGER_ALWAYS_PATCHED
+  const bool trigger_unpatched = false;  // Unreachable here; see plaits_config.h.
+#else
+  const bool trigger_unpatched = parameters.trigger & TRIGGER_UNPATCHED;
+#endif
   int patch_index = patch_index_quantizer_.Process(
       parameters.harmonics * 1.02f);
   
-  if (parameters.trigger & TRIGGER_UNPATCHED) {
+  if (trigger_unpatched) {
     const float t = parameters.morph;
     voice_[0].mutable_lfo()->Scrub(2.0f * kCorrectedSampleRate * t);
 

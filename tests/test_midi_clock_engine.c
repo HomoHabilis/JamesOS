@@ -20,7 +20,7 @@ static void render(void)
 static void setup(void)
 {
     br_app_init(); br_load_preset(0u, BR_FIRST_PLAITS);
-    br_part[0].length = 3u; br_part[0].division = 1u; br_part[0].swing = 77u;
+    br_part[0].length = 3u; br_part[0].division = 1u; br_swing = 77u;
     for (uint32_t i = 0u; i < 3u; ++i) {
         br_part[0].step[i] = BR_NOTE_STEP(60u + i, 100u);
         br_seq_synth_length[0][i] = 16u; br_seq_synth_velocity[0][i] = 255u;
@@ -42,7 +42,7 @@ int main(void)
     }
     /* An in-flight positive micro-event keeps its original physical gate
      * calculation when the estimate changes before the event fires. */
-    setup(); br_part[0].swing = 0u; br_seq_synth_micro[0][0] = 3;
+    setup(); br_swing = 0u; br_seq_synth_micro[0][0] = 3;
     render();
     uint32_t slot = 0u;
     while (slot < BR_SEQ_EVENT_SLOTS && !br_micro_event[0][slot].active) ++slot;

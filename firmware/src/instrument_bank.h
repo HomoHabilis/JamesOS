@@ -3,11 +3,10 @@
 #define BR_INSTRUMENT_BANK_H
 #include <stdint.h>
 
-/* SEL sound bank: 64 starting-point sounds for the synth tracks. A bank entry
+/* SEL sound bank: 128 curated sounds for the synth tracks. A bank entry
  * writes only existing sound and modulation fields, so the session format is
  * unchanged. Values are the spec's 0-127 numbers (assets/presets/bank.json). */
-#define BR_BANK_COUNT 64u
-#define BR_BANK_SIZE 8u              /* sounds per bank A..H */
+#define BR_BANK_COUNT 128u
 
 typedef struct {
     char name[11];
@@ -15,28 +14,39 @@ typedef struct {
     uint8_t h, t, m;                 /* harmonics, timbre, morph */
     uint8_t f, q;                    /* low-pass cutoff (127 = open), resonance */
     uint8_t a, d, s, r;              /* amplitude envelope */
-    uint8_t dly, rev;                /* sends */
+    uint8_t dly, rev, drive;                /* sends */
     uint8_t lfo_target, lfo_rate, lfo_depth;   /* LFO 1; target 0 = none */
     uint8_t env_target;              /* modulation envelope target; 0 = none */
     int8_t env_amount;
     uint8_t env_decay;
     uint8_t aux;                     /* Plaits main/aux output mix */
+    uint8_t voice_mode;              /* 0 legacy/default, 1 mono, 2 poly */
 } br_bank_t;
 
 static const br_bank_t br_bank[BR_BANK_COUNT] = {
 #include "instrument_bank_data.inc"
 };
 
-static const char *const br_bank_name[BR_BANK_COUNT / BR_BANK_SIZE] = {
-    "BASS", "KEYS", "CHORDS", "PADS", "LEADS", "PLUCKS", "PERC/FX", "TEXTURES"
-};
+static inline const char *br_bank_category(uint32_t n)
+{
+    if (n < 32u) return "FAVORITES";
+    if (n < 41u) return "BASS";
+    if (n < 52u) return "ACID/BASS";
+    if (n < 61u) return "FRENCH";
+    if (n < 73u) return "LEADS";
+    if (n < 87u) return "KEYS";
+    if (n < 98u) return "PADS";
+    if (n < 113u) return "ARPS/PLUCK";
+    return "ORGANS/FX";
+}
 
 /* The fields a bank entry rewrites. Taking and restoring this much leaves the
- * track's level, tune, pan, mute, drive, gate and routing alone. */
+ * track's level, tune, pan, mute, gate and routing alone. */
 typedef struct {
-    uint32_t preset, harmonics, aux, timbre, color, filter, resonance, keytrack;
-    uint32_t attack, decay, sustain, release, delay, reverb;
-    uint32_t timbre_mod, fm_mod, morph_mod;
+    uint32_t preset, harmonics, aux, timbre, color, filter, resonance, keytrack, voice_mode;
+    int32_t filter_env_depth;
+    uint32_t attack, decay, sustain, release, delay, reverb, drive;
+    uint32_t timbre_mod, fm_mod, morph_mod, harmonics_mod;
     uint32_t env_attack, env_decay, env_sustain, env_release, env_target;
     int32_t env_amount;
     br_lfo_config_t lfo[BR_LFOS];
@@ -46,12 +56,13 @@ static inline void br_bank_take(br_bank_state_t *s, const volatile br_sound_t *k
                                 const volatile br_mod_config_t *m)
 {
     uint32_t i;
-    s->preset = k->preset; s->harmonics = k->plaits_harmonics; s->aux = k->plaits_aux;
+    s->preset = k->preset; s->harmonics = k->plaits_harmonics; s->aux = k->plaits_aux; s->voice_mode = k->voice_mode;
     s->timbre = k->timbre; s->color = k->color; s->filter = k->filter;
     s->resonance = k->filter_resonance; s->keytrack = k->filter_keytrack;
+    s->filter_env_depth = k->filter_env_depth;
     s->attack = k->attack; s->decay = k->decay; s->sustain = k->sustain;
-    s->release = k->release; s->delay = k->delay; s->reverb = k->reverb;
-    s->timbre_mod = k->timbre_mod; s->fm_mod = k->fm_mod; s->morph_mod = k->morph_mod;
+    s->release = k->release; s->delay = k->delay; s->reverb = k->reverb; s->drive = k->drive;
+    s->timbre_mod = k->timbre_mod; s->fm_mod = k->fm_mod; s->morph_mod = k->morph_mod; s->harmonics_mod = k->harmonics_mod;
     s->env_attack = m->attack; s->env_decay = m->decay; s->env_sustain = m->sustain;
     s->env_release = m->release; s->env_target = m->target; s->env_amount = m->amount;
     for (i = 0u; i < BR_LFOS; ++i) {
@@ -64,12 +75,13 @@ static inline void br_bank_put(const br_bank_state_t *s, volatile br_sound_t *k,
                                volatile br_mod_config_t *m)
 {
     uint32_t i;
-    k->preset = s->preset; k->plaits_harmonics = s->harmonics; k->plaits_aux = s->aux;
+    k->preset = s->preset; k->plaits_harmonics = s->harmonics; k->plaits_aux = s->aux; k->voice_mode = s->voice_mode;
     k->timbre = s->timbre; k->color = s->color; k->filter = s->filter;
     k->filter_resonance = s->resonance; k->filter_keytrack = s->keytrack;
+    k->filter_env_depth = s->filter_env_depth;
     k->attack = s->attack; k->decay = s->decay; k->sustain = s->sustain;
-    k->release = s->release; k->delay = s->delay; k->reverb = s->reverb;
-    k->timbre_mod = s->timbre_mod; k->fm_mod = s->fm_mod; k->morph_mod = s->morph_mod;
+    k->release = s->release; k->delay = s->delay; k->reverb = s->reverb; k->drive = s->drive;
+    k->timbre_mod = s->timbre_mod; k->fm_mod = s->fm_mod; k->morph_mod = s->morph_mod; k->harmonics_mod = s->harmonics_mod;
     m->attack = s->env_attack; m->decay = s->env_decay; m->sustain = s->env_sustain;
     m->release = s->env_release; m->target = s->env_target; m->amount = s->env_amount;
     for (i = 0u; i < BR_LFOS; ++i) {
@@ -83,18 +95,19 @@ static inline void br_bank_put(const br_bank_state_t *s, volatile br_sound_t *k,
 static inline void br_bank_state(const br_bank_t *b, br_bank_state_t *s)
 {
     uint32_t i;
-    s->preset = BR_FIRST_PLAITS + b->model; s->harmonics = b->h; s->aux = b->aux;
+    s->preset = BR_FIRST_PLAITS + b->model; s->harmonics = b->h; s->aux = b->aux; s->voice_mode = b->voice_mode;
     s->timbre = b->t; s->color = b->m;
     s->filter = b->f >= 127u ? 64u : (uint32_t)(b->f >> 1);
-    s->resonance = b->q; s->keytrack = 0u;
+    s->resonance = b->q; s->keytrack = 0u; s->filter_env_depth = 0;
     s->attack = b->a; s->decay = b->d; s->sustain = b->s; s->release = b->r;
-    s->delay = b->dly; s->reverb = b->rev;
-    s->timbre_mod = s->fm_mod = s->morph_mod = 64u;
-    s->env_attack = 0u; s->env_decay = b->env_decay; s->env_sustain = 0u; s->env_release = 24u;
+    s->delay = b->dly; s->reverb = b->rev; s->drive = b->drive;
+    s->timbre_mod = s->fm_mod = s->morph_mod = 64u;   /* neutral modulation scale */
+    s->harmonics_mod = 0u;
+    s->env_attack = 5u; s->env_decay = b->env_decay; s->env_sustain = 0u; s->env_release = 61u;
     s->env_target = b->env_target ? b->env_target : BR_TARGET_FILTER;
     s->env_amount = b->env_target ? b->env_amount : 0;
     for (i = 0u; i < BR_LFOS; ++i) {
-        s->lfo[i].wave = BR_WAVE_SINE; s->lfo[i].rate = 32u + 16u * i;
+        s->lfo[i].wave = BR_WAVE_SINE; s->lfo[i].rate = 102u + 7u * i;
         s->lfo[i].depth = 0u; s->lfo[i].target = BR_TARGET_OFF;
     }
     if (b->lfo_target) {
@@ -105,7 +118,7 @@ static inline void br_bank_state(const br_bank_t *b, br_bank_state_t *s)
 
 /* Kit patches use existing saved controls; no new preset IDs or session bytes.
  * They leave the pattern, lane assignments, mix, routing and effects untouched. */
-#define BR_KIT_BANK_COUNT (BR_ENABLE_PLAITS ? 12u : 9u)
+#define BR_KIT_BANK_COUNT (BR_ENABLE_PLAITS ? 12u : 3u)
 typedef struct {
     char name[11];
     uint8_t preset, timbre, color, harmonics, decay, snap;
@@ -119,13 +132,13 @@ static const br_kit_patch_t br_kit_bank[BR_KIT_BANK_COUNT] = {
     {"PLAITS",     BR_KIT_PLAITS, 64, 64, 64, 64, 64, 0},
     {"PLAITS LOW", BR_KIT_PLAITS, 34, 38, 35, 95, 40,-5},
     {"PLAITS AIR", BR_KIT_PLAITS,104,105,102, 42,105, 5},
+    {"80S KIT",    BR_KIT_PLAITS, 42, 40, 38, 94, 45, -3},
+    {"80S DEEP",   BR_KIT_PLAITS, 32, 34, 25,105, 35, -5},
+    {"80S BRIGHT", BR_KIT_PLAITS, 64, 68, 50, 76, 70, 0},
+    {"90S KIT",    BR_KIT_PLAITS, 76, 82, 70, 78, 92, 0},
+    {"90S DEEP",   BR_KIT_PLAITS, 55, 60, 60, 94, 70, -3},
+    {"90S BRIGHT", BR_KIT_PLAITS,100,105, 95, 65,110, 3},
 #endif
-    {"80S KIT",    BR_KIT_808,    64, 64, 64,127, 64, 0},
-    {"80S DEEP",   BR_KIT_808,    32, 64, 64,105, 38,-5},
-    {"80S BRIGHT", BR_KIT_808,   112, 64, 64, 72,112, 4},
-    {"90S KIT",    BR_KIT_909,    64, 64, 64,127, 64, 0},
-    {"90S DEEP",   BR_KIT_909,    32, 64, 64,100, 38,-5},
-    {"90S BRIGHT", BR_KIT_909,   112, 64, 64, 72,112, 4},
 };
 typedef struct { uint32_t preset, timbre, color, harmonics, decay, snap; int32_t tune; } br_kit_bank_state_t;
 static inline void br_kit_bank_take(br_kit_bank_state_t *s, const volatile br_sound_t *k)

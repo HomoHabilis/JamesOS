@@ -2,6 +2,10 @@
 #define FM1_MIDI_CLOCK_SCHEDULER_H
 
 #include <stdint.h>
+/* BR_COLD_SIZE: see instrument_audio.c; empty when this header is used on its own. */
+#ifndef BR_COLD_SIZE
+#define BR_COLD_SIZE
+#endif
 
 /* One track's future-boundary planner. All returned durations are physical
  * audio frames. This module neither advances audio nor changes an in-flight
@@ -27,7 +31,7 @@ static void fm1_mcs_start(fm1_mcs_track_t *track, uint64_t phase_q16)
  * gradually. Caller must schedule early next-step events using this duration.
  * Return zero if the reference or input is invalid; caller must then stop or
  * explicitly choose another clock policy. */
-static uint32_t fm1_mcs_next(fm1_mcs_track_t *track, uint64_t phase_q16,
+BR_COLD_SIZE static uint32_t fm1_mcs_next(fm1_mcs_track_t *track, uint64_t phase_q16,
                              uint64_t period_q16, uint32_t division, uint32_t swing,
                              uint32_t step)
 {
