@@ -802,9 +802,10 @@ static int br_session_v15_valid(const br_session_t *s)
 /* v16 uses formerly required-zero retrigger high bits; low six bits remain
  * unchanged. First 15 entries store little-endian 2-bit groups: channels
  * (1..16 encoded as 0..15) in bits 0..27, receive-clock in bit 28, and
- * bit 29 reserved zero. The next seven high bits encode MIDI OFF for the
- * seven destinations; their channel nibble must be zero. Other bits stay zero.
- * Earlier v16 firmware rejects sessions with OFF, rather than misreading them. */
+ * send-clock in bit 29. The next seven high bits encode MIDI OFF for the
+ * seven destinations; their channel nibble must be zero. The eighth is USB
+ * AUDIO = FULL. Other bits stay zero. Earlier v16 firmware rejects sessions
+ * with OFF, SEND or FULL, rather than misreading them. */
 static uint32_t br_session_midi_word(const br_session_t *s)
 {
     uint32_t i, word = 0u;
@@ -818,7 +819,7 @@ static int br_session_v16_valid(const br_session_t *s)
     if (!br_session_full_valid(s, 16u)) return 0;
     word = br_session_midi_word(s);
     /* Bit 28 follows an external clock and bit 29 sends the clock: never both. */
-    if ((word >> 28u) == 3u || (s->kit_retrig[4][2] & 0x80u)) return 0;
+    if ((word >> 28u) == 3u) return 0;
     for (i = 0u; i < 7u; ++i) {
         uint32_t at = 15u + i / 2u;
         if ((s->kit_retrig[at / BR_DRUM_LANES][at % BR_DRUM_LANES] & (1u << (6u + i % 2u))) &&
@@ -832,6 +833,7 @@ static void br_session_midi_defaults(void)
     for (i = 0u; i < 7u; ++i) br_midi_channels[i] = (uint8_t)(i + 1u);
     br_midi_clock_enabled = 0u;
     br_midi_clock_out = 0u;
+    fm1_usb_audio_full = 0u;
 }
 static void br_session_midi_restore(const br_session_t *s, uint32_t version)
 {
@@ -845,6 +847,7 @@ static void br_session_midi_restore(const br_session_t *s, uint32_t version)
     }
     br_midi_clock_enabled = (uint8_t)((word >> 28u) & 1u);
     br_midi_clock_out = (uint8_t)((word >> 29u) & 1u);
+    fm1_usb_audio_full = (uint8_t)(s->kit_retrig[4][2] >> 7u);
 }
 static uint16_t br_session_timed_length(uint16_t length, int8_t offset)
 { return (uint16_t)((length & 0x7ffu) | (((uint16_t)offset & 31u) << 11)); }
@@ -922,6 +925,8 @@ static int br_capture(br_session_t *s)
             }
         }
         word |= (uint32_t)br_midi_clock_enabled << 28u | (uint32_t)br_midi_clock_out << 29u;
+        if (fm1_usb_audio_full > 1u) return 0;
+        s->kit_retrig[4][2] |= (uint8_t)(fm1_usb_audio_full << 7u);
         for (p = 0u; p < 15u; ++p)
             s->kit_retrig[p / BR_DRUM_LANES][p % BR_DRUM_LANES] |= (uint8_t)(((word >> (p * 2u)) & 3u) << 6u);
     }
