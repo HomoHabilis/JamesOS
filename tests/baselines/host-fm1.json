@@ -751,6 +751,18 @@
    "opt": "logic"
   },
   {
+   "runner": "run_midi_seq_out.py",
+   "args": [
+    "--reuse-dsp"
+   ],
+   "exit_code": 0,
+   "status": "pass",
+   "last_line": "MIDI sequencer, arp, drum, clock and transport output passed",
+   "seconds": 6.8,
+   "attempts": 1,
+   "opt": "audio"
+  },
+  {
    "runner": "run_midi_transport.py",
    "args": [
     "--reuse-dsp"
@@ -1970,12 +1982,12 @@
  "backoffs": [],
  "wall_seconds": 183.7,
  "summary": {
-  "pass": 164,
+  "pass": 165,
   "fail": 1,
   "needs arguments": 3,
   "timeout": 0,
   "skip": 4,
-  "total": 172,
+  "total": 173,
   "mode": "full"
  },
  "finished": "2026-11-17 00:10:57",

@@ -35,6 +35,7 @@ no runner states its level twice. --sanitize adds -fsanitize=address,undefined t
 """
 import os
 import re
+import sys
 from collections import namedtuple
 from pathlib import Path
 
@@ -103,6 +104,8 @@ def environment(tgt, with_poly=None, base=None):
     if any(not re.fullmatch(r'-D[A-Za-z_][A-Za-z0-9_]*(?:=[A-Za-z0-9_+-]+)?', flag) for flag in extra):
         raise ValueError(f'{ENV_EXTRA_DEFINES} accepts only simple -DNAME or -DNAME=VALUE flags')
     flags += extra
+    if sys.platform.startswith('linux'):
+        flags.append('-D_DEFAULT_SOURCE')   # glibc hides M_PI and POSIX names under -std=c11; macOS does not
     path = [p for p in env.get('PATH', '').split(os.pathsep) if p and Path(p).resolve() != SHIM]
     if flags:
         env[ENV_CFLAGS] = ' '.join(flags)
